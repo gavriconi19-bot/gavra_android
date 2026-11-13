@@ -64,7 +64,7 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
     return V3PutnikIdResolver.fromRow(row);
   }
 
-  /// Tracking prozor za prikaz ETA: T-15 .. T+40 (isto kao vozački tracking).
+  /// Tracking prozor za prikaz ETA: T-15 .. hard-stop (isto kao vozački tracking).
   bool _isInEtaTrackingWindow(DateTime departure, DateTime now) {
     return v3IsTrackingWindowOpen(polazakAt: departure, now: now);
   }

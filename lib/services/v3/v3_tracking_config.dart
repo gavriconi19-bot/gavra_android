@@ -15,6 +15,11 @@ const Duration v3AutoStartLeadTime = Duration(minutes: 15);
 
 const Duration v3TrackingTickInterval = Duration(seconds: 20);
 
+/// Sigurnosni hard-stop: tracking se gasi ovoliko posle polaska čak i ako
+/// putnici ostanu nefinalizovani (stuck podatak) — inače bi FGS, GPS i
+/// notifikacija radili neograničeno.
+const Duration v3TrackingHardStop = Duration(hours: 3);
+
 /// Spoljni timeout jednog tick-a (GPS + ETA).
 const Duration v3TrackingTickTimeout = Duration(seconds: 90);
 
@@ -123,21 +128,23 @@ DateTime? v3PolazakDateTime({required String datumIso, required String vreme}) {
   );
 }
 
-/// Hard-stop se više NE računa po vremenu (T+40 uklonjeno).
-/// Jedina istina da li je tracking aktivan: da li termin ima putnike
-/// koji nisu pokupljeni niti otkazani (vidi `_terminHasActivePassengers`
-/// / pozivaoce ove funkcije). [startedAt] ostaje zbog starih poziva.
+/// Hard-stop: `true` kad prođe [v3TrackingHardStop] posle polaska (ili
+/// [startedAt] kad polazak nedostaje). Primarni uslov gašenja ostaje
+/// "svi putnici pokupljeni/otkazani" — ovo je samo sigurnosna mreža.
 bool v3TrackingTimedOut({DateTime? startedAt, DateTime? polazakAt}) {
-  return false;
+  final ref = polazakAt ?? startedAt;
+  if (ref == null) return false;
+  return V3BelgradeTime.now().isAfter(ref.add(v3TrackingHardStop));
 }
 
-/// Prozor se otvara na T-15, a zatvara se samo kad više nema aktivnih
+/// Prozor se otvara na T-15 i zatvara na hard-stop ([v3TrackingHardStop]
+/// posle polaska). Između te granice tracking živi dok ima aktivnih
 /// putnika (proverava pozivalac preko `_terminHasActivePassengers` i sl.).
-/// Ovde ostaje samo provera donje granice (T-15) — gornje vremenske granice nema.
 bool v3IsTrackingWindowOpen({required DateTime polazakAt, DateTime? now}) {
   final n = now ?? V3BelgradeTime.now();
   final start = polazakAt.subtract(v3AutoStartLeadTime);
-  return !n.isBefore(start);
+  final end = polazakAt.add(v3TrackingHardStop);
+  return !n.isBefore(start) && n.isBefore(end);
 }
 
 /// Sam-zakazujući tajmer — fiksni razmak [interval] između početaka tick-ova.

@@ -26,8 +26,8 @@ Future<void> onStart(ServiceInstance service) async {
   DateTime? startedAt;
   DateTime? polazakAt;
   V3SelfReschedulingTicker? ticker;
+  Timer? expiryWatchdog;
   SupabaseClient? client;
-  var ticksPaused = false;
 
   Future<void> ensureSupabase() async {
     if (client != null) return;
@@ -56,6 +56,8 @@ Future<void> onStart(ServiceInstance service) async {
     debugPrint('[BG_TRACKING] stop');
     ticker?.cancel();
     ticker = null;
+    expiryWatchdog?.cancel();
+    expiryWatchdog = null;
     vozacId = null;
     datumIso = null;
     grad = null;
@@ -65,7 +67,6 @@ Future<void> onStart(ServiceInstance service) async {
   }
 
   void pauseTicks() {
-    ticksPaused = true;
     ticker?.cancel();
     ticker = null;
     debugPrint('[BG_TRACKING] pauseTicks');
@@ -131,7 +132,6 @@ Future<void> onStart(ServiceInstance service) async {
       return;
     }
 
-    ticksPaused = false;
     vozacId = id;
     datumIso = datum;
     grad = g;
@@ -139,6 +139,14 @@ Future<void> onStart(ServiceInstance service) async {
     startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();
     polazakAt = V3BelgradeTime.parseTs(m['polazak_at']?.toString()) ?? v3PolazakDateTime(datumIso: datum, vreme: v);
     debugPrint('[BG_TRACKING] start $g $v polazak=$polazakAt');
+
+    // Hard-stop provera i dok su tickovi pauzirani (app u FG ili ugašen) —
+    // inače bi FGS + notifikacija stajali bez aktivnog trackinga.
+    expiryWatchdog ??= Timer.periodic(const Duration(minutes: 1), (_) {
+      if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
+        finishAndStop('timeout_watchdog');
+      }
+    });
 
     ticker?.cancel();
     ticker = V3SelfReschedulingTicker(interval: v3TrackingTickInterval, onTick: doTick)..start();
@@ -157,12 +165,36 @@ Future<void> onStart(ServiceInstance service) async {
 
   try {
     final saved = await v3LoadBgTrackingSession();
-    if (saved != null && saved['ticks_paused'] != true) {
+    if (saved == null) {
+      // Respawn bez sesije (watchdog / stop race) — FGS + notifikacija ne
+      // smeju stajati dok tracking ne radi.
+      debugPrint('[BG_TRACKING] nema sesije — stopSelf');
+      service.stopSelf();
+      return;
+    }
+
+    // Sesija je mogla isteći dok je ticker bio pauziran (app ugašen u FG).
+    if (v3TrackingTimedOut(
+      startedAt: V3BelgradeTime.parseTs(saved['started_at']?.toString()),
+      polazakAt: V3BelgradeTime.parseTs(saved['polazak_at']?.toString()) ??
+          v3PolazakDateTime(
+            datumIso: V3BelgradeTime.parseIsoDatePart(saved['datum_iso']?.toString() ?? ''),
+            vreme: V3BelgradeTime.normalizeToHHmm(saved['vreme']?.toString() ?? ''),
+          ),
+    )) {
+      debugPrint('[BG_TRACKING] sesija istekla — stopSelf');
+      unawaited(v3ClearBgTrackingSession());
+      service.stopSelf();
+      return;
+    }
+
+    if (saved['ticks_paused'] == true) {
+      // startTracking puni session polja (potrebna expiry watchdog-u), pa pauza.
+      startTracking(saved);
+      pauseTicks();
+    } else {
       debugPrint('[BG_TRACKING] resume iz prefs');
       startTracking(saved);
-    } else if (saved != null) {
-      ticksPaused = true;
-      debugPrint('[BG_TRACKING] FGS živ, ticker pauziran');
     }
   } catch (e) {
     debugPrint('[BG_TRACKING] prefs resume greška: $e');

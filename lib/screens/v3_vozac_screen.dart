@@ -1512,7 +1512,8 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
 
       final polazak = v3PolazakDateTime(datumIso: datum, vreme: vreme);
       if (polazak == null) continue;
-      // Nema T+40 hard-stopa: jedina istina je da li termin ima aktivne putnike.
+      // Kandidati = termini sa aktivnim putnicima; hard-stop granicu
+      // primenjuje pozivalac (v3TrackingHardStop / v3IsTrackingWindowOpen).
       if (!_terminHasActivePassengers(datum, grad, vreme)) continue;
 
       candidates.add((datumIso: datum, grad: grad, vreme: vreme, polazak: polazak));
@@ -1525,10 +1526,13 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
   /// Najbliži termin danas u T-15 prozoru (nezavisno od UI selektora).
   ({String datumIso, String grad, String vreme, DateTime polazak})? _findAutoStartTermin() {
     final now = V3BelgradeTime.now();
-    final candidates = _activeTerminCandidates();
+    // Termini preko hard-stopa nisu kandidati — inače bi zaglavljeni termin
+    // (nefinalizovan putnik) večno re-startovao tracking.
+    final candidates =
+        _activeTerminCandidates().where((c) => now.isBefore(c.polazak.add(v3TrackingHardStop))).toList();
     if (candidates.isEmpty) return null;
 
-    // Prvo aktivan prozor (T-15..), inače najraniji budući.
+    // Prvo aktivan prozor (T-15..hard-stop), inače najraniji budući.
     for (final c in candidates) {
       if (v3IsTrackingWindowOpen(polazakAt: c.polazak, now: now)) return c;
     }
@@ -1546,7 +1550,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     for (final c in _activeTerminCandidates()) {
       final isLater = activePolazak == null || c.polazak.isAfter(activePolazak);
       if (!isLater) continue;
-      if (!now.isBefore(c.polazak.subtract(v3AutoStartLeadTime))) return c;
+      if (v3IsTrackingWindowOpen(polazakAt: c.polazak, now: now)) return c;
     }
     return null;
   }

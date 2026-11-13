@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -44,7 +45,8 @@ extension V3TrackingStartResultX on V3TrackingStartResult {
 ///
 /// Start: V3VozacScreen auto-start (T-15). Zahteva GPS + **Always**.
 /// Tick (20s): live GPS → `v3_vozac_location` → `v3-compute-eta`.
-/// Stop: polazak+40, svi putnici gotovi, ili ručni stop.
+/// Stop: svi putnici gotovi, hard-stop (polazak+[v3TrackingHardStop]),
+/// ili ručni stop.
 ///
 /// Platforme (dok traje vožnja):
 /// - **Android** — FGS notifikacija živi dok je tracking aktivan
@@ -59,6 +61,8 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
 
   static const _tag = '[V3VozacLocationTrackingService]';
   static const _bgNotificationId = 888;
+
+  static final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
 
   String _vozacId = '';
   String _datumIso = '';
@@ -153,11 +157,8 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   Future<void> _syncEngines({bool immediateTick = true}) async {
     if (!_isRunning || _vozacId.isEmpty) return;
 
-    await v3SaveBgTrackingSession(
-      _sessionPayload(ticksPaused: !Platform.isIOS && _isAppInForeground),
-    );
-
     if (Platform.isIOS) {
+      await v3SaveBgTrackingSession(_sessionPayload());
       // iOS: main isolate mora da ostane živ — ticker + continuous location.
       _startIosLocationKeepAlive();
       if (_fgTicker == null) _startFgTicker();
@@ -563,6 +564,38 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     await _syncEngines(immediateTick: true);
   }
 
+  int? _androidSdkInt;
+
+  /// Android 12+ (API 31) zabranjuje start FGS iz pozadine; stariji smeju.
+  Future<bool> _canStartFgsFromBackground() async {
+    if (!Platform.isAndroid) return false;
+    _androidSdkInt ??=
+        await DeviceInfoPlugin().androidInfo.then((i) => i.version.sdkInt).catchError((_) => 0);
+    return _androidSdkInt! < 31;
+  }
+
+  /// `gavra_bg_tracking` kanal mora postojati pre `startService()` — plugin
+  /// prosleđeni channelId ne kreira sam, a cold-start restore može pobediti
+  /// `_ensureLocalNotificationsInitialized` u main-u. Isti parametri kao tamo.
+  Future<void> _ensureBgNotificationChannel() async {
+    try {
+      final androidImpl =
+          _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await androidImpl?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'gavra_bg_tracking',
+          'Praćenje vožnje',
+          description: 'Aktivno praćenje lokacije vozača u pozadini',
+          importance: Importance.low,
+          playSound: false,
+          enableVibration: false,
+        ),
+      );
+    } catch (e) {
+      debugPrint('$_tag BG channel greška: $e');
+    }
+  }
+
   Future<void> _startBg() async {
     if (_vozacId.isEmpty || !_isRunning || Platform.isIOS) return;
     try {
@@ -571,6 +604,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
 
       final service = FlutterBackgroundService();
       if (!await service.isRunning()) {
+        // Na API 31+ startService iz pozadine baca izuzetak — servis se
+        // podiže na sledećem resume-u; sesija je već u prefs.
+        if (!_isAppInForeground && !await _canStartFgsFromBackground()) return;
+        await _ensureBgNotificationChannel();
         await service.startService();
       }
 
@@ -591,9 +628,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     try {
       await v3SaveBgTrackingSession(_sessionPayload(ticksPaused: _isAppInForeground));
       final service = FlutterBackgroundService();
-      if (!await service.isRunning()) {
-        await service.startService();
-      }
+      if (await service.isRunning()) return;
+      if (!_isAppInForeground && !await _canStartFgsFromBackground()) return;
+      await _ensureBgNotificationChannel();
+      await service.startService();
     } catch (e) {
       debugPrint('$_tag BG ensure greška: $e');
     }
@@ -613,7 +651,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
 
   Future<void> _cancelBgNotification() async {
     try {
-      await FlutterLocalNotificationsPlugin().cancel(_bgNotificationId);
+      await _notifications.cancel(_bgNotificationId);
     } catch (e) {
       debugPrint('$_tag cancel BG notifikacije greška: $e');
     }
