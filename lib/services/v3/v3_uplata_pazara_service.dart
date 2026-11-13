@@ -9,6 +9,63 @@ class V3UplataPazaraService {
   V3UplataPazaraService._();
 
   static final Map<String, Future<void>> _saveQueueByKey = {};
+  static const double _eps = 0.009;
+
+  /// Serijalizuje upise po kljucu (vozac+godina+mesec+dan) da se read-modify-write
+  /// ciklusi na istom danu ne preklapaju.
+  static Future<T> _enqueue<T>(String saveKey, Future<T> Function() task) async {
+    final previous = _saveQueueByKey[saveKey] ?? Future.value();
+    final completer = Future<T>.sync(() async {
+      await previous;
+      return task();
+    });
+
+    _saveQueueByKey[saveKey] = completer;
+    try {
+      return await completer;
+    } finally {
+      if (identical(_saveQueueByKey[saveKey], completer)) {
+        _saveQueueByKey.remove(saveKey);
+      }
+    }
+  }
+
+  static Future<Map<String, dynamic>?> _fetchMonthRow(String vozacId, int mesec, int godina) {
+    return supabase
+        .from('v3_uplata_pazara')
+        .select()
+        .eq('vozac_id', vozacId)
+        .eq('mesec', mesec)
+        .eq('godina', godina)
+        .maybeSingle();
+  }
+
+  /// Upisuje/ubacuje dnevnu uplatu u mesecni red i vraca azurirani zapis.
+  static Future<V3UplataPazara?> _upisiDnevnuUplatu({
+    required String vozacId,
+    required int mesec,
+    required int godina,
+    required Map<String, dynamic>? existing,
+    required V3DnevnaUplataPazara novaUplata,
+  }) async {
+    if (existing != null) {
+      final uplata = V3UplataPazara.fromJson(existing);
+      final updated = uplata.withUplata(novaUplata);
+      await supabase.from('v3_uplata_pazara').update({
+        'dnevne_uplate_json': updated.dnevneUplate.map((e) => e.toJson()).toList(),
+        'updated_at': V3BelgradeTime.nowIsoUtc(),
+      }).eq('id', uplata.id);
+      return updated;
+    }
+
+    final res = await supabase.from('v3_uplata_pazara').insert({
+      'vozac_id': vozacId,
+      'mesec': mesec,
+      'godina': godina,
+      'dnevne_uplate_json': [novaUplata.toJson()],
+    }).select().maybeSingle();
+    return res != null ? V3UplataPazara.fromJson(res) : null;
+  }
 
   /// Ucitava mesecnu evidenciju za vozaca i datum.
   static Future<V3UplataPazara?> getZaVozacaIMesec({
@@ -19,14 +76,7 @@ class V3UplataPazaraService {
     if (id.isEmpty) return null;
 
     try {
-      final res = await supabase
-          .from('v3_uplata_pazara')
-          .select()
-          .eq('vozac_id', id)
-          .eq('mesec', datum.month)
-          .eq('godina', datum.year)
-          .maybeSingle();
-
+      final res = await _fetchMonthRow(id, datum.month, datum.year);
       if (res == null) return null;
       return V3UplataPazara.fromJson(res);
     } catch (e) {
@@ -36,87 +86,130 @@ class V3UplataPazaraService {
   }
 
   /// Cuva ili azurira dnevnu uplatu pazara za vozaca i datum.
-  static Future<void> sacuvajDnevnuUplatu({
+  /// Vraca azurirani mesecni zapis (za osvezavanje cache-a), ili null.
+  static Future<V3UplataPazara?> sacuvajDnevnuUplatu({
     required String vozacId,
     required DateTime datum,
     required double predao,
     required double ukupno,
     bool zahtevanUnos = false,
     bool saberiSaPostojecimPredao = false,
-  }) async {
+  }) {
     final id = vozacId.trim();
-    if (id.isEmpty) return;
+    if (id.isEmpty) return Future.value(null);
 
     final mesec = datum.month;
     final godina = datum.year;
     final dan = datum.day;
     final saveKey = '$id-$godina-$mesec-$dan';
 
-    final previous = _saveQueueByKey[saveKey] ?? Future.value();
-    final completer = Future<void>.sync(() async {
-      await previous;
-
+    return _enqueue(saveKey, () async {
       debugPrint(
           '[V3UplataPazaraService] sacuvajDnevnuUplatu: vozacId=$id, dan=$dan.$mesec.$godina, predao=$predao, ukupno=$ukupno, zahtevanUnos=$zahtevanUnos, saberiSaPostojecimPredao=$saberiSaPostojecimPredao');
 
       try {
-        final existing = await supabase
-            .from('v3_uplata_pazara')
-            .select('id, dnevne_uplate_json')
-            .eq('vozac_id', id)
-            .eq('mesec', mesec)
-            .eq('godina', godina)
-            .maybeSingle();
+        final existing = await _fetchMonthRow(id, mesec, godina);
+        final uplata = existing != null ? V3UplataPazara.fromJson(existing) : null;
+        final prethodnaZaDan = uplata?.uplataZaDan(dan);
+        final efektivniPredao = saberiSaPostojecimPredao ? (prethodnaZaDan?.predao ?? 0) + predao : predao;
+        final novaUplata = V3DnevnaUplataPazara(
+          dan: dan,
+          predao: efektivniPredao,
+          ukupno: ukupno,
+          razlika: efektivniPredao - ukupno,
+          zahtevanUnos: zahtevanUnos,
+        );
 
-        if (existing != null) {
-          final uplata = V3UplataPazara.fromJson(existing);
-          final prethodnaZaDan = uplata.uplataZaDan(dan);
-          final efektivniPredao = saberiSaPostojecimPredao ? (prethodnaZaDan?.predao ?? 0) + predao : predao;
-          final novaUplata = V3DnevnaUplataPazara(
-            dan: dan,
-            predao: efektivniPredao,
-            ukupno: ukupno,
-            razlika: efektivniPredao - ukupno,
-            zahtevanUnos: zahtevanUnos,
-          );
-          final updated = uplata.withUplata(novaUplata);
-
-          debugPrint('[V3UplataPazaraService] ažuriram postojeći zapis id=${uplata.id}');
-          await supabase.from('v3_uplata_pazara').update({
-            'dnevne_uplate_json': updated.dnevneUplate.map((e) => e.toJson()).toList(),
-            'updated_at': V3BelgradeTime.nowIsoUtc(),
-          }).eq('id', uplata.id);
-        } else {
-          final novaUplata = V3DnevnaUplataPazara(
-            dan: dan,
-            predao: predao,
-            ukupno: ukupno,
-            razlika: predao - ukupno,
-            zahtevanUnos: zahtevanUnos,
-          );
-          debugPrint('[V3UplataPazaraService] kreiram novi zapis');
-          await supabase.from('v3_uplata_pazara').insert({
-            'vozac_id': id,
-            'mesec': mesec,
-            'godina': godina,
-            'dnevne_uplate_json': [novaUplata.toJson()],
-          });
-        }
+        debugPrint('[V3UplataPazaraService] ${existing != null ? 'ažuriram' : 'kreiram'} zapis');
+        final updated = await _upisiDnevnuUplatu(
+          vozacId: id,
+          mesec: mesec,
+          godina: godina,
+          existing: existing,
+          novaUplata: novaUplata,
+        );
         debugPrint('[V3UplataPazaraService] sacuvajDnevnuUplatu: uspešno');
+        return updated;
       } catch (e) {
         debugPrint('[V3UplataPazaraService] sacuvajDnevnuUplatu error: $e');
         rethrow;
       }
     });
+  }
 
-    _saveQueueByKey[saveKey] = completer;
-    try {
-      await completer;
-    } finally {
-      if (identical(_saveQueueByKey[saveKey], completer)) {
-        _saveQueueByKey.remove(saveKey);
+  /// Sinhronizuje zahtev za unos pazara za jedan dan. Za razliku od
+  /// [sacuvajDnevnuUplatu] ne upisuje predaju vec samo odrzava `ukupno` i
+  /// `zahtevan_unos` zastavu — i to na SVEZEM stanju iz baze (unutar reda), pa
+  /// ne moze pregaziti upravo sacuvanu predaju vozaca.
+  ///
+  /// Pravila merge-a:
+  ///  - `predao` se uvek zadrzava iz baze
+  ///  - `zahtevanUnos` se postavlja samo ako nema zapisa ili je `ukupno`
+  ///    porastao u odnosu na sveze stanje (reblokada nakon naknadne naplate);
+  ///    nikad se ne vraca na `true` nad zavrsenim unosom bez rasta iznosa
+  ///  - `ukupno` se azurira u oba smera (ispravke/storna)
+  ///
+  /// Vraca svezi mesecni zapis i da li je doslo do reblokade zavrsenog unosa
+  /// (`bilaPredaja` — za "naknadna naplata" indikator u popupu).
+  static Future<({V3UplataPazara? uplata, bool bilaPredaja})> syncZahtevanUnos({
+    required String vozacId,
+    required DateTime datum,
+    required double ukupno,
+  }) {
+    final id = vozacId.trim();
+    if (id.isEmpty) return Future.value((uplata: null, bilaPredaja: false));
+
+    final mesec = datum.month;
+    final godina = datum.year;
+    final dan = datum.day;
+    final saveKey = '$id-$godina-$mesec-$dan';
+
+    return _enqueue(saveKey, () async {
+      try {
+        final existing = await _fetchMonthRow(id, mesec, godina);
+        final uplataPostojeca = existing != null ? V3UplataPazara.fromJson(existing) : null;
+        final prethodna = uplataPostojeca?.uplataZaDan(dan);
+
+        // Nema zapisa i nema pazara — nema sta da se zahteva.
+        if (prethodna == null && ukupno <= 0) {
+          return (uplata: uplataPostojeca, bilaPredaja: false);
+        }
+
+        final efektivniPredao = prethodna?.predao ?? 0.0;
+        final porastao = prethodna == null || (ukupno - prethodna.ukupno) > _eps;
+        final noviZahtevanUnos = (prethodna?.zahtevanUnos ?? false) || porastao;
+        final bilaPredaja = prethodna != null && prethodna.zahtevanUnos == false && noviZahtevanUnos;
+
+        // Nista se nije promenilo — bez suvisnog upisa.
+        if (prethodna != null &&
+            prethodna.zahtevanUnos == noviZahtevanUnos &&
+            (ukupno - prethodna.ukupno).abs() <= _eps) {
+          return (uplata: uplataPostojeca, bilaPredaja: false);
+        }
+
+        final novaUplata = V3DnevnaUplataPazara(
+          dan: dan,
+          predao: efektivniPredao,
+          ukupno: ukupno,
+          razlika: efektivniPredao - ukupno,
+          zahtevanUnos: noviZahtevanUnos,
+        );
+
+        debugPrint(
+            '[V3UplataPazaraService] syncZahtevanUnos: vozacId=$id, dan=$dan.$mesec.$godina, ukupno=$ukupno, predao=$efektivniPredao, zahtevanUnos=$noviZahtevanUnos, bilaPredaja=$bilaPredaja');
+        final updated = await _upisiDnevnuUplatu(
+          vozacId: id,
+          mesec: mesec,
+          godina: godina,
+          existing: existing,
+          novaUplata: novaUplata,
+        );
+        return (uplata: updated ?? uplataPostojeca, bilaPredaja: bilaPredaja);
+      } catch (e) {
+        debugPrint('[V3UplataPazaraService] syncZahtevanUnos error: $e');
+        rethrow;
       }
-    }
+    });
   }
 
   /// Vraca iznos predaje za konkretan dan.

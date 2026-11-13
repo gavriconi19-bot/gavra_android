@@ -1416,6 +1416,21 @@ class V3FinansijeService {
     }
   }
 
+  /// ISO datum (yyyy-MM-dd) naplate u Beogradskoj zoni. `naplatio_at` i
+  /// `datum` se upisuju kao UTC timestamp — bez konverzije u Beograd naplate
+  /// u prvom času posle ponoći upadaju na pogrešan dan.
+  static String _danNaplateIso(Map<String, dynamic> uplata) {
+    for (final key in const ['naplatio_at', 'datum']) {
+      final raw = (uplata[key]?.toString() ?? '').trim();
+      if (raw.isEmpty) continue;
+      final dt = V3BelgradeTime.parseTs(raw);
+      if (dt != null) return V3BelgradeTime.toIsoDate(dt);
+      final iso = V3BelgradeTime.parseIsoDatePart(raw);
+      if (iso.isNotEmpty) return iso;
+    }
+    return '';
+  }
+
   /// Vraća ukupan pazar (naplaćeno) po vozaču za zadati dan, na osnovu
   /// uplate_json stavki čiji dan naplate (naplatio_at, ili datum ako
   /// naplatio_at nedostaje) odgovara zadatom danu. Ključ mape je vozacId
@@ -1426,10 +1441,7 @@ class V3FinansijeService {
 
     for (final row in _naplataRows()) {
       for (final uplata in _readUplate(row)) {
-        final naplatioAtRaw = (uplata['naplatio_at']?.toString() ?? '').trim();
-        final dayIso = naplatioAtRaw.isNotEmpty
-            ? V3BelgradeTime.parseIsoDatePart(naplatioAtRaw)
-            : V3BelgradeTime.parseIsoDatePart(uplata['datum']?.toString() ?? '');
+        final dayIso = _danNaplateIso(uplata);
         if (dayIso != datumIso) continue;
 
         final naplatioBy = (uplata['naplatio_by']?.toString() ?? '').trim();
@@ -1437,6 +1449,30 @@ class V3FinansijeService {
 
         final iznos = (uplata['iznos'] as num?)?.toDouble() ?? 0.0;
         result[naplatioBy] = (result[naplatioBy] ?? 0.0) + iznos;
+      }
+    }
+
+    return result;
+  }
+
+  /// Vraća pazar po danima za jednog vozača — ključ je ISO datum (yyyy-MM-dd)
+  /// dana naplate (naplatio_at, ili datum ako naplatio_at nedostaje), vrednost
+  /// je ukupan naplaćen iznos tog dana. Jedan prolaz kroz sve naplata redove.
+  static Map<String, double> getPazarPoVozacuPoDanima(String vozacId) {
+    final result = <String, double>{};
+    final id = vozacId.trim();
+    if (id.isEmpty) return result;
+
+    for (final row in _naplataRows()) {
+      for (final uplata in _readUplate(row)) {
+        final naplatioBy = (uplata['naplatio_by']?.toString() ?? '').trim();
+        if (naplatioBy != id) continue;
+
+        final dayIso = _danNaplateIso(uplata);
+        if (dayIso.isEmpty) continue;
+
+        final iznos = (uplata['iznos'] as num?)?.toDouble() ?? 0.0;
+        result[dayIso] = (result[dayIso] ?? 0.0) + iznos;
       }
     }
 
@@ -1491,10 +1527,7 @@ class V3FinansijeService {
         final naplatioBy = (uplata['naplatio_by']?.toString() ?? '').trim().toLowerCase();
         if (naplatioBy != idLower) continue;
 
-        final naplatioAtRaw = (uplata['naplatio_at']?.toString() ?? '').trim();
-        final dayIso = naplatioAtRaw.isNotEmpty
-            ? V3BelgradeTime.parseIsoDatePart(naplatioAtRaw)
-            : V3BelgradeTime.parseIsoDatePart(uplata['datum']?.toString() ?? '');
+        final dayIso = _danNaplateIso(uplata);
         if (dayIso != datumIso) continue;
 
         result.add({

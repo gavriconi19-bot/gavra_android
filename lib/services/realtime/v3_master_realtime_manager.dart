@@ -57,7 +57,7 @@ class V3MasterRealtimeManager {
   static final DateTime _defaultPazarPolicyStartDate = V3BelgradeTime.dateTime(2026, 9, 4);
   static const int _pazarDailyTriggerHour = 16;
   static const int _pazarDailyTriggerMinute = 30;
-  static const int _pazarLookbackDays = 7;
+  static const double _pazarIznosEps = 0.009;
   static const Duration _pazarAutoCheckInterval = Duration(minutes: 1);
 
   final V3CacheStore _cacheStore = V3CacheStore();
@@ -83,12 +83,11 @@ class V3MasterRealtimeManager {
 
   final StreamController<V3PazarPromptEvent> _pazarPromptController = StreamController<V3PazarPromptEvent>.broadcast();
   StreamSubscription<int>? _pazarRevisionSub;
-  StreamSubscription<int>? _pazarVoznjeRevisionSub;
+  StreamSubscription<int>? _pazarFinansijeRevisionSub;
   Timer? _pazarAutoCheckTimer;
   bool _pazarMonitoringStarted = false;
   int _pazarMonitoringSubscribers = 0;
   bool _pazarCheckInFlight = false;
-  bool _pazarAutoTriggerInFlight = false;
 
   // --- IN-MEMORY CACHE ---
   final Map<String, Map<String, dynamic>> adreseCache = {};
@@ -826,24 +825,20 @@ class V3MasterRealtimeManager {
     _pazarMonitoringStarted = true;
 
     debugPrint('[V3MasterRealtimeManager] pazar monitoring start');
-    unawaited(_checkPazarForCurrentDriver(fromRealtime: false));
+    unawaited(_checkPazarForCurrentDriver());
 
     _pazarRevisionSub = tableRevisionStream('v3_uplata_pazara').listen((revision) {
       debugPrint('[V3MasterRealtimeManager] pazar revision=$revision');
-      unawaited(_checkPazarForCurrentDriver(fromRealtime: true));
+      unawaited(_checkPazarForCurrentDriver());
     });
 
-    _pazarVoznjeRevisionSub = tablesRevisionStream(const [
-      'v3_trenutna_dodela',
-      'v3_operativna_nedelja',
-      'v3_finansije',
-    ]).listen((revision) {
-      debugPrint('[V3MasterRealtimeManager] voznje revision hash=$revision');
-      unawaited(_checkPazarForCurrentDriver(fromRealtime: true));
+    _pazarFinansijeRevisionSub = tableRevisionStream('v3_finansije').listen((revision) {
+      debugPrint('[V3MasterRealtimeManager] finansije revision hash=$revision');
+      unawaited(_checkPazarForCurrentDriver());
     });
 
     _pazarAutoCheckTimer = Timer.periodic(_pazarAutoCheckInterval, (_) {
-      unawaited(_checkPazarForCurrentDriver(fromRealtime: false));
+      unawaited(_checkPazarForCurrentDriver());
     });
   }
 
@@ -856,8 +851,8 @@ class V3MasterRealtimeManager {
     _pazarMonitoringStarted = false;
     _pazarRevisionSub?.cancel();
     _pazarRevisionSub = null;
-    _pazarVoznjeRevisionSub?.cancel();
-    _pazarVoznjeRevisionSub = null;
+    _pazarFinansijeRevisionSub?.cancel();
+    _pazarFinansijeRevisionSub = null;
     _pazarAutoCheckTimer?.cancel();
     _pazarAutoCheckTimer = null;
     debugPrint('[V3MasterRealtimeManager] pazar monitoring stop');
@@ -868,37 +863,6 @@ class V3MasterRealtimeManager {
     final configuredStart = V3AppSettingsState.instance.pazarPolicyStartDateValue;
     final effectiveStart = configuredStart ?? _defaultPazarPolicyStartDate;
     return !dayOnly.isBefore(effectiveStart);
-  }
-
-  _V3PendingPazarEntry? _findOldestPendingPazarFromCache({
-    required String vozacId,
-    required DateTime nowBelgrade,
-  }) {
-    final today = V3BelgradeTime.dateTime(nowBelgrade.year, nowBelgrade.month, nowBelgrade.day);
-    _V3PendingPazarEntry? oldest;
-
-    for (final row in uplataPazaraCache.values) {
-      if ((row['vozac_id']?.toString() ?? '').trim() != vozacId) continue;
-
-      final uplata = V3UplataPazara.fromJson(row);
-      for (final dnevna in uplata.dnevneUplate) {
-        if (dnevna.zahtevanUnos != true) continue;
-
-        final datum = V3BelgradeTime.dateTime(uplata.godina, uplata.mesec, dnevna.dan);
-        if (datum.isAfter(today)) continue;
-        if (!_isPazarPolicyActiveFor(datum)) continue;
-
-        if (oldest == null || datum.isBefore(oldest.datum)) {
-          oldest = _V3PendingPazarEntry(
-            datum: datum,
-            ukupno: dnevna.ukupno,
-            predao: dnevna.predao,
-          );
-        }
-      }
-    }
-
-    return oldest;
   }
 
   bool _isPazarDueFor(DateTime day, DateTime nowBelgrade) {
@@ -912,108 +876,71 @@ class V3MasterRealtimeManager {
     return !nowBelgrade.isBefore(dueAt);
   }
 
-  Future<V3DnevnaUplataPazara?> _dnevnaPazarZaDan({
+  /// Mesecni zapis iz baze, memoizovan po proveri. Baza je autoritativni izvor —
+  /// cache se koristi samo kao hint za kandidate, a odluke se donose nad sveze
+  /// procitanim stanjem da zastareli cache ne bi digao lazni popup ni prepisao
+  /// upravo sacuvanu predaju.
+  Future<V3UplataPazara?> _uplataZaMesec({
     required String vozacId,
     required DateTime day,
+    required Map<String, V3UplataPazara?> memo,
   }) async {
-    Map<String, dynamic>? targetRow;
-    for (final row in uplataPazaraCache.values) {
-      final rowVozacId = (row['vozac_id']?.toString() ?? '').trim();
-      if (rowVozacId == vozacId && row['mesec'] == day.month && row['godina'] == day.year) {
-        targetRow = row;
-        break;
-      }
-    }
+    final key = '${day.year}-${day.month}';
+    if (memo.containsKey(key)) return memo[key];
 
-    final uplata = targetRow != null
-        ? V3UplataPazara.fromJson(targetRow)
-        : await V3UplataPazaraService.getZaVozacaIMesec(
-            vozacId: vozacId,
-            datum: day,
-          );
-    return uplata?.uplataZaDan(day.day);
-  }
-
-  Future<bool> _sacuvajPazarZahtev({
-    required String vozacId,
-    required DateTime day,
-    required double predao,
-    required double ukupno,
-  }) async {
-    if (_pazarAutoTriggerInFlight) return false;
-    _pazarAutoTriggerInFlight = true;
-    try {
-      await V3UplataPazaraService.sacuvajDnevnuUplatu(
-        vozacId: vozacId,
-        datum: day,
-        predao: predao,
-        ukupno: ukupno,
-        zahtevanUnos: true,
-      );
-      return true;
-    } catch (e) {
-      debugPrint('[V3MasterRealtimeManager] pazar zahtev save error: $e');
-      return false;
-    } finally {
-      _pazarAutoTriggerInFlight = false;
+    final uplata = await V3UplataPazaraService.getZaVozacaIMesec(
+      vozacId: vozacId,
+      datum: day,
+    );
+    memo[key] = uplata;
+    if (uplata != null) {
+      v3UpsertToCache('v3_uplata_pazara', uplata.toJson());
     }
+    return uplata;
   }
 
   /// Sinhronizuje zahtev za unos pazara za jedan dan i vraca pending zapis ako
-  /// postoji. Pokriva tri slucaja:
+  /// postoji. Upis delegira na [V3UplataPazaraService.syncZahtevanUnos] koji
+  /// merge-uje na svezem stanju iz baze:
   ///  - nema zapisa: posle 16:30 kreira auto-zahtev (isti mehanizam radi i
   ///    backfill dana kada aplikacija nije bila pokrenuta posle 16:30)
   ///  - `zahtevan_unos=false` a pazar je porastao: reblokada (naknadna naplata
   ///    posle predaje)
-  ///  - `zahtevan_unos=true` a pazar je porastao: osvezava `ukupno` da popup
-  ///    ne prikazuje zastareli iznos
+  ///  - `ukupno` se osvezava u oba smera (ispravke/storna)
   Future<({_V3PendingPazarEntry? pending, bool naknadna})> _syncPazarZaDan({
     required String vozacId,
     required DateTime day,
     required DateTime nowBelgrade,
+    required double trenutnoUkupno,
+    required Map<String, V3UplataPazara?> mesecMemo,
   }) async {
-    var dnevna = await _dnevnaPazarZaDan(vozacId: vozacId, day: day);
-    final trenutnoUkupno = V3FinansijeService.getPazarPoVozacuZaDan(day)[vozacId] ?? 0.0;
+    var uplata = await _uplataZaMesec(vozacId: vozacId, day: day, memo: mesecMemo);
+    var dnevna = uplata?.uplataZaDan(day.day);
     var naknadna = false;
 
-    if (dnevna == null) {
-      if (!_isPazarDueFor(day, nowBelgrade) || trenutnoUkupno <= 0) {
-        return (pending: null, naknadna: false);
-      }
-      if (await _sacuvajPazarZahtev(
-        vozacId: vozacId,
-        day: day,
-        predao: 0,
-        ukupno: trenutnoUkupno,
-      )) {
-        dnevna = V3DnevnaUplataPazara(
-          dan: day.day,
-          predao: 0,
+    final potrebanSync = dnevna == null
+        ? _isPazarDueFor(day, nowBelgrade) && trenutnoUkupno > 0
+        : (trenutnoUkupno - dnevna.ukupno).abs() > _pazarIznosEps;
+
+    if (potrebanSync) {
+      try {
+        final res = await V3UplataPazaraService.syncZahtevanUnos(
+          vozacId: vozacId,
+          datum: day,
           ukupno: trenutnoUkupno,
-          razlika: -trenutnoUkupno,
-          zahtevanUnos: true,
         );
-        debugPrint('[V3MasterRealtimeManager] auto zahtev unosa za ${V3BelgradeTime.toIsoDate(day)}');
-      }
-    } else if ((trenutnoUkupno - dnevna.ukupno) > 0.009) {
-      final bilaPredaja = dnevna.zahtevanUnos == false;
-      if (await _sacuvajPazarZahtev(
-        vozacId: vozacId,
-        day: day,
-        predao: dnevna.predao,
-        ukupno: trenutnoUkupno,
-      )) {
-        naknadna = bilaPredaja;
-        dnevna = V3DnevnaUplataPazara(
-          dan: day.day,
-          predao: dnevna.predao,
-          ukupno: trenutnoUkupno,
-          razlika: dnevna.predao - trenutnoUkupno,
-          zahtevanUnos: true,
-        );
-        debugPrint(bilaPredaja
-            ? '[V3MasterRealtimeManager] reblokada pazara: detektovana naknadna naplata'
-            : '[V3MasterRealtimeManager] osvezen ukupno pazara dok je unos na cekanju');
+        if (res.uplata != null) {
+          uplata = res.uplata;
+          mesecMemo['${day.year}-${day.month}'] = uplata;
+          v3UpsertToCache('v3_uplata_pazara', uplata!.toJson());
+          dnevna = uplata.uplataZaDan(day.day);
+          naknadna = res.bilaPredaja;
+          debugPrint(res.bilaPredaja
+              ? '[V3MasterRealtimeManager] reblokada pazara: detektovana naknadna naplata'
+              : '[V3MasterRealtimeManager] sinhronizovan zahtev unosa za ${V3BelgradeTime.toIsoDate(day)}');
+        }
+      } catch (e) {
+        debugPrint('[V3MasterRealtimeManager] pazar sync error: $e');
       }
     }
 
@@ -1030,7 +957,7 @@ class V3MasterRealtimeManager {
     return (pending: null, naknadna: naknadna);
   }
 
-  Future<void> _checkPazarForCurrentDriver({required bool fromRealtime}) async {
+  Future<void> _checkPazarForCurrentDriver() async {
     if (!_pazarMonitoringStarted) return;
     if (_pazarCheckInFlight) return;
     _pazarCheckInFlight = true;
@@ -1044,22 +971,41 @@ class V3MasterRealtimeManager {
       final today = V3BelgradeTime.dateTime(now.year, now.month, now.day);
       if (!_isPazarPolicyActiveFor(today)) return;
 
+      // Kandidati za sync: svi dani kada je vozac naplatio pazar (iz
+      // finansija) + svi dani sa postojecim uplata zapisima. Nije ograniceno
+      // lookback prozorom — backfill pokriva i dane kada aplikacija nije
+      // bila pokrenuta posle 16:30.
+      final pazarPoDanu = V3FinansijeService.getPazarPoVozacuPoDanima(vozacId);
+      final kandidati = <String>{};
+      pazarPoDanu.forEach((iso, iznos) {
+        if (iznos > 0) kandidati.add(iso);
+      });
+      for (final row in uplataPazaraCache.values) {
+        if ((row['vozac_id']?.toString() ?? '').trim() != vozacId) continue;
+        final uplata = V3UplataPazara.fromJson(row);
+        for (final dnevna in uplata.dnevneUplate) {
+          kandidati.add(V3BelgradeTime.toIsoDate(DateTime(uplata.godina, uplata.mesec, dnevna.dan)));
+        }
+      }
+
+      final mesecMemo = <String, V3UplataPazara?>{};
       _V3PendingPazarEntry? oldestPending;
       var oldestNaknadna = false;
 
-      // Lookback prozor: sinhronizacija je autoritativna (cache -> fetch
-      // fallback), pa pokriva i backfill dana kada aplikacija nije radila.
-      final lookbackStartDate = DateTime(today.year, today.month, today.day - _pazarLookbackDays);
-      final lookbackStart =
-          V3BelgradeTime.dateTime(lookbackStartDate.year, lookbackStartDate.month, lookbackStartDate.day);
-      for (var i = _pazarLookbackDays; i >= 0; i--) {
-        final d = DateTime(today.year, today.month, today.day - i);
-        final day = V3BelgradeTime.dateTime(d.year, d.month, d.day);
+      final sorted = kandidati.toList()..sort();
+      for (final iso in sorted) {
+        final parsed = V3BelgradeTime.parseDatum(iso);
+        if (parsed == null) continue;
+        final day = V3BelgradeTime.dateTime(parsed.year, parsed.month, parsed.day);
+        if (day.isAfter(today)) continue;
         if (!_isPazarPolicyActiveFor(day)) continue;
+
         final result = await _syncPazarZaDan(
           vozacId: vozacId,
           day: day,
           nowBelgrade: now,
+          trenutnoUkupno: pazarPoDanu[iso] ?? 0.0,
+          mesecMemo: mesecMemo,
         );
         final pending = result.pending;
         if (pending != null && (oldestPending == null || pending.datum.isBefore(oldestPending.datum))) {
@@ -1068,37 +1014,27 @@ class V3MasterRealtimeManager {
         }
       }
 
-      // Pending stariji od lookback prozora: kandidat iz cache-a se verifikuje
-      // direktno iz baze da zastareli cache ne bi digao lazni popup.
-      final cachedPending = _findOldestPendingPazarFromCache(
-        vozacId: vozacId,
-        nowBelgrade: now,
-      );
-      if (cachedPending != null && cachedPending.datum.isBefore(lookbackStart)) {
-        final uplata = await V3UplataPazaraService.getZaVozacaIMesec(
-          vozacId: vozacId,
-          datum: cachedPending.datum,
-        );
-        final dnevna = uplata?.uplataZaDan(cachedPending.datum.day);
-        if (dnevna != null && dnevna.zahtevanUnos == true && dnevna.ukupno > 0) {
-          oldestPending = _V3PendingPazarEntry(
-            datum: cachedPending.datum,
-            ukupno: dnevna.ukupno,
-            predao: dnevna.predao,
-          );
-          oldestNaknadna = false;
-        }
-      }
-
       if (oldestPending != null) {
-        _pazarPromptController.add(
-          V3PazarPromptEvent(
-            datum: oldestPending.datum,
-            ukupno: oldestPending.ukupno,
-            predao: oldestPending.predao,
-            naknadnaNaplataDetektovana: oldestNaknadna,
-          ),
+        // Verifikacija iz baze neposredno pre emitovanja — vozac ili drugi
+        // uredjaj je mozda upravo zavrsio unos za ovaj dan.
+        final fresh = await V3UplataPazaraService.getZaVozacaIMesec(
+          vozacId: vozacId,
+          datum: oldestPending.datum,
         );
+        if (fresh != null) {
+          v3UpsertToCache('v3_uplata_pazara', fresh.toJson());
+        }
+        final dnevna = fresh?.uplataZaDan(oldestPending.datum.day);
+        if (dnevna != null && dnevna.zahtevanUnos == true && dnevna.ukupno > 0) {
+          _pazarPromptController.add(
+            V3PazarPromptEvent(
+              datum: oldestPending.datum,
+              ukupno: dnevna.ukupno,
+              predao: dnevna.predao,
+              naknadnaNaplataDetektovana: oldestNaknadna,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('[V3MasterRealtimeManager] check pazar error: $e');

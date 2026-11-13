@@ -1207,6 +1207,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Geben Sie den zusätzlichen Betrag ein, den Sie übergeben',
       'zh': '请输入您要补交的额外金额'
     },
+    'iznosSeRazlikujeNaslov': {
+      'sr': 'Iznos se razlikuje od pazara',
+      'en': 'Amount differs from earnings',
+      'ru': 'Сумма отличается от выручки',
+      'de': 'Betrag weicht von Einnahmen ab',
+      'zh': '金额与收入不符'
+    },
+    'iznosSeRazlikujePoruka': {
+      'sr': 'Očekivani iznos je {ocekivano} din, a uneli ste {uneti} din (razlika {razlika} din). Da li želite ipak da sačuvate?',
+      'en': 'Expected amount is {ocekivano} RSD, you entered {uneti} RSD (difference {razlika} RSD). Save anyway?',
+      'ru': 'Ожидаемая сумма {ocekivano} дин, вы ввели {uneti} дин (разница {razlika} дин). Всё равно сохранить?',
+      'de': 'Erwarteter Betrag ist {ocekivano} RSD, Sie haben {uneti} RSD eingegeben (Differenz {razlika} RSD). Trotzdem speichern?',
+      'zh': '预期金额为 {ocekivano} 第纳尔，您输入了 {uneti} 第纳尔（差额 {razlika} 第纳尔）。仍要保存吗？'
+    },
+    'ipakSacuvaj': {
+      'sr': 'Ipak sačuvaj',
+      'en': 'Save anyway',
+      'ru': 'Всё равно сохранить',
+      'de': 'Trotzdem speichern',
+      'zh': '仍然保存'
+    },
+    'ispraviIznos': {
+      'sr': 'Ispravi iznos',
+      'en': 'Correct amount',
+      'ru': 'Исправить сумму',
+      'de': 'Betrag korrigieren',
+      'zh': '更正金额'
+    },
   },
   'vozacScreen': {
     'kombiNijeDodeljen': {

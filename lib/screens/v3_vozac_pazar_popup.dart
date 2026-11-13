@@ -88,18 +88,30 @@ class _V3VozacPazarPopupState extends State<V3VozacPazarPopup> {
       return;
     }
 
+    // Potvrda kad uneti iznos odstupa od ocekivanog (preostalog) pazara —
+    // stiti i od lapsusa i od trajnog "odlaganja" unosom 0.
+    final ocekivano = max(0.0, _ukupno - _vecPredato);
+    if ((predaoVal - ocekivano).abs() > 0.009) {
+      final potvrdjeno = await _potvrdiRazliku(predaoVal, ocekivano);
+      if (!potvrdjeno || !mounted) return;
+    }
+
     setState(() => _isSaving = true);
     try {
       // Svezi ukupno u trenutku cuvanja — naplata moze stici dok je popup otvoren.
       final pazarMap = V3FinansijeService.getPazarPoVozacuZaDan(widget.datum);
       final svezeUkupno = max(_ukupno, pazarMap[vozacId] ?? 0.0);
-      await V3UplataPazaraService.sacuvajDnevnuUplatu(
+      final sacuvano = await V3UplataPazaraService.sacuvajDnevnuUplatu(
         vozacId: vozacId,
         datum: widget.datum,
-        predao: _vecPredato + predaoVal,
+        predao: predaoVal,
         ukupno: svezeUkupno,
         zahtevanUnos: false, // gasimo popup jer je ukucao!
+        saberiSaPostojecimPredao: true, // aditivno na sveze stanje iz baze
       );
+      if (sacuvano != null) {
+        V3MasterRealtimeManager.instance.v3UpsertToCache('v3_uplata_pazara', sacuvano.toJson());
+      }
       final noviPredao = await V3UplataPazaraService.getPredaoZaDan(
         vozacId: vozacId,
         datum: widget.datum,
@@ -116,6 +128,46 @@ class _V3VozacPazarPopupState extends State<V3VozacPazarPopup> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Future<bool> _potvrdiRazliku(double uneti, double ocekivano) async {
+    final razlika = (uneti - ocekivano).abs();
+    final rezultat = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A2A2A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          _PopupTr.tr('iznosSeRazlikujeNaslov'),
+          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          _PopupTr.tr('iznosSeRazlikujePoruka')
+              .replaceAll('{ocekivano}', ocekivano.toStringAsFixed(0))
+              .replaceAll('{uneti}', uneti.toStringAsFixed(0))
+              .replaceAll('{razlika}', razlika.toStringAsFixed(0)),
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              _PopupTr.tr('ispraviIznos'),
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              _PopupTr.tr('ipakSacuvaj'),
+              style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    return rezultat == true;
   }
 
   @override
