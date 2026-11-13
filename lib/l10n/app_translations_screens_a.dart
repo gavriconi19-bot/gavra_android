@@ -576,6 +576,13 @@ const Map<String, Map<String, Map<String, String>>> _screensA = {
       'de': 'km/h',
       'zh': 'km/h',
     },
+    'zastarelo': {
+      'sr': 'zastarelo',
+      'en': 'stale',
+      'ru': 'устарело',
+      'de': 'veraltet',
+      'zh': '已过期',
+    },
   },
   'adreseScreen': {
     'naslov': {'sr': '📍 Adrese', 'en': '📍 Addresses', 'ru': '📍 Адреса', 'de': '📍 Adressen', 'zh': '📍 地址'},

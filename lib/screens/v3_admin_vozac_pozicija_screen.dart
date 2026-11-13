@@ -48,6 +48,15 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
   /// km/h; null = GPS nije poslao validan speed.
   final Map<String, double?> _brzine = {};
 
+  /// Lokacija starija od ovoga = vozač više ne track-uje.
+  /// Usklađeno sa DRIVER_LOCATION_MAX_AGE_MS (130s) u v3-compute-eta —
+  /// tick ide na 20s, pa je ovo ~6 propuštenih tick-ova.
+  static const Duration _locationMaxAge = Duration(seconds: 130);
+
+  /// Red se nikad ne briše iz v3_vozac_location — bez timera bi zastarela
+  /// pozicija ostala "zelena" dok ne stigne sledeći realtime event.
+  Timer? _freshnessTimer;
+
   StreamSubscription<int>? _locationSub;
   final MapController _mapController = MapController();
   bool _mapReady = false;
@@ -61,12 +70,23 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
       if (!mounted) return;
       _applyCacheToState(moveMap: true);
     });
+    _freshnessTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _locationSub?.cancel();
+    _freshnessTimer?.cancel();
     super.dispose();
+  }
+
+  /// Sveža pozicija = updated_at u poslednjih [_locationMaxAge].
+  /// Nepoznato vreme (null) se tretira kao zastarelo.
+  bool _isSveza(String vozacId) {
+    final ts = _lastUpdates[vozacId];
+    return ts != null && V3BelgradeTime.now().difference(ts) <= _locationMaxAge;
   }
 
   void _applyCacheToState({required bool moveMap}) {
@@ -82,8 +102,9 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
       final lng = (row['lng'] as num?)?.toDouble();
       if (vozacId.isEmpty || lat == null || lng == null) continue;
       newPozicije[vozacId] = ll.LatLng(lat, lng);
+      // Bez fallback-a na now(): neparsibilan updated_at = zastarela pozicija.
       final parsed = V3BelgradeTime.parseTs(row['updated_at']?.toString());
-      newUpdates[vozacId] = parsed ?? V3BelgradeTime.now();
+      if (parsed != null) newUpdates[vozacId] = parsed;
       final speedRaw = row['speed_kmh'];
       newBrzine[vozacId] = speedRaw is num ? speedRaw.toDouble() : null;
     }
@@ -131,7 +152,9 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
   @override
   Widget build(BuildContext context) {
     final prikazaniVozaci = _prikazaniVozaci;
-    final brojAktivnih = _pozicije.length;
+    // Aktivan = sveža pozicija; zastareli redovi ne ulaze u brojač.
+    final brojAktivnih = _pozicije.keys.where(_isSveza).length;
+    final imaSvezihPrikazanih = prikazaniVozaci.any((v) => _isSveza(v.id));
     final selectedSpeed = _selectedVozacId != null ? _brzine[_selectedVozacId] : null;
 
     return Scaffold(
@@ -159,7 +182,11 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
                 ..._vozaci.map((v) => DropdownMenuItem<String>(
                       value: v.id,
                       child: Text(
-                        _pozicije.containsKey(v.id) ? '${v.imePrezime} 🟢' : v.imePrezime,
+                        !_pozicije.containsKey(v.id)
+                            ? v.imePrezime
+                            : _isSveza(v.id)
+                                ? '${v.imePrezime} 🟢'
+                                : '${v.imePrezime} ⚪',
                       ),
                     )),
               ],
@@ -173,17 +200,12 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
                 Icon(
                   prikazaniVozaci.isNotEmpty ? Icons.gps_fixed : Icons.gps_not_fixed,
                   size: 16,
-                  color: prikazaniVozaci.isNotEmpty ? Colors.green : Colors.grey,
+                  color: imaSvezihPrikazanih ? Colors.green : Colors.grey,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    prikazaniVozaci.isEmpty
-                        ? _VozacPozTr.tr('cekaSePozicija')
-                        : _selectedVozacId != null && _lastUpdates[_selectedVozacId] != null
-                            ? '${_VozacPozTr.tr('azurirano')}: ${_formatTime(_lastUpdates[_selectedVozacId]!)}'
-                                '${selectedSpeed != null ? ' · ${_formatSpeed(selectedSpeed)}' : ''}'
-                            : '${_VozacPozTr.tr('aktivnihVozaca')}: $brojAktivnih',
+                    _statusText(prikazaniVozaci, selectedSpeed, brojAktivnih),
                     style: const TextStyle(fontSize: 12),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -220,8 +242,10 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
                         // topCenter = ceo marker IZNAD tačke, vrh pina = GPS.
                         // bottomCenter bi ceo marker spustio ISPOD puta.
                         alignment: Alignment.topCenter,
+                        // Zastarela pozicija ostaje na mapi (poslednja poznata),
+                        // ali siva — bez boje vozača.
                         child: _VozacMarker(
-                          boja: V3CardColorPolicy.vozacColorOr(vozac.boja),
+                          boja: _isSveza(vozac.id) ? V3CardColorPolicy.vozacColorOr(vozac.boja) : Colors.grey,
                           ime: vozac.imePrezime,
                           brzinaLabel: _formatSpeed(_brzine[vozac.id]),
                         ),
@@ -234,6 +258,23 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
         ],
       ),
     );
+  }
+
+  /// Statusna linija iznad mape: čekanje / izabrani vozač (sa stale oznakom) / broj aktivnih.
+  String _statusText(List<V3Vozac> prikazaniVozaci, double? selectedSpeed, int brojAktivnih) {
+    if (prikazaniVozaci.isEmpty) {
+      return _VozacPozTr.tr('cekaSePozicija');
+    }
+    final selectedId = _selectedVozacId;
+    if (selectedId != null) {
+      final speedPart = selectedSpeed != null ? ' · ${_formatSpeed(selectedSpeed)}' : '';
+      final stalePart = _isSveza(selectedId) ? '' : ' (${_VozacPozTr.tr('zastarelo')})';
+      final ts = _lastUpdates[selectedId];
+      return ts != null
+          ? '${_VozacPozTr.tr('azurirano')}: ${_formatTime(ts)}$speedPart$stalePart'
+          : '${_VozacPozTr.tr('zastarelo')}$speedPart';
+    }
+    return '${_VozacPozTr.tr('aktivnihVozaca')}: $brojAktivnih';
   }
 
   String _formatTime(DateTime dt) {
