@@ -4,7 +4,7 @@ import '../../../globals.dart';
 
 class V3VozacRepository {
   static const String _authVozacSelect =
-      'id, ime, telefon, telefon_2, boja, push_token, push_token_2, pin_hash, uloga, created_at, updated_at';
+      'id, ime, telefon, telefon_2, boja, push_token, push_token_2, push_token_3, pin_hash, uloga, created_at, updated_at';
 
   Future<void> deleteById(String id) {
     return Future.value();
@@ -30,7 +30,8 @@ class V3VozacRepository {
     final status = response.status;
     final data = response.data;
     if (status < 200 || status >= 300 || data is! Map || data['ok'] != true) {
-      final reason = (data is Map ? data['reason']?.toString() : null) ?? 'edge_error';
+      final reason =
+          (data is Map ? data['reason']?.toString() : null) ?? 'edge_error';
       throw Exception('v3-set-uloga failed: $reason');
     }
 
@@ -41,7 +42,8 @@ class V3VozacRepository {
     return Map<String, dynamic>.from(row);
   }
 
-  Future<Map<String, dynamic>> updateByIdReturning(String id, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateByIdReturning(
+      String id, Map<String, dynamic> payload) async {
     final mapped = _mapUpdatePayloadToAuth(payload);
     // Uvek postavi tip na 'vozac' — dozvoljava konverziju putnika u vozača
     // (bez ovoga, filter .eq('tip','vozac') na update-u ne bi pogodio red
@@ -54,7 +56,12 @@ class V3VozacRepository {
     if (ulogaValue == null || ulogaValue.isEmpty || ulogaValue == 'putnik') {
       mapped['uloga'] = 'vozac';
     }
-    return supabase.from('v3_auth').update(mapped).eq('id', id).select('$_authVozacSelect, tip').single();
+    return supabase
+        .from('v3_auth')
+        .update(mapped)
+        .eq('id', id)
+        .select('$_authVozacSelect, tip')
+        .single();
   }
 
   Future<Map<String, dynamic>?> getActiveByIdAndPushToken({
@@ -66,7 +73,7 @@ class V3VozacRepository {
         .select('id')
         .eq('id', vozacId)
         .eq('tip', 'vozac')
-        .or('push_token.eq.$pushToken,push_token_2.eq.$pushToken')
+        .or('push_token.eq.$pushToken,push_token_2.eq.$pushToken,push_token_3.eq.$pushToken,push_token_hms.eq.$pushToken,push_token_hms_2.eq.$pushToken,push_token_hms_3.eq.$pushToken')
         .maybeSingle();
   }
 
@@ -74,7 +81,12 @@ class V3VozacRepository {
     final id = authId.trim();
     if (id.isEmpty) return null;
 
-    final row = await supabase.from('v3_auth').select(_authVozacSelect).eq('id', id).eq('tip', 'vozac').maybeSingle();
+    final row = await supabase
+        .from('v3_auth')
+        .select(_authVozacSelect)
+        .eq('id', id)
+        .eq('tip', 'vozac')
+        .maybeSingle();
 
     if (row == null) return null;
     return _mapAuthRowToVozac(Map<String, dynamic>.from(row));
@@ -98,7 +110,11 @@ class V3VozacRepository {
       'tip': 'vozac',
       if (uloga != null && uloga.isNotEmpty) 'uloga': uloga,
     };
-    return supabase.from('v3_auth').insert(mapped).select('$_authVozacSelect, tip').single();
+    return supabase
+        .from('v3_auth')
+        .insert(mapped)
+        .select('$_authVozacSelect, tip')
+        .single();
   }
 
   Map<String, dynamic> _mapUpdatePayloadToAuth(Map<String, dynamic> payload) {
@@ -106,10 +122,15 @@ class V3VozacRepository {
 
     if (payload.containsKey('ime_prezime')) out['ime'] = payload['ime_prezime'];
     if (payload.containsKey('telefon_1')) out['telefon'] = payload['telefon_1'];
-    if (payload.containsKey('telefon_2')) out['telefon_2'] = payload['telefon_2'];
+    if (payload.containsKey('telefon_2'))
+      out['telefon_2'] = payload['telefon_2'];
     if (payload.containsKey('boja')) out['boja'] = payload['boja'];
-    if (payload.containsKey('push_token')) out['push_token'] = payload['push_token'];
-    if (payload.containsKey('push_token_2')) out['push_token_2'] = payload['push_token_2'];
+    if (payload.containsKey('push_token'))
+      out['push_token'] = payload['push_token'];
+    if (payload.containsKey('push_token_2'))
+      out['push_token_2'] = payload['push_token_2'];
+    if (payload.containsKey('push_token_3'))
+      out['push_token_3'] = payload['push_token_3'];
     if (payload.containsKey('uloga')) out['uloga'] = payload['uloga'];
 
     return out;
@@ -124,6 +145,7 @@ class V3VozacRepository {
       'boja': row['boja'],
       'push_token': row['push_token'],
       'push_token_2': row['push_token_2'],
+      'push_token_3': row['push_token_3'],
       'pin_hash': row['pin_hash'],
       'uloga': row['uloga'],
       'created_at': row['created_at'],

@@ -8,6 +8,7 @@ class V3Vozac {
   final String? boja;
   final String? pushToken;
   final String? pushToken2;
+  final String? pushToken3;
   final String? pinHash;
   final String uloga;
   final DateTime? createdAt;
@@ -21,6 +22,7 @@ class V3Vozac {
     this.boja,
     this.pushToken,
     this.pushToken2,
+    this.pushToken3,
     this.pinHash,
     this.uloga = 'vozac',
     this.createdAt,
@@ -36,8 +38,11 @@ class V3Vozac {
       boja: json['boja'] as String?,
       pushToken: json['push_token'] as String?,
       pushToken2: json['push_token_2'] as String?,
+      pushToken3: json['push_token_3'] as String?,
       pinHash: json['pin_hash'] as String?,
-      uloga: (json['uloga'] as String?)?.trim().isNotEmpty == true ? json['uloga'] as String : 'vozac',
+      uloga: (json['uloga'] as String?)?.trim().isNotEmpty == true
+          ? json['uloga'] as String
+          : 'vozac',
       createdAt: V3BelgradeTime.parseTs(json['created_at'] as String?),
       updatedAt: V3BelgradeTime.parseTs(json['updated_at'] as String?),
     );
@@ -52,6 +57,7 @@ class V3Vozac {
       'boja': boja,
       'push_token': pushToken,
       'push_token_2': pushToken2,
+      'push_token_3': pushToken3,
       'pin_hash': pinHash,
       'uloga': uloga,
     };

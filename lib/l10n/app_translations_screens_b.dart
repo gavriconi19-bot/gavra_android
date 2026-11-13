@@ -2,7 +2,13 @@ part of 'app_translations.dart';
 
 const Map<String, Map<String, Map<String, String>>> _screensB = {
   'putniciScreen': {
-    'uloge': {'sr': 'Uloge', 'en': 'Roles', 'ru': 'Роли', 'de': 'Rollen', 'zh': '角色'},
+    'uloge': {
+      'sr': 'Uloge',
+      'en': 'Roles',
+      'ru': 'Роли',
+      'de': 'Rollen',
+      'zh': '角色'
+    },
     'greskaCuvanja': {
       'sr': 'Greška pri čuvanju',
       'en': 'Error saving',
@@ -55,13 +61,44 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
           'Вы уверены, что хотите удалить "%s"?\n\n⚠️ ВАЖНО:\n• Пассажир будет НАВСЕГДА удален\n• Все поездки и статистика будут удалены\n• Это действие НЕОБРАТИМО!',
       'de':
           'Möchten Sie "%s" wirklich löschen?\n\n⚠️ WICHTIG:\n• Der Passagier wird DAUERHAFT gelöscht\n• Alle Fahrten und Statistiken werden gelöscht\n• Diese Aktion ist UNWIDERRUFLICH!',
-      'zh': '您确定要删除“%s”吗？\n\n⚠️ 重要提示：\n• 乘客将被永久删除\n• 所有行程和统计数据都将被删除\n• 此操作不可恢复！',
+      'zh':
+          '您确定要删除“%s”吗？\n\n⚠️ 重要提示：\n• 乘客将被永久删除\n• 所有行程和统计数据都将被删除\n• 此操作不可恢复！',
     },
-    'obrisi': {'sr': 'Obriši', 'en': 'Delete', 'ru': 'Удалить', 'de': 'Löschen', 'zh': '删除'},
-    'otkazi': {'sr': 'Otkaži', 'en': 'Cancel', 'ru': 'Отмена', 'de': 'Abbrechen', 'zh': '取消'},
-    'obrisan': {'sr': 'obrisan', 'en': 'deleted', 'ru': 'удален', 'de': 'gelöscht', 'zh': '已删除'},
-    'potvrda': {'sr': 'Potvrda', 'en': 'Confirm', 'ru': 'Подтверждение', 'de': 'Bestätigung', 'zh': '确认'},
-    'nastavi': {'sr': 'Nastavi', 'en': 'Continue', 'ru': 'Продолжить', 'de': 'Weiter', 'zh': '继续'},
+    'obrisi': {
+      'sr': 'Obriši',
+      'en': 'Delete',
+      'ru': 'Удалить',
+      'de': 'Löschen',
+      'zh': '删除'
+    },
+    'otkazi': {
+      'sr': 'Otkaži',
+      'en': 'Cancel',
+      'ru': 'Отмена',
+      'de': 'Abbrechen',
+      'zh': '取消'
+    },
+    'obrisan': {
+      'sr': 'obrisan',
+      'en': 'deleted',
+      'ru': 'удален',
+      'de': 'gelöscht',
+      'zh': '已删除'
+    },
+    'potvrda': {
+      'sr': 'Potvrda',
+      'en': 'Confirm',
+      'ru': 'Подтверждение',
+      'de': 'Bestätigung',
+      'zh': '确认'
+    },
+    'nastavi': {
+      'sr': 'Nastavi',
+      'en': 'Continue',
+      'ru': 'Продолжить',
+      'de': 'Weiter',
+      'zh': '继续'
+    },
     'konverzijaPutnikaUVozacaUpozorenje': {
       'sr':
           'Menjate tip naloga u "Vozač". Podaci specifični za putnika (tip putnika, adrese, cene) će biti trajno izgubljeni. Da li želite da nastavite?',
@@ -73,7 +110,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
           'Sie ändern den Kontotyp auf "Fahrer". Passagierspezifische Daten (Passagiertyp, Adressen, Preise) gehen dauerhaft verloren. Möchten Sie fortfahren?',
       'zh': '您正在将账户类型更改为"司机"。乘客特定数据（乘客类型、地址、价格）将永久丢失。是否继续？',
     },
-    'pozovi': {'sr': 'Pozovi', 'en': 'Call', 'ru': 'Позвонить', 'de': 'Anrufen', 'zh': '打电话'},
+    'pozovi': {
+      'sr': 'Pozovi',
+      'en': 'Call',
+      'ru': 'Позвонить',
+      'de': 'Anrufen',
+      'zh': '打电话'
+    },
     'detaljneStatistike': {
       'sr': 'Detaljne statistike',
       'en': 'Detailed statistics',
@@ -81,8 +124,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Detaillierte Statistik',
       'zh': '详细统计'
     },
-    'uredi': {'sr': 'Uredi', 'en': 'Edit', 'ru': 'Изменить', 'de': 'Bearbeiten', 'zh': '编辑'},
-    'kontaktiraj': {'sr': 'Kontaktiraj', 'en': 'Contact', 'ru': 'Связаться с', 'de': 'Kontaktieren', 'zh': '联系'},
+    'uredi': {
+      'sr': 'Uredi',
+      'en': 'Edit',
+      'ru': 'Изменить',
+      'de': 'Bearbeiten',
+      'zh': '编辑'
+    },
+    'kontaktiraj': {
+      'sr': 'Kontaktiraj',
+      'en': 'Contact',
+      'ru': 'Связаться с',
+      'de': 'Kontaktieren',
+      'zh': '联系'
+    },
     'sms': {'sr': 'SMS', 'en': 'SMS', 'ru': 'SMS', 'de': 'SMS', 'zh': '短信'},
     'unesiteImeIliTelefon': {
       'sr': '⚠️ Unesite makar ime ili broj telefona',
@@ -105,7 +160,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '✅ Passagier gespeichert',
       'zh': '✅ 乘客已保存'
     },
-    'greska': {'sr': 'Greška', 'en': 'Error', 'ru': 'Ошибка', 'de': 'Fehler', 'zh': '错误'},
+    'greska': {
+      'sr': 'Greška',
+      'en': 'Error',
+      'ru': 'Ошибка',
+      'de': 'Fehler',
+      'zh': '错误'
+    },
     'nijeOdabrano': {
       'sr': '— nije odabrano —',
       'en': '— not selected —',
@@ -155,10 +216,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Passagiertyp',
       'zh': '乘客类型'
     },
-    'radnik': {'sr': '👷 Radnik', 'en': '👷 Worker', 'ru': '👷 Рабочий', 'de': '👷 Arbeiter', 'zh': '👷 工人'},
-    'ucenik': {'sr': '🎒 Učenik', 'en': '🎒 Student', 'ru': '🎒 Ученик', 'de': '🎒 Schüler', 'zh': '🎒 学生'},
-    'dnevni': {'sr': '🚶 Dnevni', 'en': '🚶 Daily', 'ru': '🚶 Ежедневный', 'de': '🚶 Täglich', 'zh': '🚶 日常'},
-    'posiljka': {'sr': '📦 Pošiljka', 'en': '📦 Shipment', 'ru': '📦 Посылка', 'de': '📦 Sendung', 'zh': '📦 包裹'},
+    'radnik': {
+      'sr': '👷 Radnik',
+      'en': '👷 Worker',
+      'ru': '👷 Рабочий',
+      'de': '👷 Arbeiter',
+      'zh': '👷 工人'
+    },
+    'ucenik': {
+      'sr': '🎒 Učenik',
+      'en': '🎒 Student',
+      'ru': '🎒 Ученик',
+      'de': '🎒 Schüler',
+      'zh': '🎒 学生'
+    },
+    'dnevni': {
+      'sr': '🚶 Dnevni',
+      'en': '🚶 Daily',
+      'ru': '🚶 Ежедневный',
+      'de': '🚶 Täglich',
+      'zh': '🚶 日常'
+    },
+    'posiljka': {
+      'sr': '📦 Pošiljka',
+      'en': '📦 Shipment',
+      'ru': '📦 Посылка',
+      'de': '📦 Sendung',
+      'zh': '📦 包裹'
+    },
     'imePrezime': {
       'sr': 'Ime i prezime',
       'en': 'First and last name',
@@ -166,7 +251,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Vor- und Nachname',
       'zh': '姓名'
     },
-    'telefon1': {'sr': 'Telefon 1 *', 'en': 'Phone 1 *', 'ru': 'Телефон 1 *', 'de': 'Telefon 1 *', 'zh': '电话 1 *'},
+    'telefon1': {
+      'sr': 'Telefon 1 *',
+      'en': 'Phone 1 *',
+      'ru': 'Телефон 1 *',
+      'de': 'Telefon 1 *',
+      'zh': '电话 1 *'
+    },
     'telefon2': {
       'sr': 'Telefon 2 (opciono)',
       'en': 'Phone 2 (optional)',
@@ -230,8 +321,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'VS — Adresse 2 (optional)',
       'zh': 'VS — 地址 2（可选）'
     },
-    'sacuvaj': {'sr': 'Sačuvaj', 'en': 'Save', 'ru': 'Сохранить', 'de': 'Speichern', 'zh': '保存'},
-    'dodaj': {'sr': 'Dodaj', 'en': 'Add', 'ru': 'Добавить', 'de': 'Hinzufügen', 'zh': '添加'},
+    'sacuvaj': {
+      'sr': 'Sačuvaj',
+      'en': 'Save',
+      'ru': 'Сохранить',
+      'de': 'Speichern',
+      'zh': '保存'
+    },
+    'dodaj': {
+      'sr': 'Dodaj',
+      'en': 'Add',
+      'ru': 'Добавить',
+      'de': 'Hinzufügen',
+      'zh': '添加'
+    },
   },
   'putnikProfilScreenProfileDialogT': {
     'izmeniProfilTitle': {
@@ -255,8 +358,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Vor- und Nachname',
       'zh': '姓名'
     },
-    'telefon1': {'sr': 'Telefon 1', 'en': 'Phone 1', 'ru': 'Телефон 1', 'de': 'Telefon 1', 'zh': '电话 1'},
-    'telefon2': {'sr': 'Telefon 2', 'en': 'Phone 2', 'ru': 'Телефон 2', 'de': 'Telefon 2', 'zh': '电话 2'},
+    'telefon1': {
+      'sr': 'Telefon 1',
+      'en': 'Phone 1',
+      'ru': 'Телефон 1',
+      'de': 'Telefon 1',
+      'zh': '电话 1'
+    },
+    'telefon2': {
+      'sr': 'Telefon 2',
+      'en': 'Phone 2',
+      'ru': 'Телефон 2',
+      'de': 'Telefon 2',
+      'zh': '电话 2'
+    },
     'stalneAdrese': {
       'sr': 'Stalne adrese',
       'en': 'Permanent addresses',
@@ -320,10 +435,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '⚠️ Hauptadresse BC und VS auswählen',
       'zh': '⚠️ 请选择主要 BC 和 VS 地址',
     },
-    'promeniPin': {'sr': 'Promeni PIN', 'en': 'Change PIN', 'ru': 'Изменить PIN', 'de': 'PIN ändern', 'zh': '更改PIN码'},
-    'otkazi': {'sr': 'Otkaži', 'en': 'Cancel', 'ru': 'Отмена', 'de': 'Abbrechen', 'zh': '取消'},
-    'sacuvaj': {'sr': 'Sačuvaj', 'en': 'Save', 'ru': 'Сохранить', 'de': 'Speichern', 'zh': '保存'},
-    'dodaj': {'sr': '➕ dodaj', 'en': '➕ add', 'ru': '➕ добавить', 'de': '➕ hinzufügen', 'zh': '➕ 添加'},
+    'promeniPin': {
+      'sr': 'Promeni PIN',
+      'en': 'Change PIN',
+      'ru': 'Изменить PIN',
+      'de': 'PIN ändern',
+      'zh': '更改PIN码'
+    },
+    'otkazi': {
+      'sr': 'Otkaži',
+      'en': 'Cancel',
+      'ru': 'Отмена',
+      'de': 'Abbrechen',
+      'zh': '取消'
+    },
+    'sacuvaj': {
+      'sr': 'Sačuvaj',
+      'en': 'Save',
+      'ru': 'Сохранить',
+      'de': 'Speichern',
+      'zh': '保存'
+    },
+    'dodaj': {
+      'sr': '➕ dodaj',
+      'en': '➕ add',
+      'ru': '➕ добавить',
+      'de': '➕ hinzufügen',
+      'zh': '➕ 添加'
+    },
     'imeNeSmeBitiPrazno': {
       'sr': '⚠️ Ime i prezime ne sme biti prazno',
       'en': '⚠️ Full name must not be empty',
@@ -338,7 +477,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '✅ Profil gespeichert',
       'zh': '✅ 资料已保存',
     },
-    'greska': {'sr': 'Greška', 'en': 'Error', 'ru': 'Ошибка', 'de': 'Fehler', 'zh': '错误'},
+    'greska': {
+      'sr': 'Greška',
+      'en': 'Error',
+      'ru': 'Ошибка',
+      'de': 'Fehler',
+      'zh': '错误'
+    },
     'promeniPinTitle': {
       'sr': 'Promeni PIN',
       'en': 'Change PIN',
@@ -360,7 +505,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Aktuelle PIN',
       'zh': '当前PIN码'
     },
-    'noviPin': {'sr': 'Novi PIN', 'en': 'New PIN', 'ru': 'Новый PIN', 'de': 'Neue PIN', 'zh': '新PIN码'},
+    'noviPin': {
+      'sr': 'Novi PIN',
+      'en': 'New PIN',
+      'ru': 'Новый PIN',
+      'de': 'Neue PIN',
+      'zh': '新PIN码'
+    },
     'ponoviNoviPin': {
       'sr': 'Ponovi novi PIN',
       'en': 'Repeat new PIN',
@@ -419,7 +570,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
     },
   },
   'putnikProfilScreen': {
-    'tema': {'sr': 'Tema', 'en': 'Theme', 'ru': 'Тема', 'de': 'Thema', 'zh': '主题'},
+    'tema': {
+      'sr': 'Tema',
+      'en': 'Theme',
+      'ru': 'Тема',
+      'de': 'Thema',
+      'zh': '主题'
+    },
     'izmeniProfil': {
       'sr': 'Izmeni profil',
       'en': 'Edit profile',
@@ -427,12 +584,48 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Profil bearbeiten',
       'zh': '编辑资料'
     },
-    'odjava': {'sr': 'Odjava', 'en': 'Log out', 'ru': 'Выйти', 'de': 'Abmelden', 'zh': '退出登录'},
-    'tipUcenik': {'sr': '🎓 Učenik', 'en': '🎓 Student', 'ru': '🎓 Ученик', 'de': '🎓 Schüler', 'zh': '🎓 学生'},
-    'tipPosiljka': {'sr': '📦 Pošiljka', 'en': '📦 Parcel', 'ru': '📦 Посылка', 'de': '📦 Paket', 'zh': '📦 包裹'},
-    'tipDnevni': {'sr': '📅 Dnevni', 'en': '📅 Daily', 'ru': '📅 Ежедневно', 'de': '📅 Täglich', 'zh': '📅 每日'},
-    'tipRadnik': {'sr': '💼 Radnik', 'en': '💼 Worker', 'ru': '💼 Рабочий', 'de': '💼 Arbeiter', 'zh': '💼 工人'},
-    'tipPutnik': {'sr': '👤 Putnik', 'en': '👤 Passenger', 'ru': '👤 Пассажир', 'de': '👤 Fahrgast', 'zh': '👤 乘客'},
+    'odjava': {
+      'sr': 'Odjava',
+      'en': 'Log out',
+      'ru': 'Выйти',
+      'de': 'Abmelden',
+      'zh': '退出登录'
+    },
+    'tipUcenik': {
+      'sr': '🎓 Učenik',
+      'en': '🎓 Student',
+      'ru': '🎓 Ученик',
+      'de': '🎓 Schüler',
+      'zh': '🎓 学生'
+    },
+    'tipPosiljka': {
+      'sr': '📦 Pošiljka',
+      'en': '📦 Parcel',
+      'ru': '📦 Посылка',
+      'de': '📦 Paket',
+      'zh': '📦 包裹'
+    },
+    'tipDnevni': {
+      'sr': '📅 Dnevni',
+      'en': '📅 Daily',
+      'ru': '📅 Ежедневно',
+      'de': '📅 Täglich',
+      'zh': '📅 每日'
+    },
+    'tipRadnik': {
+      'sr': '💼 Radnik',
+      'en': '💼 Worker',
+      'ru': '💼 Рабочий',
+      'de': '💼 Arbeiter',
+      'zh': '💼 工人'
+    },
+    'tipPutnik': {
+      'sr': '👤 Putnik',
+      'en': '👤 Passenger',
+      'ru': '👤 Пассажир',
+      'de': '👤 Fahrgast',
+      'zh': '👤 乘客'
+    },
     'cenaPoVoznji': {
       'sr': 'Cena po vožnji',
       'en': 'Price per ride',
@@ -461,11 +654,41 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Status der Fahrten und Zahlungen',
       'zh': '行程与付款状态',
     },
-    'voznji': {'sr': 'Vožnji', 'en': 'Rides', 'ru': 'Поездок', 'de': 'Fahrten', 'zh': '行程'},
-    'otkazano': {'sr': 'Otkazano', 'en': 'Canceled', 'ru': 'Отменено', 'de': 'Storniert', 'zh': '已取消'},
-    'placeno': {'sr': 'Plaćeno', 'en': 'Paid', 'ru': 'Оплачено', 'de': 'Bezahlt', 'zh': '已支付'},
-    'dug': {'sr': 'Dug', 'en': 'Debt', 'ru': 'Долг', 'de': 'Schuld', 'zh': '欠款'},
-    'ukupanDug': {'sr': 'Ukupan dug', 'en': 'Total debt', 'ru': 'Общий долг', 'de': 'Gesamtschuld', 'zh': '总欠款'},
+    'voznji': {
+      'sr': 'Vožnji',
+      'en': 'Rides',
+      'ru': 'Поездок',
+      'de': 'Fahrten',
+      'zh': '行程'
+    },
+    'otkazano': {
+      'sr': 'Otkazano',
+      'en': 'Canceled',
+      'ru': 'Отменено',
+      'de': 'Storniert',
+      'zh': '已取消'
+    },
+    'placeno': {
+      'sr': 'Plaćeno',
+      'en': 'Paid',
+      'ru': 'Оплачено',
+      'de': 'Bezahlt',
+      'zh': '已支付'
+    },
+    'dug': {
+      'sr': 'Dug',
+      'en': 'Debt',
+      'ru': 'Долг',
+      'de': 'Schuld',
+      'zh': '欠款'
+    },
+    'ukupanDug': {
+      'sr': 'Ukupan dug',
+      'en': 'Total debt',
+      'ru': 'Общий долг',
+      'de': 'Gesamtschuld',
+      'zh': '总欠款'
+    },
     'ukupanVisak': {
       'sr': 'Ukupan višak',
       'en': 'Total credit',
@@ -481,10 +704,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '最后付款',
     },
     'modelCenaPoDanu': {
-      'sr': 'Model: cena po danu (jedna cena za jednu ili vise voznji u toku dana).',
+      'sr':
+          'Model: cena po danu (jedna cena za jednu ili vise voznji u toku dana).',
       'en': 'Model: price per day (one price for one or more rides per day).',
-      'ru': 'Модель: цена за день (одна цена за одну или несколько поездок в течение дня).',
-      'de': 'Modell: Preis pro Tag (ein Preis für eine oder mehrere Fahrten pro Tag).',
+      'ru':
+          'Модель: цена за день (одна цена за одну или несколько поездок в течение дня).',
+      'de':
+          'Modell: Preis pro Tag (ein Preis für eine oder mehrere Fahrten pro Tag).',
       'zh': '模式：按天计价（一天内一次或多次行程统一收费）。',
     },
     'modelCenaPoVoznji': {
@@ -522,8 +748,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '🕐 Zeitplan',
       'zh': '🕐 日程安排'
     },
-    'belaCrkva': {'sr': 'Bela Crkva', 'en': 'Bela Crkva', 'ru': 'Бела Црква', 'de': 'Bela Crkva', 'zh': 'Bela Crkva'},
-    'vrsac': {'sr': 'Vrsac', 'en': 'Vrsac', 'ru': 'Вршац', 'de': 'Vrsac', 'zh': 'Vrsac'},
+    'belaCrkva': {
+      'sr': 'Bela Crkva',
+      'en': 'Bela Crkva',
+      'ru': 'Бела Црква',
+      'de': 'Bela Crkva',
+      'zh': 'Bela Crkva'
+    },
+    'vrsac': {
+      'sr': 'Vrsac',
+      'en': 'Vrsac',
+      'ru': 'Вршац',
+      'de': 'Vrsac',
+      'zh': 'Vrsac'
+    },
     'glavnaAdresa': {
       'sr': 'Glavna adresa',
       'en': 'Main address',
@@ -566,8 +804,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Termin stornieren',
       'zh': '取消预约',
     },
-    'zatvori': {'sr': 'Zatvori', 'en': 'Close', 'ru': 'Закрыть', 'de': 'Schließen', 'zh': '关闭'},
-    'odjavaTitle': {'sr': 'Odjava', 'en': 'Log out', 'ru': 'Выход', 'de': 'Abmelden', 'zh': '退出登录'},
+    'zatvori': {
+      'sr': 'Zatvori',
+      'en': 'Close',
+      'ru': 'Закрыть',
+      'de': 'Schließen',
+      'zh': '关闭'
+    },
+    'odjavaTitle': {
+      'sr': 'Odjava',
+      'en': 'Log out',
+      'ru': 'Выход',
+      'de': 'Abmelden',
+      'zh': '退出登录'
+    },
     'odjavaMessage': {
       'sr': 'Da li ste sigurni da želite da se odjavite?',
       'en': 'Are you sure you want to log out?',
@@ -575,18 +825,90 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Möchten Sie sich wirklich abmelden?',
       'zh': '您确定要退出登录吗？',
     },
-    'odjaviSe': {'sr': 'Odjavi se', 'en': 'Log out', 'ru': 'Выйти', 'de': 'Abmelden', 'zh': '退出登录'},
-    'otkaziBtn': {'sr': 'Otkaži', 'en': 'Cancel', 'ru': 'Отмена', 'de': 'Abbrechen', 'zh': '取消'},
-    'danas': {'sr': 'danas', 'en': 'today', 'ru': 'сегодня', 'de': 'heute', 'zh': '今天'},
-    'sutra': {'sr': 'sutra', 'en': 'tomorrow', 'ru': 'завтра', 'de': 'morgen', 'zh': '明天'},
-    'danPonedeljak': {'sr': 'Ponedeljak', 'en': 'Monday', 'ru': 'Понедельник', 'de': 'Montag', 'zh': '星期一'},
-    'danUtorak': {'sr': 'Utorak', 'en': 'Tuesday', 'ru': 'Вторник', 'de': 'Dienstag', 'zh': '星期二'},
-    'danSreda': {'sr': 'Sreda', 'en': 'Wednesday', 'ru': 'Среда', 'de': 'Mittwoch', 'zh': '星期三'},
-    'danCetvrtak': {'sr': 'Četvrtak', 'en': 'Thursday', 'ru': 'Четверг', 'de': 'Donnerstag', 'zh': '星期四'},
-    'danPetak': {'sr': 'Petak', 'en': 'Friday', 'ru': 'Пятница', 'de': 'Freitag', 'zh': '星期五'},
-    'danSubota': {'sr': 'Subota', 'en': 'Saturday', 'ru': 'Суббота', 'de': 'Samstag', 'zh': '星期六'},
-    'danNedelja': {'sr': 'Nedelja', 'en': 'Sunday', 'ru': 'Воскресенье', 'de': 'Sonntag', 'zh': '星期日'},
-    'jezik': {'sr': 'Jezik', 'en': 'Language', 'ru': 'Язык', 'de': 'Sprache', 'zh': '语言'},
+    'odjaviSe': {
+      'sr': 'Odjavi se',
+      'en': 'Log out',
+      'ru': 'Выйти',
+      'de': 'Abmelden',
+      'zh': '退出登录'
+    },
+    'otkaziBtn': {
+      'sr': 'Otkaži',
+      'en': 'Cancel',
+      'ru': 'Отмена',
+      'de': 'Abbrechen',
+      'zh': '取消'
+    },
+    'danas': {
+      'sr': 'danas',
+      'en': 'today',
+      'ru': 'сегодня',
+      'de': 'heute',
+      'zh': '今天'
+    },
+    'sutra': {
+      'sr': 'sutra',
+      'en': 'tomorrow',
+      'ru': 'завтра',
+      'de': 'morgen',
+      'zh': '明天'
+    },
+    'danPonedeljak': {
+      'sr': 'Ponedeljak',
+      'en': 'Monday',
+      'ru': 'Понедельник',
+      'de': 'Montag',
+      'zh': '星期一'
+    },
+    'danUtorak': {
+      'sr': 'Utorak',
+      'en': 'Tuesday',
+      'ru': 'Вторник',
+      'de': 'Dienstag',
+      'zh': '星期二'
+    },
+    'danSreda': {
+      'sr': 'Sreda',
+      'en': 'Wednesday',
+      'ru': 'Среда',
+      'de': 'Mittwoch',
+      'zh': '星期三'
+    },
+    'danCetvrtak': {
+      'sr': 'Četvrtak',
+      'en': 'Thursday',
+      'ru': 'Четверг',
+      'de': 'Donnerstag',
+      'zh': '星期四'
+    },
+    'danPetak': {
+      'sr': 'Petak',
+      'en': 'Friday',
+      'ru': 'Пятница',
+      'de': 'Freitag',
+      'zh': '星期五'
+    },
+    'danSubota': {
+      'sr': 'Subota',
+      'en': 'Saturday',
+      'ru': 'Суббота',
+      'de': 'Samstag',
+      'zh': '星期六'
+    },
+    'danNedelja': {
+      'sr': 'Nedelja',
+      'en': 'Sunday',
+      'ru': 'Воскресенье',
+      'de': 'Sonntag',
+      'zh': '星期日'
+    },
+    'jezik': {
+      'sr': 'Jezik',
+      'en': 'Language',
+      'ru': 'Язык',
+      'de': 'Sprache',
+      'zh': '语言'
+    },
     'mestoOslobodjenoNaslov': {
       'sr': '🎉 Oslobodilo se mesto',
       'en': '🎉 A seat opened up',
@@ -594,8 +916,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '🎉 Ein Platz ist frei geworden',
       'zh': '🎉 有空位了',
     },
-    'mestoPrihvati': {'sr': 'Prihvati', 'en': 'Accept', 'ru': 'Принять', 'de': 'Annehmen', 'zh': '接受'},
-    'mestoOdbij': {'sr': 'Ne', 'en': 'No', 'ru': 'Нет', 'de': 'Nein', 'zh': '拒绝'},
+    'mestoPrihvati': {
+      'sr': 'Prihvati',
+      'en': 'Accept',
+      'ru': 'Принять',
+      'de': 'Annehmen',
+      'zh': '接受'
+    },
+    'mestoOdbij': {
+      'sr': 'Ne',
+      'en': 'No',
+      'ru': 'Нет',
+      'de': 'Nein',
+      'zh': '拒绝'
+    },
     'mestoPonudaIstice': {
       'sr': 'Ponuda važi još ~%s min',
       'en': 'Offer valid ~%s min',
@@ -647,12 +981,48 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Monatsansicht (Januar-Dezember %s)',
       'zh': '按月查看（一月-十二月 %s）',
     },
-    'voznji': {'sr': 'Vožnji', 'en': 'Rides', 'ru': 'Поездки', 'de': 'Fahrten', 'zh': '行程'},
-    'otkazano': {'sr': 'Otkazano', 'en': 'Canceled', 'ru': 'Отменено', 'de': 'Storniert', 'zh': '已取消'},
-    'obaveza': {'sr': 'Obaveza', 'en': 'Amount due', 'ru': 'Задолженность', 'de': 'Fälliger Betrag', 'zh': '应付金额'},
-    'placeno': {'sr': 'Plaćeno', 'en': 'Paid', 'ru': 'Оплачено', 'de': 'Bezahlt', 'zh': '已支付'},
-    'dug': {'sr': 'Dug', 'en': 'Debt', 'ru': 'Долг', 'de': 'Schulden', 'zh': '欠款'},
-    'visak': {'sr': 'Višak', 'en': 'Credit', 'ru': 'Переплата', 'de': 'Guthaben', 'zh': '余额'},
+    'voznji': {
+      'sr': 'Vožnji',
+      'en': 'Rides',
+      'ru': 'Поездки',
+      'de': 'Fahrten',
+      'zh': '行程'
+    },
+    'otkazano': {
+      'sr': 'Otkazano',
+      'en': 'Canceled',
+      'ru': 'Отменено',
+      'de': 'Storniert',
+      'zh': '已取消'
+    },
+    'obaveza': {
+      'sr': 'Obaveza',
+      'en': 'Amount due',
+      'ru': 'Задолженность',
+      'de': 'Fälliger Betrag',
+      'zh': '应付金额'
+    },
+    'placeno': {
+      'sr': 'Plaćeno',
+      'en': 'Paid',
+      'ru': 'Оплачено',
+      'de': 'Bezahlt',
+      'zh': '已支付'
+    },
+    'dug': {
+      'sr': 'Dug',
+      'en': 'Debt',
+      'ru': 'Долг',
+      'de': 'Schulden',
+      'zh': '欠款'
+    },
+    'visak': {
+      'sr': 'Višak',
+      'en': 'Credit',
+      'ru': 'Переплата',
+      'de': 'Guthaben',
+      'zh': '余额'
+    },
     'ukupanDug': {
       'sr': 'Ukupan dug',
       'en': 'Total debt',
@@ -690,15 +1060,69 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Keine Fahrten im ausgewählten Monat.',
       'zh': '所选月份没有行程。',
     },
-    'voznji': {'sr': 'vožnji', 'en': 'rides', 'ru': 'поездок', 'de': 'Fahrten', 'zh': '次行程'},
-    'voznja': {'sr': 'vožnja', 'en': 'ride', 'ru': 'поездка', 'de': 'Fahrt', 'zh': '行程'},
-    'voznje': {'sr': 'vožnje', 'en': 'rides', 'ru': 'поездки', 'de': 'Fahrten', 'zh': '行程'},
-    'uplata': {'sr': 'Uplata', 'en': 'Payment', 'ru': 'Оплата', 'de': 'Zahlung', 'zh': '付款'},
-    'vozac': {'sr': 'Vozač', 'en': 'Driver', 'ru': 'Водитель', 'de': 'Fahrer', 'zh': '司机'},
-    'pokupio': {'sr': 'Pokupio', 'en': 'Picked up', 'ru': 'Подобрал', 'de': 'Abgeholt', 'zh': '已接载'},
-    'vreme': {'sr': 'vreme', 'en': 'time', 'ru': 'время', 'de': 'Zeit', 'zh': '时间'},
-    'ukupno': {'sr': 'Ukupno', 'en': 'Total', 'ru': 'Всего', 'de': 'Gesamt', 'zh': '总计'},
-    'otkazano': {'sr': 'Otkazano', 'en': 'Canceled', 'ru': 'Отменено', 'de': 'Storniert', 'zh': '已取消'},
+    'voznji': {
+      'sr': 'vožnji',
+      'en': 'rides',
+      'ru': 'поездок',
+      'de': 'Fahrten',
+      'zh': '次行程'
+    },
+    'voznja': {
+      'sr': 'vožnja',
+      'en': 'ride',
+      'ru': 'поездка',
+      'de': 'Fahrt',
+      'zh': '行程'
+    },
+    'voznje': {
+      'sr': 'vožnje',
+      'en': 'rides',
+      'ru': 'поездки',
+      'de': 'Fahrten',
+      'zh': '行程'
+    },
+    'uplata': {
+      'sr': 'Uplata',
+      'en': 'Payment',
+      'ru': 'Оплата',
+      'de': 'Zahlung',
+      'zh': '付款'
+    },
+    'vozac': {
+      'sr': 'Vozač',
+      'en': 'Driver',
+      'ru': 'Водитель',
+      'de': 'Fahrer',
+      'zh': '司机'
+    },
+    'pokupio': {
+      'sr': 'Pokupio',
+      'en': 'Picked up',
+      'ru': 'Подобрал',
+      'de': 'Abgeholt',
+      'zh': '已接载'
+    },
+    'vreme': {
+      'sr': 'vreme',
+      'en': 'time',
+      'ru': 'время',
+      'de': 'Zeit',
+      'zh': '时间'
+    },
+    'ukupno': {
+      'sr': 'Ukupno',
+      'en': 'Total',
+      'ru': 'Всего',
+      'de': 'Gesamt',
+      'zh': '总计'
+    },
+    'otkazano': {
+      'sr': 'Otkazano',
+      'en': 'Canceled',
+      'ru': 'Отменено',
+      'de': 'Storniert',
+      'zh': '已取消'
+    },
     'otkazaoPutnik': {
       'sr': 'Otkazao putnik',
       'en': 'Canceled by passenger',
@@ -722,10 +1146,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Anfragenüberwachung',
       'zh': '请求监控',
     },
-    'obrada': {'sr': 'obrada', 'en': 'processing', 'ru': 'обработка', 'de': 'Bearbeitung', 'zh': '处理中'},
-    'odobreno': {'sr': 'odobreno', 'en': 'approved', 'ru': 'одобрено', 'de': 'genehmigt', 'zh': '已批准'},
-    'odbijeno': {'sr': 'odbijeno', 'en': 'rejected', 'ru': 'отклонено', 'de': 'abgelehnt', 'zh': '已拒绝'},
-    'otkazano': {'sr': 'otkazano', 'en': 'canceled', 'ru': 'отменено', 'de': 'storniert', 'zh': '已取消'},
+    'obrada': {
+      'sr': 'obrada',
+      'en': 'processing',
+      'ru': 'обработка',
+      'de': 'Bearbeitung',
+      'zh': '处理中'
+    },
+    'odobreno': {
+      'sr': 'odobreno',
+      'en': 'approved',
+      'ru': 'одобрено',
+      'de': 'genehmigt',
+      'zh': '已批准'
+    },
+    'odbijeno': {
+      'sr': 'odbijeno',
+      'en': 'rejected',
+      'ru': 'отклонено',
+      'de': 'abgelehnt',
+      'zh': '已拒绝'
+    },
+    'otkazano': {
+      'sr': 'otkazano',
+      'en': 'canceled',
+      'ru': 'отменено',
+      'de': 'storniert',
+      'zh': '已取消'
+    },
     'nemaZahteva': {
       'sr': 'Nema zahteva',
       'en': 'No requests',
@@ -733,17 +1181,30 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Keine Anfragen',
       'zh': '没有请求'
     },
-    'putnik': {'sr': 'Putnik', 'en': 'Passenger', 'ru': 'Пассажир', 'de': 'Fahrgast', 'zh': '乘客'},
+    'putnik': {
+      'sr': 'Putnik',
+      'en': 'Passenger',
+      'ru': 'Пассажир',
+      'de': 'Fahrgast',
+      'zh': '乘客'
+    },
   },
   'smsLoginScreen': {
     'nemaSacuvanihPodataka': {
       'sr': 'ℹ️ Nema sačuvanih podataka. Prijavi se brojem telefona.',
       'en': 'ℹ️ No saved data. Log in with your phone number.',
       'ru': 'ℹ️ Нет сохранённых данных. Войдите с помощью номера телефона.',
-      'de': 'ℹ️ Keine gespeicherten Daten. Melden Sie sich mit Ihrer Telefonnummer an.',
+      'de':
+          'ℹ️ Keine gespeicherten Daten. Melden Sie sich mit Ihrer Telefonnummer an.',
       'zh': 'ℹ️ 没有保存的数据。请使用手机号登录。',
     },
-    'prijava': {'sr': 'Prijava', 'en': 'Login', 'ru': 'Вход', 'de': 'Anmeldung', 'zh': '登录'},
+    'prijava': {
+      'sr': 'Prijava',
+      'en': 'Login',
+      'ru': 'Вход',
+      'de': 'Anmeldung',
+      'zh': '登录'
+    },
     'unesitePhone': {
       'sr': 'Unesite broj telefona za prijavu.',
       'en': 'Enter your phone number to log in.',
@@ -772,8 +1233,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '06x xxx xxxx',
       'zh': '06x xxx xxxx'
     },
-    'nalepi': {'sr': 'Nalepi', 'en': 'Paste', 'ru': 'Вставить', 'de': 'Einfügen', 'zh': '粘贴'},
-    'nastavi': {'sr': 'Nastavi', 'en': 'Continue', 'ru': 'Продолжить', 'de': 'Weiter', 'zh': '继续'},
+    'nalepi': {
+      'sr': 'Nalepi',
+      'en': 'Paste',
+      'ru': 'Вставить',
+      'de': 'Einfügen',
+      'zh': '粘贴'
+    },
+    'nastavi': {
+      'sr': 'Nastavi',
+      'en': 'Continue',
+      'ru': 'Продолжить',
+      'de': 'Weiter',
+      'zh': '继续'
+    },
     'ucitavanje': {
       'sr': 'Učitavanje...',
       'en': 'Loading...',
@@ -788,9 +1261,27 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Geben Sie die Kontodaten ein für',
       'zh': '请输入账户信息：',
     },
-    'ime': {'sr': 'Ime', 'en': 'First name', 'ru': 'Имя', 'de': 'Vorname', 'zh': '名字'},
-    'prezime': {'sr': 'Prezime', 'en': 'Last name', 'ru': 'Фамилия', 'de': 'Nachname', 'zh': '姓氏'},
-    'kategorija': {'sr': 'Kategorija', 'en': 'Category', 'ru': 'Категория', 'de': 'Kategorie', 'zh': '类别'},
+    'ime': {
+      'sr': 'Ime',
+      'en': 'First name',
+      'ru': 'Имя',
+      'de': 'Vorname',
+      'zh': '名字'
+    },
+    'prezime': {
+      'sr': 'Prezime',
+      'en': 'Last name',
+      'ru': 'Фамилия',
+      'de': 'Nachname',
+      'zh': '姓氏'
+    },
+    'kategorija': {
+      'sr': 'Kategorija',
+      'en': 'Category',
+      'ru': 'Категория',
+      'de': 'Kategorie',
+      'zh': '类别'
+    },
     'izaberiteKategoriju': {
       'sr': 'Izaberite kategoriju',
       'en': 'Select category',
@@ -798,12 +1289,48 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Kategorie auswählen',
       'zh': '选择类别',
     },
-    'radnik': {'sr': '👷 Radnik', 'en': '👷 Worker', 'ru': '👷 Рабочий', 'de': '👷 Arbeiter', 'zh': '👷 工人'},
-    'ucenik': {'sr': '🎒 Učenik', 'en': '🎒 Student', 'ru': '🎒 Ученик', 'de': '🎒 Schüler', 'zh': '🎒 学生'},
-    'dnevni': {'sr': '📅 Dnevni', 'en': '📅 Daily', 'ru': '📅 Ежедневно', 'de': '📅 Täglich', 'zh': '📅 每日'},
-    'posiljka': {'sr': '📦 Pošiljka', 'en': '📦 Parcel', 'ru': '📦 Посылка', 'de': '📦 Paket', 'zh': '📦 包裹'},
-    'adresaBc': {'sr': 'Adresa BC *', 'en': 'BC address *', 'ru': 'Адрес БЦ *', 'de': 'BC-Adresse *', 'zh': 'BC地址 *'},
-    'adresaVs': {'sr': 'Adresa VS *', 'en': 'VS address *', 'ru': 'Адрес ВС *', 'de': 'VS-Adresse *', 'zh': 'VS地址 *'},
+    'radnik': {
+      'sr': '👷 Radnik',
+      'en': '👷 Worker',
+      'ru': '👷 Рабочий',
+      'de': '👷 Arbeiter',
+      'zh': '👷 工人'
+    },
+    'ucenik': {
+      'sr': '🎒 Učenik',
+      'en': '🎒 Student',
+      'ru': '🎒 Ученик',
+      'de': '🎒 Schüler',
+      'zh': '🎒 学生'
+    },
+    'dnevni': {
+      'sr': '📅 Dnevni',
+      'en': '📅 Daily',
+      'ru': '📅 Ежедневно',
+      'de': '📅 Täglich',
+      'zh': '📅 每日'
+    },
+    'posiljka': {
+      'sr': '📦 Pošiljka',
+      'en': '📦 Parcel',
+      'ru': '📦 Посылка',
+      'de': '📦 Paket',
+      'zh': '📦 包裹'
+    },
+    'adresaBc': {
+      'sr': 'Adresa BC *',
+      'en': 'BC address *',
+      'ru': 'Адрес БЦ *',
+      'de': 'BC-Adresse *',
+      'zh': 'BC地址 *'
+    },
+    'adresaVs': {
+      'sr': 'Adresa VS *',
+      'en': 'VS address *',
+      'ru': 'Адрес ВС *',
+      'de': 'VS-Adresse *',
+      'zh': 'VS地址 *'
+    },
     'noviPin': {
       'sr': 'Sami smislite PIN kod (6 cifara) *',
       'en': 'Create your own PIN code (6 digits) *',
@@ -832,10 +1359,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Speichern und fortfahren',
       'zh': '保存并继续',
     },
-    'adresaBcKratko': {'sr': 'adresa BC', 'en': 'BC address', 'ru': 'адрес БЦ', 'de': 'BC-Adresse', 'zh': 'BC地址'},
-    'adresaVsKratko': {'sr': 'adresa VS', 'en': 'VS address', 'ru': 'адрес ВС', 'de': 'VS-Adresse', 'zh': 'VS地址'},
-    'pinKod': {'sr': 'PIN kod', 'en': 'PIN code', 'ru': 'PIN-код', 'de': 'PIN-Code', 'zh': 'PIN码'},
-    'tip': {'sr': 'tip', 'en': 'category', 'ru': 'категория', 'de': 'Kategorie', 'zh': '类别'},
+    'adresaBcKratko': {
+      'sr': 'adresa BC',
+      'en': 'BC address',
+      'ru': 'адрес БЦ',
+      'de': 'BC-Adresse',
+      'zh': 'BC地址'
+    },
+    'adresaVsKratko': {
+      'sr': 'adresa VS',
+      'en': 'VS address',
+      'ru': 'адрес ВС',
+      'de': 'VS-Adresse',
+      'zh': 'VS地址'
+    },
+    'pinKod': {
+      'sr': 'PIN kod',
+      'en': 'PIN code',
+      'ru': 'PIN-код',
+      'de': 'PIN-Code',
+      'zh': 'PIN码'
+    },
+    'tip': {
+      'sr': 'tip',
+      'en': 'category',
+      'ru': 'категория',
+      'de': 'Kategorie',
+      'zh': '类别'
+    },
     'dopunitePolja': {
       'sr': 'Dopunite',
       'en': 'Please complete',
@@ -875,14 +1426,29 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
           'Die PIN legen Sie selbst hier fest — niemand sendet sie Ihnen. Geben Sie 6 Ziffern ein, die Sie sich merken und beim Anmelden verwenden.',
       'zh': '请在此自行设置PIN码——不会有人发送给您。请输入您会记住并用于登录的6位数字。',
     },
-    'imeKratko': {'sr': 'ime', 'en': 'name', 'ru': 'имя', 'de': 'Name', 'zh': '名字'},
-    'kategorijuKratko': {'sr': 'kategoriju', 'en': 'category', 'ru': 'категорию', 'de': 'Kategorie', 'zh': '类别'},
+    'imeKratko': {
+      'sr': 'ime',
+      'en': 'name',
+      'ru': 'имя',
+      'de': 'Name',
+      'zh': '名字'
+    },
+    'kategorijuKratko': {
+      'sr': 'kategoriju',
+      'en': 'category',
+      'ru': 'категорию',
+      'de': 'Kategorie',
+      'zh': '类别'
+    },
     'deviceLimitReached': {
-      'sr': '❌ Dostignut je limit od 2 uređaja po nalogu. Kontaktirajte admina.',
-      'en': '❌ Device limit of 2 per account reached. Contact admin.',
-      'ru': '❌ Достигнут лимит в 2 устройства на аккаунт. Свяжитесь с администратором.',
-      'de': '❌ Limit von 2 Geräten pro Konto erreicht. Kontaktieren Sie den Administrator.',
-      'zh': '❌ 每个账户最多2台设备的限制已达到。请联系管理员。',
+      'sr':
+          '❌ Dostignut je limit od 3 uređaja po nalogu. Kontaktirajte admina.',
+      'en': '❌ Device limit of 3 per account reached. Contact admin.',
+      'ru':
+          '❌ Достигнут лимит в 3 устройства на аккаунт. Свяжитесь с администратором.',
+      'de':
+          '❌ Limit von 3 Geräten pro Konto erreicht. Kontaktieren Sie den Administrator.',
+      'zh': '❌ 每个账户最多3台设备的限制已达到。请联系管理员。',
     },
     'telefonNijeUparen': {
       'sr': '❌ Telefon nije uparen sa UUID nalogom.',
@@ -892,10 +1458,14 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '❌ 手机未与该账户配对。',
     },
     'nisteUSistemu': {
-      'sr': '❌ Aplikacija je zatvorenog tipa i Vi niste u sistemu. Kontaktirajte admina.',
-      'en': '❌ This is a closed application and you are not in the system. Contact admin.',
-      'ru': '❌ Это приложение закрытого типа, и вы не зарегистрированы в системе. Свяжитесь с администратором.',
-      'de': '❌ Dies ist eine geschlossene Anwendung und Sie sind nicht im System. Kontaktieren Sie den Administrator.',
+      'sr':
+          '❌ Aplikacija je zatvorenog tipa i Vi niste u sistemu. Kontaktirajte admina.',
+      'en':
+          '❌ This is a closed application and you are not in the system. Contact admin.',
+      'ru':
+          '❌ Это приложение закрытого типа, и вы не зарегистрированы в системе. Свяжитесь с администратором.',
+      'de':
+          '❌ Dies ist eine geschlossene Anwendung und Sie sind nicht im System. Kontaktieren Sie den Administrator.',
       'zh': '❌ 这是一个封闭式应用，您不在系统中。请联系管理员。',
     },
     'unosNijeKompletan': {
@@ -923,7 +1493,8 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': '❌ Čuvanje profila trenutno nije moguće. Pokušajte ponovo.',
       'en': '❌ Saving profile is currently not possible. Please try again.',
       'ru': '❌ Сохранение профиля сейчас невозможно. Попробуйте снова.',
-      'de': '❌ Profil kann derzeit nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+      'de':
+          '❌ Profil kann derzeit nicht gespeichert werden. Bitte versuchen Sie es erneut.',
       'zh': '❌ 目前无法保存个人资料。请重试。',
     },
     'sesijaIstekla': {
@@ -944,14 +1515,18 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': '❌ Prijava trenutno nije moguća. Pokušajte ponovo.',
       'en': '❌ Login is currently not possible. Please try again.',
       'ru': '❌ Вход сейчас невозможен. Попробуйте снова.',
-      'de': '❌ Anmeldung ist derzeit nicht möglich. Bitte versuchen Sie es erneut.',
+      'de':
+          '❌ Anmeldung ist derzeit nicht möglich. Bitte versuchen Sie es erneut.',
       'zh': '❌ 目前无法登录。请重试。',
     },
     'sacuvanTelefonNijeIspravan': {
       'sr': '❌ Sačuvan telefon nije ispravan. Prijavi se brojem telefona.',
-      'en': '❌ Saved phone number is invalid. Please log in using your phone number.',
-      'ru': '❌ Сохранённый номер телефона неверен. Войдите с помощью номера телефона.',
-      'de': '❌ Gespeicherte Telefonnummer ist ungültig. Bitte mit Telefonnummer anmelden.',
+      'en':
+          '❌ Saved phone number is invalid. Please log in using your phone number.',
+      'ru':
+          '❌ Сохранённый номер телефона неверен. Войдите с помощью номера телефона.',
+      'de':
+          '❌ Gespeicherte Telefonnummer ist ungültig. Bitte mit Telefonnummer anmelden.',
       'zh': '❌保存的电话号码无效。请使用手机号码登录。',
     },
     'brojNijePronadjen': {
@@ -979,7 +1554,8 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': '❌ Trenutno ne možemo da obradimo zahtev. Pokušajte ponovo.',
       'en': '❌ We cannot process your request right now. Please try again.',
       'ru': '❌ Сейчас мы не можем обработать ваш запрос. Попробуйте снова.',
-      'de': '❌ Ihre Anfrage kann derzeit nicht bearbeitet werden. Bitte versuchen Sie es erneut.',
+      'de':
+          '❌ Ihre Anfrage kann derzeit nicht bearbeitet werden. Bitte versuchen Sie es erneut.',
       'zh': '❌ 目前无法处理您的请求。请重试。',
     },
     'pinNisuIsti': {
@@ -1014,7 +1590,8 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': '❌ Previše pogrešnih pokušaja. Kontaktirajte admina.',
       'en': '❌ Too many failed attempts. Please contact admin.',
       'ru': '❌ Слишком много неудачных попыток. Свяжитесь с администратором.',
-      'de': '❌ Zu viele fehlgeschlagene Versuche. Bitte kontaktieren Sie den Administrator.',
+      'de':
+          '❌ Zu viele fehlgeschlagene Versuche. Bitte kontaktieren Sie den Administrator.',
       'zh': '❌ 失败尝试次数过多。请联系管理员。',
     },
     'proveravamPin': {
@@ -1056,7 +1633,8 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': '❌ PIN potvrda trenutno nije moguća. Pokušajte ponovo.',
       'en': '❌ PIN confirmation is currently not possible. Please try again.',
       'ru': '❌ Подтверждение PIN сейчас невозможно. Попробуйте снова.',
-      'de': '❌ PIN-Bestätigung ist derzeit nicht möglich. Bitte versuchen Sie es erneut.',
+      'de':
+          '❌ PIN-Bestätigung ist derzeit nicht möglich. Bitte versuchen Sie es erneut.',
       'zh': '❌ 目前无法确认PIN。请重试。',
     },
     'uneseiteImePrezime': {
@@ -1103,10 +1681,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Anfragenüberwachung',
       'zh': '请求监控'
     },
-    'obrada': {'sr': 'obrada', 'en': 'processing', 'ru': 'обработка', 'de': 'Bearbeitung', 'zh': '处理中'},
-    'odobreno': {'sr': 'odobreno', 'en': 'approved', 'ru': 'одобрено', 'de': 'genehmigt', 'zh': '已批准'},
-    'odbijeno': {'sr': 'odbijeno', 'en': 'rejected', 'ru': 'отклонено', 'de': 'abgelehnt', 'zh': '已拒绝'},
-    'otkazano': {'sr': 'otkazano', 'en': 'canceled', 'ru': 'отменено', 'de': 'storniert', 'zh': '已取消'},
+    'obrada': {
+      'sr': 'obrada',
+      'en': 'processing',
+      'ru': 'обработка',
+      'de': 'Bearbeitung',
+      'zh': '处理中'
+    },
+    'odobreno': {
+      'sr': 'odobreno',
+      'en': 'approved',
+      'ru': 'одобрено',
+      'de': 'genehmigt',
+      'zh': '已批准'
+    },
+    'odbijeno': {
+      'sr': 'odbijeno',
+      'en': 'rejected',
+      'ru': 'отклонено',
+      'de': 'abgelehnt',
+      'zh': '已拒绝'
+    },
+    'otkazano': {
+      'sr': 'otkazano',
+      'en': 'canceled',
+      'ru': 'отменено',
+      'de': 'storniert',
+      'zh': '已取消'
+    },
     'nemaZahteva': {
       'sr': 'Nema zahteva',
       'en': 'No requests',
@@ -1114,8 +1716,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Keine Anfragen',
       'zh': '无请求'
     },
-    'putnik': {'sr': 'Putnik', 'en': 'Passenger', 'ru': 'Пассажир', 'de': 'Fahrgast', 'zh': '乘客'},
-    'ucenik': {'sr': 'Učenik', 'en': 'Student', 'ru': 'Ученик', 'de': 'Schüler', 'zh': '学生'},
+    'putnik': {
+      'sr': 'Putnik',
+      'en': 'Passenger',
+      'ru': 'Пассажир',
+      'de': 'Fahrgast',
+      'zh': '乘客'
+    },
+    'ucenik': {
+      'sr': 'Učenik',
+      'en': 'Student',
+      'ru': 'Ученик',
+      'de': 'Schüler',
+      'zh': '学生'
+    },
   },
   'vozacPazarPopup': {
     'unesiteIspravanIznos': {
@@ -1136,22 +1750,34 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': 'Pazar je sačuvan i dodat na postojeći iznos.',
       'en': 'Earnings were saved and added to the existing amount.',
       'ru': 'Выручка сохранена и добавлена к существующей сумме.',
-      'de': 'Die Einnahmen wurden gespeichert und zum bestehenden Betrag addiert.',
+      'de':
+          'Die Einnahmen wurden gespeichert und zum bestehenden Betrag addiert.',
       'zh': '收入已保存并添加到现有金额。'
     },
     'pazarEvidentiranSaUkupnim': {
       'sr': 'Pazar je evidentiran. Novi ukupno predato: {iznos} din',
       'en': 'Earnings recorded. New total handed over: {iznos} RSD',
       'ru': 'Выручка зафиксирована. Новый итог сдано: {iznos} дин',
-      'de': 'Einnahmen erfasst. Neuer insgesamt übergebener Betrag: {iznos} RSD',
+      'de':
+          'Einnahmen erfasst. Neuer insgesamt übergebener Betrag: {iznos} RSD',
       'zh': '收入已记录。新的已交总额：{iznos} 第纳尔'
     },
-    'greska': {'sr': 'Greška', 'en': 'Error', 'ru': 'Ошибка', 'de': 'Fehler', 'zh': '错误'},
+    'greska': {
+      'sr': 'Greška',
+      'en': 'Error',
+      'ru': 'Ошибка',
+      'de': 'Fehler',
+      'zh': '错误'
+    },
     'smenaZavrsenaUnesiteIznos': {
-      'sr': 'Vaša smena za danas je završena. Molimo unesite iznos današnjeg pazara.',
-      'en': 'Your shift for today has ended. Please enter today\'s earnings amount.',
-      'ru': 'Ваша смена на сегодня завершена. Пожалуйста, введите сумму сегодняшней выручки.',
-      'de': 'Ihre Schicht für heute ist beendet. Bitte geben Sie den heutigen Einnahmenbetrag ein.',
+      'sr':
+          'Vaša smena za danas je završena. Molimo unesite iznos današnjeg pazara.',
+      'en':
+          'Your shift for today has ended. Please enter today\'s earnings amount.',
+      'ru':
+          'Ваша смена на сегодня завершена. Пожалуйста, введите сумму сегодняшней выручки.',
+      'de':
+          'Ihre Schicht für heute ist beendet. Bitte geben Sie den heutigen Einnahmenbetrag ein.',
       'zh': '您今天的班次已结束。请输入今天的收入金额。',
     },
     'unesitePredatIznos': {
@@ -1215,10 +1841,14 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '金额与收入不符'
     },
     'iznosSeRazlikujePoruka': {
-      'sr': 'Očekivani iznos je {ocekivano} din, a uneli ste {uneti} din (razlika {razlika} din). Da li želite ipak da sačuvate?',
-      'en': 'Expected amount is {ocekivano} RSD, you entered {uneti} RSD (difference {razlika} RSD). Save anyway?',
-      'ru': 'Ожидаемая сумма {ocekivano} дин, вы ввели {uneti} дин (разница {razlika} дин). Всё равно сохранить?',
-      'de': 'Erwarteter Betrag ist {ocekivano} RSD, Sie haben {uneti} RSD eingegeben (Differenz {razlika} RSD). Trotzdem speichern?',
+      'sr':
+          'Očekivani iznos je {ocekivano} din, a uneli ste {uneti} din (razlika {razlika} din). Da li želite ipak da sačuvate?',
+      'en':
+          'Expected amount is {ocekivano} RSD, you entered {uneti} RSD (difference {razlika} RSD). Save anyway?',
+      'ru':
+          'Ожидаемая сумма {ocekivano} дин, вы ввели {uneti} дин (разница {razlika} дин). Всё равно сохранить?',
+      'de':
+          'Erwarteter Betrag ist {ocekivano} RSD, Sie haben {uneti} RSD eingegeben (Differenz {razlika} RSD). Trotzdem speichern?',
       'zh': '预期金额为 {ocekivano} 第纳尔，您输入了 {uneti} 第纳尔（差额 {razlika} 第纳尔）。仍要保存吗？'
     },
     'ipakSacuvaj': {
@@ -1251,8 +1881,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Betriebswoche:',
       'zh': '运营周：',
     },
-    'statusAktivno': {'sr': 'AKTIVNO', 'en': 'ACTIVE', 'ru': 'АКТИВНО', 'de': 'AKTIV', 'zh': '运行中'},
-    'statusCeka': {'sr': 'ČEKAM', 'en': 'WAITING', 'ru': 'ОЖИДАНИЕ', 'de': 'WARTET', 'zh': '等待中'},
+    'statusAktivno': {
+      'sr': 'AKTIVNO',
+      'en': 'ACTIVE',
+      'ru': 'АКТИВНО',
+      'de': 'AKTIV',
+      'zh': '运行中'
+    },
+    'statusCeka': {
+      'sr': 'ČEKAM',
+      'en': 'WAITING',
+      'ru': 'ОЖИДАНИЕ',
+      'de': 'WARTET',
+      'zh': '等待中'
+    },
     'trackingAktivanZaTermin': {
       'sr': 'Tracking aktivan: %GRAD% %VREME%',
       'en': 'Tracking active: %GRAD% %VREME%',
@@ -1268,19 +1910,30 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '显示进行中的班次',
     },
     'mapaSamoZaAktivniTermin': {
-      'sr': 'Mapa je za aktivni tracking slot (%GRAD% %VREME%). Prebaci se na taj slot ili dodirni baner.',
-      'en': 'Map is for the active tracking slot (%GRAD% %VREME%). Switch to that slot or tap the banner.',
-      'ru': 'Карта для активного слота (%GRAD% %VREME%). Перейдите на этот слот или нажмите баннер.',
+      'sr':
+          'Mapa je za aktivni tracking slot (%GRAD% %VREME%). Prebaci se na taj slot ili dodirni baner.',
+      'en':
+          'Map is for the active tracking slot (%GRAD% %VREME%). Switch to that slot or tap the banner.',
+      'ru':
+          'Карта для активного слота (%GRAD% %VREME%). Перейдите на этот слот или нажмите баннер.',
       'de':
           'Karte gilt für den aktiven Tracking-Slot (%GRAD% %VREME%). Wechseln Sie dorthin oder tippen Sie auf das Banner.',
       'zh': '地图仅适用于进行中的跟踪班次（%GRAD% %VREME%）。请切换到该班次或点横幅。',
     },
-    'mapaDugme': {'sr': 'MAPA', 'en': 'MAP', 'ru': 'КАРТА', 'de': 'KARTE', 'zh': '地图'},
+    'mapaDugme': {
+      'sr': 'MAPA',
+      'en': 'MAP',
+      'ru': 'КАРТА',
+      'de': 'KARTE',
+      'zh': '地图'
+    },
     'rutaBiceDostupna': {
-      'sr': 'Ruta će biti dostupna kada se tracking automatski aktivira. Čekaj push obaveštenje za slot.',
+      'sr':
+          'Ruta će biti dostupna kada se tracking automatski aktivira. Čekaj push obaveštenje za slot.',
       'en':
           'The route will be available once tracking activates automatically. Wait for the push notification for the slot.',
-      'ru': 'Маршрут будет доступен, когда отслеживание активируется автоматически. Ждите push-уведомление о слоте.',
+      'ru':
+          'Маршрут будет доступен, когда отслеживание активируется автоматически. Ждите push-уведомление о слоте.',
       'de':
           'Die Route ist verfügbar, sobald das Tracking automatisch aktiviert wird. Warten Sie auf die Push-Benachrichtigung für den Slot.',
       'zh': '跟踪自动启动后即可查看路线。请等待班次推送通知。',
@@ -1303,7 +1956,8 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'sr': 'GPS je isključen. Uključi lokaciju na telefonu.',
       'en': 'GPS is turned off. Enable location on your phone.',
       'ru': 'ГПС выключен. Включите геолокацию на телефоне.',
-      'de': 'GPS ist ausgeschaltet. Aktivieren Sie den Standort auf Ihrem Telefon.',
+      'de':
+          'GPS ist ausgeschaltet. Aktivieren Sie den Standort auf Ihrem Telefon.',
       'zh': 'GPS已关闭。请在手机上启用定位。',
     },
     'dozvolaOdbijena': {
@@ -1315,15 +1969,21 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
     },
     'dozvolaTrajnoOdbijena': {
       'sr': 'Dozvola za lokaciju je trajno odbijena. Uključi je u Settings.',
-      'en': 'Location permission was permanently denied. Enable it in Settings.',
-      'ru': 'В доступе к геолокации отказано навсегда. Включите её в настройках.',
-      'de': 'Standortberechtigung wurde dauerhaft verweigert. Aktivieren Sie sie in den Einstellungen.',
+      'en':
+          'Location permission was permanently denied. Enable it in Settings.',
+      'ru':
+          'В доступе к геолокации отказано навсегда. Включите её в настройках.',
+      'de':
+          'Standortberechtigung wurde dauerhaft verweigert. Aktivieren Sie sie in den Einstellungen.',
       'zh': '位置权限已被永久拒绝。请在设置中启用它。',
     },
     'dozvolaPotrebnaUvek': {
-      'sr': 'Za praćenje vožnje potrebna je dozvola "Uvek" za lokaciju. Podesi u Settings.',
-      'en': 'Driving tracking requires "Always" location permission. Enable it in Settings.',
-      'ru': 'Для отслеживания поездки требуется разрешение «Всегда» на геолокацию. Включите в настройках.',
+      'sr':
+          'Za praćenje vožnje potrebna je dozvola "Uvek" za lokaciju. Podesi u Settings.',
+      'en':
+          'Driving tracking requires "Always" location permission. Enable it in Settings.',
+      'ru':
+          'Для отслеживания поездки требуется разрешение «Всегда» на геолокацию. Включите в настройках.',
       'de':
           'Für die Fahrtverfolgung ist die Standortfreigabe "Immer" erforderlich. Aktivieren Sie sie in den Einstellungen.',
       'zh': '行驶跟踪需要“始终允许”位置权限。请在设置中启用。',
@@ -1331,15 +1991,21 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
     'rutaNemaKoordinate': {
       'sr': 'Nije moguće formirati rutu: nema validnih koordinata adresa.',
       'en': 'Cannot build route: no valid address coordinates.',
-      'ru': 'Не удалось построить маршрут: нет действительных координат адресов.',
-      'de': 'Route kann nicht erstellt werden: keine gültigen Adresskoordinaten.',
+      'ru':
+          'Не удалось построить маршрут: нет действительных координат адресов.',
+      'de':
+          'Route kann nicht erstellt werden: keine gültigen Adresskoordinaten.',
       'zh': '无法生成路线：没有有效的地址坐标。',
     },
     'zapocniVoznjuPrviPuta': {
-      'sr': 'Ruta će biti dostupna kada se tracking automatski aktivira za termin.',
-      'en': 'The route will be available when tracking is automatically activated for the slot.',
-      'ru': 'Маршрут станет доступен, когда отслеживание автоматически активируется для слота.',
-      'de': 'Die Route ist verfügbar, sobald das Tracking für den Termin automatisch aktiviert wird.',
+      'sr':
+          'Ruta će biti dostupna kada se tracking automatski aktivira za termin.',
+      'en':
+          'The route will be available when tracking is automatically activated for the slot.',
+      'ru':
+          'Маршрут станет доступен, когда отслеживание автоматически активируется для слота.',
+      'de':
+          'Die Route ist verfügbar, sobald das Tracking für den Termin automatisch aktiviert wird.',
       'zh': '当该时段自动启用跟踪后，路线将可用。',
     },
     'nemaPutnikaZaTermin': {
@@ -1357,10 +2023,14 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': 'HERE WeGo 已以当前站点顺序打开。',
     },
     'hereWeGoInstallTitle': {
-      'sr': 'Za GPS navigaciju instalirajte HERE WeGo. Bez te aplikacije navigacija nije dostupna.',
-      'en': 'Install HERE WeGo for GPS navigation. Navigation is unavailable without that app.',
-      'ru': 'Для GPS-навигации установите HERE WeGo. Без этого приложения навигация недоступна.',
-      'de': 'Installieren Sie HERE WeGo für die GPS-Navigation. Ohne diese App ist Navigation nicht verfügbar.',
+      'sr':
+          'Za GPS navigaciju instalirajte HERE WeGo. Bez te aplikacije navigacija nije dostupna.',
+      'en':
+          'Install HERE WeGo for GPS navigation. Navigation is unavailable without that app.',
+      'ru':
+          'Для GPS-навигации установите HERE WeGo. Без этого приложения навигация недоступна.',
+      'de':
+          'Installieren Sie HERE WeGo für die GPS-Navigation. Ohne diese App ist Navigation nicht verfügbar.',
       'zh': '请安装 HERE WeGo 以使用 GPS 导航。未安装则无法导航。',
     },
     'hereWeGoInstallAction': {
@@ -1371,10 +2041,12 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '安装',
     },
     'mapaNijeOtvorena': {
-      'sr': 'HERE WeGo nije otvoren. Proverite da li je aplikacija instalirana.',
+      'sr':
+          'HERE WeGo nije otvoren. Proverite da li je aplikacija instalirana.',
       'en': 'HERE WeGo did not open. Check that the app is installed.',
       'ru': 'HERE WeGo не открылся. Проверьте, установлено ли приложение.',
-      'de': 'HERE WeGo wurde nicht geöffnet. Prüfen Sie, ob die App installiert ist.',
+      'de':
+          'HERE WeGo wurde nicht geöffnet. Prüfen Sie, ob die App installiert ist.',
       'zh': 'HERE WeGo 未能打开。请确认应用已安装。',
     },
     'rutaPripremljena': {
@@ -1385,10 +2057,14 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '已为 HERE WeGo 准备好路线。',
     },
     'trackingVecPokrenut': {
-      'sr': 'Tracking je već pokrenut. Zaustaviće se automatski kada završite sa poslom.',
-      'en': 'Tracking is already running. It will stop automatically when you finish work.',
-      'ru': 'Отслеживание уже запущено. Оно остановится автоматически по завершению работы.',
-      'de': 'Tracking läuft bereits. Es wird automatisch gestoppt, wenn Sie die Arbeit beenden.',
+      'sr':
+          'Tracking je već pokrenut. Zaustaviće se automatski kada završite sa poslom.',
+      'en':
+          'Tracking is already running. It will stop automatically when you finish work.',
+      'ru':
+          'Отслеживание уже запущено. Оно остановится автоматически по завершению работы.',
+      'de':
+          'Tracking läuft bereits. Es wird automatisch gestoppt, wenn Sie die Arbeit beenden.',
       'zh': '跟踪已在运行。完成工作后将自动停止。',
     },
     'autoStartPauzirajMeni': {
@@ -1434,10 +2110,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '无法识别司机。',
     },
     'autoStartUToku': {
-      'sr': 'Pokretanje praćenja je već u toku, pokušaj ponovo za koji trenutak.',
+      'sr':
+          'Pokretanje praćenja je već u toku, pokušaj ponovo za koji trenutak.',
       'en': 'Tracking start is already in progress, try again in a moment.',
-      'ru': 'Запуск отслеживания уже выполняется, повторите попытку через мгновение.',
-      'de': 'Der Tracking-Start läuft bereits, versuchen Sie es gleich noch einmal.',
+      'ru':
+          'Запуск отслеживания уже выполняется, повторите попытку через мгновение.',
+      'de':
+          'Der Tracking-Start läuft bereits, versuchen Sie es gleich noch einmal.',
       'zh': '跟踪启动已在进行中，请稍后再试。',
     },
     'autoStartVanProzora': {
@@ -1458,7 +2137,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Thema ändern',
       'zh': '更改主题'
     },
-    'promeniPin': {'sr': 'Promeni PIN', 'en': 'Change PIN', 'ru': 'Изменить PIN', 'de': 'PIN ändern', 'zh': '更改PIN码'},
+    'promeniPin': {
+      'sr': 'Promeni PIN',
+      'en': 'Change PIN',
+      'ru': 'Изменить PIN',
+      'de': 'PIN ändern',
+      'zh': '更改PIN码'
+    },
     'promeniJezik': {
       'sr': 'Promeni jezik',
       'en': 'Change language',
@@ -1473,9 +2158,27 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '🌐 Sprache geändert',
       'zh': '🌐 语言已更改',
     },
-    'logout': {'sr': 'Logout', 'en': 'Log out', 'ru': 'Выйти', 'de': 'Abmelden', 'zh': '退出登录'},
-    'otkazi': {'sr': 'Otkaži', 'en': 'Cancel', 'ru': 'Отмена', 'de': 'Abbrechen', 'zh': '取消'},
-    'izaberiDan': {'sr': 'Izaberi dan', 'en': 'Select day', 'ru': 'Выберите день', 'de': 'Tag auswählen', 'zh': '选择日期'},
+    'logout': {
+      'sr': 'Logout',
+      'en': 'Log out',
+      'ru': 'Выйти',
+      'de': 'Abmelden',
+      'zh': '退出登录'
+    },
+    'otkazi': {
+      'sr': 'Otkaži',
+      'en': 'Cancel',
+      'ru': 'Отмена',
+      'de': 'Abbrechen',
+      'zh': '取消'
+    },
+    'izaberiDan': {
+      'sr': 'Izaberi dan',
+      'en': 'Select day',
+      'ru': 'Выберите день',
+      'de': 'Tag auswählen',
+      'zh': '选择日期'
+    },
     'logoutPitanje': {
       'sr': 'Da li ste sigurni da želite da se odjavite?',
       'en': 'Are you sure you want to log out?',
@@ -1548,7 +2251,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '✅ PIN wurde erfolgreich geändert.',
       'zh': '✅ PIN码已成功修改。',
     },
-    'promeniPin': {'sr': 'Promeni PIN', 'en': 'Change PIN', 'ru': 'Изменить PIN', 'de': 'PIN ändern', 'zh': '更改PIN码'},
+    'promeniPin': {
+      'sr': 'Promeni PIN',
+      'en': 'Change PIN',
+      'ru': 'Изменить PIN',
+      'de': 'PIN ändern',
+      'zh': '更改PIN码'
+    },
     'unesiPinSubtitle': {
       'sr': 'Unesi trenutni i novi PIN (6 cifara)',
       'en': 'Enter current and new PIN (6 digits)',
@@ -1563,7 +2272,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Aktuelle PIN',
       'zh': '当前PIN码'
     },
-    'noviPin': {'sr': 'Novi PIN', 'en': 'New PIN', 'ru': 'Новый PIN', 'de': 'Neue PIN', 'zh': '新PIN码'},
+    'noviPin': {
+      'sr': 'Novi PIN',
+      'en': 'New PIN',
+      'ru': 'Новый PIN',
+      'de': 'Neue PIN',
+      'zh': '新PIN码'
+    },
     'ponoviNoviPin': {
       'sr': 'Ponovi novi PIN',
       'en': 'Repeat new PIN',
@@ -1571,8 +2286,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Neue PIN wiederholen',
       'zh': '再次输入新PIN码',
     },
-    'otkazi': {'sr': 'Otkaži', 'en': 'Cancel', 'ru': 'Отмена', 'de': 'Abbrechen', 'zh': '取消'},
-    'sacuvaj': {'sr': 'Sačuvaj', 'en': 'Save', 'ru': 'Сохранить', 'de': 'Speichern', 'zh': '保存'},
+    'otkazi': {
+      'sr': 'Otkaži',
+      'en': 'Cancel',
+      'ru': 'Отмена',
+      'de': 'Abbrechen',
+      'zh': '取消'
+    },
+    'sacuvaj': {
+      'sr': 'Sačuvaj',
+      'en': 'Save',
+      'ru': 'Сохранить',
+      'de': 'Speichern',
+      'zh': '保存'
+    },
   },
   'welcomeScreen': {
     'welcome': {
@@ -1589,8 +2316,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Ihr zuverlässiger Transport',
       'zh': '您可靠的出行伙伴',
     },
-    'login': {'sr': 'Prijavi se', 'en': 'Log in', 'ru': 'Войти', 'de': 'Anmelden', 'zh': '登录'},
-    'about': {'sr': 'O nama', 'en': 'About us', 'ru': 'О нас', 'de': 'Über uns', 'zh': '关于我们'},
+    'login': {
+      'sr': 'Prijavi se',
+      'en': 'Log in',
+      'ru': 'Войти',
+      'de': 'Anmelden',
+      'zh': '登录'
+    },
+    'about': {
+      'sr': 'O nama',
+      'en': 'About us',
+      'ru': 'О нас',
+      'de': 'Über uns',
+      'zh': '关于我们'
+    },
     'footer1': {
       'sr': 'Designed - Developed - Crafted with balls',
       'en': 'Designed - Developed - Crafted with balls',
@@ -1606,11 +2345,15 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': 'by Bojan Gavrilovic',
     },
     'deviceLimitReached': {
-      'sr': '❌ Dostignut je limit od 2 uređaja po nalogu. Kontaktirajte admina.',
-      'en': '❌ A limit of 2 devices per account has been reached. Contact admin.',
-      'ru': '❌ Достигнут лимит в 2 устройства на аккаунт. Свяжитесь с администратором.',
-      'de': '❌ Das Limit von 2 Geräten pro Konto wurde erreicht. Kontaktieren Sie den Admin.',
-      'zh': '❌ 每个账户最多只能使用2台设备。请联系管理员。',
+      'sr':
+          '❌ Dostignut je limit od 3 uređaja po nalogu. Kontaktirajte admina.',
+      'en':
+          '❌ A limit of 3 devices per account has been reached. Contact admin.',
+      'ru':
+          '❌ Достигнут лимит в 3 устройства на аккаунт. Свяжитесь с администратором.',
+      'de':
+          '❌ Das Limit von 3 Geräten pro Konto wurde erreicht. Kontaktieren Sie den Admin.',
+      'zh': '❌ 每个账户最多只能使用3台设备。请联系管理员。',
     },
     'phoneNotPaired': {
       'sr': '❌ Telefon nije uparen sa UUID nalogom.',
@@ -1627,17 +2370,22 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '❌ 缺少用于验证的账户UUID。',
     },
     'closedTypeNotInSystem': {
-      'sr': 'Aplikacija je zatvorenog tipa i Vi niste u sistemu. Kontaktirajte admina.',
-      'en': 'This is a closed-type app and you are not in the system. Contact admin.',
-      'ru': 'Приложение закрытого типа, и вас нет в системе. Свяжитесь с администратором.',
-      'de': 'Diese App ist geschlossen und Sie sind nicht im System. Kontaktieren Sie den Admin.',
+      'sr':
+          'Aplikacija je zatvorenog tipa i Vi niste u sistemu. Kontaktirajte admina.',
+      'en':
+          'This is a closed-type app and you are not in the system. Contact admin.',
+      'ru':
+          'Приложение закрытого типа, и вас нет в системе. Свяжитесь с администратором.',
+      'de':
+          'Diese App ist geschlossen und Sie sind nicht im System. Kontaktieren Sie den Admin.',
       'zh': '该应用为封闭系统，您不在系统内。请联系管理员。',
     },
     'loginVerificationError': {
       'sr': '⚠️ Greška pri verifikaciji prijave. Pokušaj ponovo.',
       'en': '⚠️ Login verification error. Please try again.',
       'ru': '⚠️ Ошибка проверки входа. Попробуйте снова.',
-      'de': '⚠️ Fehler bei der Login-Verifizierung. Bitte versuchen Sie es erneut.',
+      'de':
+          '⚠️ Fehler bei der Login-Verifizierung. Bitte versuchen Sie es erneut.',
       'zh': '⚠️ 登录验证出错。请重试。',
     },
   },
@@ -1649,9 +2397,27 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Anfragenüberwachung',
       'zh': '请求监控'
     },
-    'obrada': {'sr': 'obrada', 'en': 'processing', 'ru': 'обработка', 'de': 'Bearbeitung', 'zh': '处理中'},
-    'odobreno': {'sr': 'odobreno', 'en': 'approved', 'ru': 'одобрено', 'de': 'genehmigt', 'zh': '已批准'},
-    'odbijeno': {'sr': 'odbijeno', 'en': 'rejected', 'ru': 'отклонено', 'de': 'abgelehnt', 'zh': '已拒绝'},
+    'obrada': {
+      'sr': 'obrada',
+      'en': 'processing',
+      'ru': 'обработка',
+      'de': 'Bearbeitung',
+      'zh': '处理中'
+    },
+    'odobreno': {
+      'sr': 'odobreno',
+      'en': 'approved',
+      'ru': 'одобрено',
+      'de': 'genehmigt',
+      'zh': '已批准'
+    },
+    'odbijeno': {
+      'sr': 'odbijeno',
+      'en': 'rejected',
+      'ru': 'отклонено',
+      'de': 'abgelehnt',
+      'zh': '已拒绝'
+    },
     'nemaZahteva': {
       'sr': 'Nema zahteva',
       'en': 'No requests',
@@ -1659,12 +2425,48 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Keine Anfragen',
       'zh': '没有请求'
     },
-    'uspeh': {'sr': '✅ Uspeh', 'en': '✅ Success', 'ru': '✅ Успех', 'de': '✅ Erfolg', 'zh': '✅ 成功'},
-    'odobrenoLabel': {'sr': '✅ Odobreno', 'en': '✅ Approved', 'ru': '✅ Одобрено', 'de': '✅ Genehmigt', 'zh': '✅ 已批准'},
-    'otkazano': {'sr': '🚫 Otkazano', 'en': '🚫 Canceled', 'ru': '🚫 Отменено', 'de': '🚫 Storniert', 'zh': '🚫 已取消'},
-    'odbijenoLabel': {'sr': '❌ Odbijeno', 'en': '❌ Rejected', 'ru': '❌ Отклонено', 'de': '❌ Abgelehnt', 'zh': '❌ 已拒绝'},
-    'putnik': {'sr': 'Putnik', 'en': 'Passenger', 'ru': 'Пассажир', 'de': 'Fahrgast', 'zh': '乘客'},
-    'nepoznat': {'sr': 'Nepoznat', 'en': 'Unknown', 'ru': 'Неизвестно', 'de': 'Unbekannt', 'zh': '未知'},
+    'uspeh': {
+      'sr': '✅ Uspeh',
+      'en': '✅ Success',
+      'ru': '✅ Успех',
+      'de': '✅ Erfolg',
+      'zh': '✅ 成功'
+    },
+    'odobrenoLabel': {
+      'sr': '✅ Odobreno',
+      'en': '✅ Approved',
+      'ru': '✅ Одобрено',
+      'de': '✅ Genehmigt',
+      'zh': '✅ 已批准'
+    },
+    'otkazano': {
+      'sr': '🚫 Otkazano',
+      'en': '🚫 Canceled',
+      'ru': '🚫 Отменено',
+      'de': '🚫 Storniert',
+      'zh': '🚫 已取消'
+    },
+    'odbijenoLabel': {
+      'sr': '❌ Odbijeno',
+      'en': '❌ Rejected',
+      'ru': '❌ Отклонено',
+      'de': '❌ Abgelehnt',
+      'zh': '❌ 已拒绝'
+    },
+    'putnik': {
+      'sr': 'Putnik',
+      'en': 'Passenger',
+      'ru': 'Пассажир',
+      'de': 'Fahrgast',
+      'zh': '乘客'
+    },
+    'nepoznat': {
+      'sr': 'Nepoznat',
+      'en': 'Unknown',
+      'ru': 'Неизвестно',
+      'de': 'Unbekannt',
+      'zh': '未知'
+    },
     'cekaOdgovor': {
       'sr': 'čeka odgovor...',
       'en': 'awaiting response...',

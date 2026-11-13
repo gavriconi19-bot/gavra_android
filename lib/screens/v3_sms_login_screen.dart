@@ -89,7 +89,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
 
   // ─── Lokalizacija ───────────────────────────────────────────────
 
-  static final Map<String, Map<String, String>> _t = AppTranslations.ns('smsLoginScreen');
+  static final Map<String, Map<String, String>> _t =
+      AppTranslations.ns('smsLoginScreen');
 
   String _tr(String key) {
     final code = V3LocaleManager().currentLocale.languageCode;
@@ -154,7 +155,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     debugPrint(
         '[V3SmsLogin] _sendSms called, _canSubmitPhoneStep=$_canSubmitPhoneStep, _isLoading=$_isLoading, _isBackendReady=$_isBackendReady');
     if (!_canSubmitPhoneStep) {
-      debugPrint('[V3SmsLogin] _sendSms blocked: _isLoading=$_isLoading, _isBackendReady=$_isBackendReady');
+      debugPrint(
+          '[V3SmsLogin] _sendSms blocked: _isLoading=$_isLoading, _isBackendReady=$_isBackendReady');
       return;
     }
 
@@ -176,7 +178,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     });
 
     try {
-      final authId = (await V3ClosedAuthService.findAuthIdByPhone(phone) ?? '').trim();
+      final authId =
+          (await V3ClosedAuthService.findAuthIdByPhone(phone) ?? '').trim();
       if (authId.isEmpty) {
         if (!mounted) return;
         V3AppSnackBar.error(context, _tr('brojNijePronadjen'));
@@ -207,7 +210,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     debugPrint('[V3SmsLogin] _advanceAfterPhoneAuth started');
     final phone = V3ClosedAuthService.normalizePhone(_normalizedPhone ?? '');
     final authId = (_targetAuthId ?? '').trim();
-    debugPrint('[V3SmsLogin] phone empty: ${phone.isEmpty}, authId empty: ${authId.isEmpty}');
+    debugPrint(
+        '[V3SmsLogin] phone empty: ${phone.isEmpty}, authId empty: ${authId.isEmpty}');
     if (phone.isEmpty) {
       if (mounted) {
         V3AppSnackBar.error(context, _tr('sesijaIstekla'));
@@ -265,7 +269,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
 
     debugPrint('[V3SmsLogin] Calling getActiveById...');
     final putnik = await V3PutnikService.getActiveById(authId);
-    debugPrint('[V3SmsLogin] getActiveById returned: ${putnik != null ? 'data' : 'null'}');
+    debugPrint(
+        '[V3SmsLogin] getActiveById returned: ${putnik != null ? 'data' : 'null'}');
     if (!mounted) return;
 
     if (putnik == null) {
@@ -312,10 +317,10 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     final missingTip = (putnik['tip_putnika']?.toString().trim() ?? '').isEmpty;
     final missingBc = (putnik['adresa_bc_id']?.toString().trim() ?? '').isEmpty;
     final missingVs = (putnik['adresa_vs_id']?.toString().trim() ?? '').isEmpty;
-    final missingPin =
-        (authId == V3AppUpdateService.appleReviewUserId || authId == V3AppUpdateService.googleReviewUserId)
-            ? false
-            : (putnik['pin_hash']?.toString().trim() ?? '').isEmpty;
+    final missingPin = (authId == V3AppUpdateService.appleReviewUserId ||
+            authId == V3AppUpdateService.googleReviewUserId)
+        ? false
+        : (putnik['pin_hash']?.toString().trim() ?? '').isEmpty;
 
     if (missingIme || missingTip || missingBc || missingVs || missingPin) {
       final bcId = putnik['adresa_bc_id']?.toString().trim() ?? '';
@@ -341,8 +346,10 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
         _requirePin = missingPin;
         _vozacPinOnlyOnboarding = false;
         _devicePinVerificationOnly = false;
-        _selectedBcAdresa = bcId.isEmpty ? null : V3AdresaService.getAdresaById(bcId);
-        _selectedVsAdresa = vsId.isEmpty ? null : V3AdresaService.getAdresaById(vsId);
+        _selectedBcAdresa =
+            bcId.isEmpty ? null : V3AdresaService.getAdresaById(bcId);
+        _selectedVsAdresa =
+            vsId.isEmpty ? null : V3AdresaService.getAdresaById(vsId);
 
         // Poruka na osnovu šta nedostaje
         final missingFieldKeys = <String>[];
@@ -388,18 +395,27 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
 
     return V3Putnik(
       id: existing['id']?.toString() ?? '',
-      imePrezime: overrideIme.isNotEmpty ? overrideIme : (existing['ime_prezime']?.toString().trim() ?? ''),
-      telefon1: existingPhone1 ?? (fallbackPhone.isEmpty ? null : fallbackPhone),
+      imePrezime: overrideIme.isNotEmpty
+          ? overrideIme
+          : (existing['ime_prezime']?.toString().trim() ?? ''),
+      telefon1:
+          existingPhone1 ?? (fallbackPhone.isEmpty ? null : fallbackPhone),
       telefon2: _trimToNull(existing['telefon_2']),
-      tipPutnika: overrideTip.isNotEmpty ? overrideTip : ((existing['tip_putnika']?.toString().trim() ?? 'radnik')),
-      adresaBcId: _trimToNull(adresaBcIdOverride) ?? _trimToNull(existing['adresa_bc_id']),
-      adresaVsId: _trimToNull(adresaVsIdOverride) ?? _trimToNull(existing['adresa_vs_id']),
+      tipPutnika: overrideTip.isNotEmpty
+          ? overrideTip
+          : ((existing['tip_putnika']?.toString().trim() ?? 'radnik')),
+      adresaBcId: _trimToNull(adresaBcIdOverride) ??
+          _trimToNull(existing['adresa_bc_id']),
+      adresaVsId: _trimToNull(adresaVsIdOverride) ??
+          _trimToNull(existing['adresa_vs_id']),
       adresaBcId2: _trimToNull(existing['adresa_bc_id_2']),
       adresaVsId2: _trimToNull(existing['adresa_vs_id_2']),
       cenaPoDanu: (existing['cena_po_danu'] as num?)?.toDouble() ?? 0.0,
-      cenaPoPokupljenju: (existing['cena_po_pokupljenju'] as num?)?.toDouble() ?? 0.0,
+      cenaPoPokupljenju:
+          (existing['cena_po_pokupljenju'] as num?)?.toDouble() ?? 0.0,
       pushToken: _trimToNull(existing['push_token']),
       pushToken2: _trimToNull(existing['push_token_2']),
+      pushToken3: _trimToNull(existing['push_token_3']),
     );
   }
 
@@ -479,7 +495,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     });
 
     try {
-      final result = await V3ClosedAuthService.verifyPin(v3AuthId: authId, pin: pin);
+      final result =
+          await V3ClosedAuthService.verifyPin(v3AuthId: authId, pin: pin);
       if (!result.ok) {
         if (!mounted) return;
         _pinController.clear();
@@ -505,7 +522,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
           _resetToStep1();
           return;
         }
-        V3AppSnackBar.error(context, '${_tr('pinNijeIspravanPreostalo')} $remaining.');
+        V3AppSnackBar.error(
+            context, '${_tr('pinNijeIspravanPreostalo')} $remaining.');
         setState(() {
           _statusMessage = '';
           _isLoading = false;
@@ -513,14 +531,16 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
         return;
       }
 
-      final installationId = (await V3DeviceIdentityService.getStableDeviceId()).trim();
+      final installationId =
+          (await V3DeviceIdentityService.getStableDeviceId()).trim();
       final hardwareId = await V3DeviceIdentityService.getHardwareId();
       final pushTokenResult = await V3PushTokenProvider.getBestToken().timeout(
         const Duration(seconds: 18),
         onTimeout: () => null,
       );
       final pushToken = pushTokenResult?.token.trim() ?? '';
-      final resolvedInstallationId = pushTokenResult?.installationId?.trim() ?? installationId;
+      final resolvedInstallationId =
+          pushTokenResult?.installationId?.trim() ?? installationId;
 
       if (resolvedInstallationId.isEmpty) {
         if (!mounted) return;
@@ -565,7 +585,10 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     }
 
     if (_vozacPinOnlyOnboarding ||
-        (_addressOnlyOnboarding && _requirePin && !_requireBcAddress && !_requireVsAddress)) {
+        (_addressOnlyOnboarding &&
+            _requirePin &&
+            !_requireBcAddress &&
+            !_requireVsAddress)) {
       await _saveVozacPinOnly(phone: phone, authId: authId);
       return;
     }
@@ -683,7 +706,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
       if (missingAfterSave.isNotEmpty) {
         if (!mounted) return;
         final translatedMissing = missingAfterSave.map(_tr).join(', ');
-        V3AppSnackBar.error(context, '${_tr('unosNijeKompletan')} $translatedMissing.');
+        V3AppSnackBar.error(
+            context, '${_tr('unosNijeKompletan')} $translatedMissing.');
         setState(() {
           _missingProfileStaticMessageKey = null;
           _missingProfileFieldKeys = missingAfterSave;
@@ -780,9 +804,11 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     final bc = putnik['adresa_bc_id']?.toString().trim() ?? '';
     final vs = putnik['adresa_vs_id']?.toString().trim() ?? '';
     final resolvedAuthId = authId ?? putnik['id']?.toString().trim();
-    final isReviewAccount = resolvedAuthId == V3AppUpdateService.appleReviewUserId ||
-        resolvedAuthId == V3AppUpdateService.googleReviewUserId;
-    final pinHash = isReviewAccount ? 'x' : (putnik['pin_hash']?.toString().trim() ?? '');
+    final isReviewAccount =
+        resolvedAuthId == V3AppUpdateService.appleReviewUserId ||
+            resolvedAuthId == V3AppUpdateService.googleReviewUserId;
+    final pinHash =
+        isReviewAccount ? 'x' : (putnik['pin_hash']?.toString().trim() ?? '');
 
     if (includeIdentityFields) {
       if (ime.isEmpty) missing.add('imeKratko');
@@ -809,8 +835,11 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           title: Text(
-            widget.title.trim().toLowerCase() == 'prijava' ? _tr('prijava') : widget.title,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            widget.title.trim().toLowerCase() == 'prijava'
+                ? _tr('prijava')
+                : widget.title,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold),
           ),
           iconTheme: const IconThemeData(color: Colors.white),
         ),
@@ -883,10 +912,13 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
   Widget _buildProfileStep() {
     final adreseBc = V3AdresaService.getAdreseZaGrad('BC');
     final adreseVs = V3AdresaService.getAdreseZaGrad('VS');
-    final hideProfileFields = _vozacPinOnlyOnboarding || _devicePinVerificationOnly;
+    final hideProfileFields =
+        _vozacPinOnlyOnboarding || _devicePinVerificationOnly;
     final showIdentityFields = !_addressOnlyOnboarding && !hideProfileFields;
-    final showBcDropdown = (!_addressOnlyOnboarding || _requireBcAddress) && !hideProfileFields;
-    final showVsDropdown = (!_addressOnlyOnboarding || _requireVsAddress) && !hideProfileFields;
+    final showBcDropdown =
+        (!_addressOnlyOnboarding || _requireBcAddress) && !hideProfileFields;
+    final showVsDropdown =
+        (!_addressOnlyOnboarding || _requireVsAddress) && !hideProfileFields;
 
     if (_selectedBcAdresa != null) {
       _selectedBcAdresa = adreseBc
@@ -909,7 +941,9 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
       children: [
         _buildInfoBox(
           icon: Icons.person_outline,
-          text: missingProfileMessage.isEmpty ? '${_tr('unesitePodatke')} ($_normalizedPhone).' : missingProfileMessage,
+          text: missingProfileMessage.isEmpty
+              ? '${_tr('unesitePodatke')} ($_normalizedPhone).'
+              : missingProfileMessage,
         ),
         const SizedBox(height: 24),
         if (showIdentityFields) ...[
@@ -940,7 +974,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
               icon: Icons.category_outlined,
             ),
             items: [
-              DropdownMenuItem(value: '', child: Text(_tr('izaberiteKategoriju'))),
+              DropdownMenuItem(
+                  value: '', child: Text(_tr('izaberiteKategoriju'))),
               DropdownMenuItem(value: 'radnik', child: Text(_tr('radnik'))),
               DropdownMenuItem(value: 'ucenik', child: Text(_tr('ucenik'))),
               DropdownMenuItem(value: 'dnevni', child: Text(_tr('dnevni'))),
@@ -1008,7 +1043,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
         if (_requirePin) ...[
           V3InputUtils.textField(
             controller: _pinController,
-            label: _devicePinVerificationOnly ? _tr('unesitePin') : _tr('noviPin'),
+            label:
+                _devicePinVerificationOnly ? _tr('unesitePin') : _tr('noviPin'),
             icon: Icons.lock_outline,
             enabled: !_isLoading,
             obscureText: true,

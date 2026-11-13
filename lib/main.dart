@@ -33,7 +33,8 @@ import 'services/v3_theme_manager.dart';
 import 'utils/v3_belgrade_time.dart';
 
 // Globalna instanca za lokalne notifikacije
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 bool _localNotificationsInitialized = false;
 bool _notificationLaunchHandled = false;
 Future<void>? _localNotificationsInitInFlight;
@@ -46,8 +47,10 @@ bool _fcmHandlersInitialized = false;
 final Map<String, DateTime> _canceledStatusPushSeenAt = <String, DateTime>{};
 String _lastProcessedPushActionKey = '';
 DateTime? _lastProcessedPushActionAt;
-const MethodChannel _iosPushActionsChannel = MethodChannel(AppPlatform.pushActionsChannel);
-const MethodChannel _pushTokenChannel = MethodChannel(AppPlatform.pushTokenChannel);
+const MethodChannel _iosPushActionsChannel =
+    MethodChannel(AppPlatform.pushActionsChannel);
+const MethodChannel _pushTokenChannel =
+    MethodChannel(AppPlatform.pushTokenChannel);
 bool _iosPushActionsBridgeInitialized = false;
 bool _pushLaunchChannelInitialized = false;
 const Duration _canceledStatusPushDedupWindow = Duration(seconds: 20);
@@ -60,7 +63,8 @@ bool _isCanceledZahtevStatusPush({
 }) {
   if (type.trim() != 'zahtev_status') return false;
 
-  final normalizedStatus = (data['status'] ?? data['zahtev_status'] ?? '').trim().toLowerCase();
+  final normalizedStatus =
+      (data['status'] ?? data['zahtev_status'] ?? '').trim().toLowerCase();
   if (normalizedStatus == 'otkazano' ||
       normalizedStatus == 'otkazan' ||
       normalizedStatus == 'cancelled' ||
@@ -95,7 +99,8 @@ bool _isDuplicateCanceledZahtevStatusPush({
   required String body,
   required Map<String, String> data,
 }) {
-  if (!_isCanceledZahtevStatusPush(type: type, title: title, body: body, data: data)) {
+  if (!_isCanceledZahtevStatusPush(
+      type: type, title: title, body: body, data: data)) {
     return false;
   }
 
@@ -103,9 +108,11 @@ bool _isDuplicateCanceledZahtevStatusPush({
   final staleCutoff = now.subtract(const Duration(minutes: 2));
   _canceledStatusPushSeenAt.removeWhere((_, ts) => ts.isBefore(staleCutoff));
 
-  final key = _canceledZahtevStatusDedupKey(title: title, body: body, data: data);
+  final key =
+      _canceledZahtevStatusDedupKey(title: title, body: body, data: data);
   final lastSeen = _canceledStatusPushSeenAt[key];
-  if (lastSeen != null && now.difference(lastSeen) <= _canceledStatusPushDedupWindow) {
+  if (lastSeen != null &&
+      now.difference(lastSeen) <= _canceledStatusPushDedupWindow) {
     return true;
   }
 
@@ -143,13 +150,16 @@ Future<void> _runBackgroundTask({
     try {
       await task().timeout(timeout);
       if (attempt > 1) {
-        debugPrint('✅ [main] Task "$label" uspeo nakon retry pokušaja #$attempt');
+        debugPrint(
+            '✅ [main] Task "$label" uspeo nakon retry pokušaja #$attempt');
       }
       return;
     } catch (e) {
-      debugPrint('⚠️ [main] Task "$label" pokušaj #$attempt/$totalAttempts neuspešan: $e');
+      debugPrint(
+          '⚠️ [main] Task "$label" pokušaj #$attempt/$totalAttempts neuspešan: $e');
       if (attempt >= totalAttempts) return;
-      await Future<void>.delayed(Duration(milliseconds: retryDelay.inMilliseconds * attempt));
+      await Future<void>.delayed(
+          Duration(milliseconds: retryDelay.inMilliseconds * attempt));
     }
   }
 }
@@ -167,24 +177,30 @@ Future<void> _ensureLocalNotificationsInitialized() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@drawable/ic_notification');
 
-    final List<DarwinNotificationCategory> darwinNotificationCategories = <DarwinNotificationCategory>[
+    final List<DarwinNotificationCategory> darwinNotificationCategories =
+        <DarwinNotificationCategory>[
       DarwinNotificationCategory(
         'alternativa_oba',
         actions: <DarwinNotificationAction>[
           DarwinNotificationAction.plain(
             'accept_pre',
             'Prihvati prvi termin',
-            options: <DarwinNotificationActionOption>{DarwinNotificationActionOption.foreground},
+            options: <DarwinNotificationActionOption>{
+              DarwinNotificationActionOption.foreground
+            },
           ),
           DarwinNotificationAction.plain(
             'accept_posle',
             'Prihvati drugi termin',
-            options: <DarwinNotificationActionOption>{DarwinNotificationActionOption.foreground},
+            options: <DarwinNotificationActionOption>{
+              DarwinNotificationActionOption.foreground
+            },
           ),
-          DarwinNotificationAction.plain('reject', 'Odbij', options: <DarwinNotificationActionOption>{
-            DarwinNotificationActionOption.destructive,
-            DarwinNotificationActionOption.foreground,
-          }),
+          DarwinNotificationAction.plain('reject', 'Odbij',
+              options: <DarwinNotificationActionOption>{
+                DarwinNotificationActionOption.destructive,
+                DarwinNotificationActionOption.foreground,
+              }),
         ],
       ),
       DarwinNotificationCategory(
@@ -193,12 +209,15 @@ Future<void> _ensureLocalNotificationsInitialized() async {
           DarwinNotificationAction.plain(
             'accept_pre',
             'Prihvati termin',
-            options: <DarwinNotificationActionOption>{DarwinNotificationActionOption.foreground},
+            options: <DarwinNotificationActionOption>{
+              DarwinNotificationActionOption.foreground
+            },
           ),
-          DarwinNotificationAction.plain('reject', 'Odbij', options: <DarwinNotificationActionOption>{
-            DarwinNotificationActionOption.destructive,
-            DarwinNotificationActionOption.foreground,
-          }),
+          DarwinNotificationAction.plain('reject', 'Odbij',
+              options: <DarwinNotificationActionOption>{
+                DarwinNotificationActionOption.destructive,
+                DarwinNotificationActionOption.foreground,
+              }),
         ],
       ),
       DarwinNotificationCategory(
@@ -207,12 +226,15 @@ Future<void> _ensureLocalNotificationsInitialized() async {
           DarwinNotificationAction.plain(
             'accept_posle',
             'Prihvati termin',
-            options: <DarwinNotificationActionOption>{DarwinNotificationActionOption.foreground},
+            options: <DarwinNotificationActionOption>{
+              DarwinNotificationActionOption.foreground
+            },
           ),
-          DarwinNotificationAction.plain('reject', 'Odbij', options: <DarwinNotificationActionOption>{
-            DarwinNotificationActionOption.destructive,
-            DarwinNotificationActionOption.foreground,
-          }),
+          DarwinNotificationAction.plain('reject', 'Odbij',
+              options: <DarwinNotificationActionOption>{
+                DarwinNotificationActionOption.destructive,
+                DarwinNotificationActionOption.foreground,
+              }),
         ],
       ),
       DarwinNotificationCategory(
@@ -221,23 +243,28 @@ Future<void> _ensureLocalNotificationsInitialized() async {
           DarwinNotificationAction.plain(
             'accept_pre',
             'Prihvati',
-            options: <DarwinNotificationActionOption>{DarwinNotificationActionOption.foreground},
+            options: <DarwinNotificationActionOption>{
+              DarwinNotificationActionOption.foreground
+            },
           ),
-          DarwinNotificationAction.plain('reject', 'Ne', options: <DarwinNotificationActionOption>{
-            DarwinNotificationActionOption.destructive,
-            DarwinNotificationActionOption.foreground,
-          }),
+          DarwinNotificationAction.plain('reject', 'Ne',
+              options: <DarwinNotificationActionOption>{
+                DarwinNotificationActionOption.destructive,
+                DarwinNotificationActionOption.foreground,
+              }),
         ],
       ),
     ];
 
-    final DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings(
+    final DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
       notificationCategories: darwinNotificationCategories,
     );
-    final InitializationSettings initializationSettings = InitializationSettings(
+    final InitializationSettings initializationSettings =
+        InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsIOS,
     );
@@ -257,7 +284,8 @@ Future<void> _ensureLocalNotificationsInitialized() async {
       enableVibration: true,
     );
 
-    const AndroidNotificationChannel alternativaChannel = AndroidNotificationChannel(
+    const AndroidNotificationChannel alternativaChannel =
+        AndroidNotificationChannel(
       'gavra_alternativa',
       'Alternativa termina',
       description: 'Klikabilna obaveštenja za alternativne termine',
@@ -267,7 +295,8 @@ Future<void> _ensureLocalNotificationsInitialized() async {
     );
 
     // Isti channelId kao AndroidConfiguration u _initializeBackgroundTrackingService.
-    const AndroidNotificationChannel bgTrackingChannel = AndroidNotificationChannel(
+    const AndroidNotificationChannel bgTrackingChannel =
+        AndroidNotificationChannel(
       'gavra_bg_tracking',
       'Praćenje vožnje',
       description: 'Aktivno praćenje lokacije vozača u pozadini',
@@ -277,15 +306,18 @@ Future<void> _ensureLocalNotificationsInitialized() async {
     );
 
     final androidImpl =
-        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.createNotificationChannel(channel);
     await androidImpl?.createNotificationChannel(alternativaChannel);
     await androidImpl?.createNotificationChannel(bgTrackingChannel);
 
     if (!_notificationLaunchHandled) {
-      final launchDetails = await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+      final launchDetails = await flutterLocalNotificationsPlugin
+          .getNotificationAppLaunchDetails();
       final notificationResponse = launchDetails?.notificationResponse;
-      if ((launchDetails?.didNotificationLaunchApp ?? false) && notificationResponse != null) {
+      if ((launchDetails?.didNotificationLaunchApp ?? false) &&
+          notificationResponse != null) {
         _notificationLaunchHandled = true;
         onNotificationTap(notificationResponse);
       }
@@ -362,20 +394,23 @@ void main() async {
     await configService.initializeBasic().timeout(const Duration(seconds: 3));
     debugPrint('🚀 [main] 3. configService completed');
   } catch (e) {
-    debugPrint('⚠️ [main] configService timeout/greška, nastavljam sa fallback tokom: $e');
+    debugPrint(
+        '⚠️ [main] configService timeout/greška, nastavljam sa fallback tokom: $e');
   }
 
   // SUPABASE - Inicijalizuj sa osnovnim kredencijalima
   try {
     debugPrint('🚀 [main] 4. Supabase init start');
-    final supabaseReady = await _ensureSupabaseInitialized().timeout(const Duration(seconds: 4));
+    final supabaseReady =
+        await _ensureSupabaseInitialized().timeout(const Duration(seconds: 4));
     if (supabaseReady) {
       debugPrint('🚀 [main] 4. Supabase init completed');
       if (startupPhaseNotifier.value == V3StartupPhase.booting) {
         startupPhaseNotifier.value = V3StartupPhase.dbReady;
       }
     } else {
-      debugPrint('⚠️ [main] Supabase init incomplete, nastavljam sa fallback tokom.');
+      debugPrint(
+          '⚠️ [main] Supabase init incomplete, nastavljam sa fallback tokom.');
       startupPhaseNotifier.value = V3StartupPhase.degraded;
     }
   } catch (e) {
@@ -396,14 +431,17 @@ void main() async {
 
   // Jezik učitamo pre prvog crteža UI-ja da ne bi bilo kratkog SR flicker-a.
   try {
-    await V3LocaleManager().loadLocaleFromStorage().timeout(const Duration(seconds: 3));
+    await V3LocaleManager()
+        .loadLocaleFromStorage()
+        .timeout(const Duration(seconds: 3));
   } catch (e) {
     debugPrint('⚠️ [main] Locale load timeout/greška: $e');
   }
 
   // Kad korisnik promeni jezik u app-u, odmah sinhronizuj locale_code u bazi
   // (umesto da se to desi tek na sledećem hladnom startu/resume-u).
-  V3LocaleManager().onLocaleChanged = () => unawaited(_syncLocaleOnResume(force: true));
+  V3LocaleManager().onLocaleChanged =
+      () => unawaited(_syncLocaleOnResume(force: true));
 
   // ODMAH POKREĆEMO UI KAKO BI IZBEGLI CRN OS EKRAN
   debugPrint('🚀 [main] 5. runApp start (Native non-blocking UI)');
@@ -446,7 +484,8 @@ Future<void> _postRunAppInitialization() async {
   }
 
   if (isSupabaseReady) {
-    debugPrint('🚀 [main] 7. V3MasterRealtimeManager.initV3 start (background)');
+    debugPrint(
+        '🚀 [main] 7. V3MasterRealtimeManager.initV3 start (background)');
     _startBackgroundTask(
       label: 'V3MasterRealtimeManager.initV3',
       task: () async {
@@ -469,7 +508,9 @@ Future<void> _postRunAppInitialization() async {
   // 3. 🎨 Tema - učitaj iz secure storage (ui će automatski reagovati na promenu teme)
   try {
     debugPrint('🚀 [main] 8. loadThemeFromStorage start');
-    await V3ThemeManager().loadThemeFromStorage().timeout(const Duration(seconds: 3));
+    await V3ThemeManager()
+        .loadThemeFromStorage()
+        .timeout(const Duration(seconds: 3));
     debugPrint('🚀 [main] 8. loadThemeFromStorage completed');
   } catch (e) {
     debugPrint('⚠️ [main] Theme load timeout/greška: $e');
@@ -609,8 +650,9 @@ String _encodeTapPayload(String type, Map<String, String> data) {
     if (decoded is Map<String, dynamic>) {
       final type = decoded['type']?.toString().trim() ?? '';
       final rawData = decoded['data'];
-      final data =
-          rawData is Map ? rawData.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')) : <String, String>{};
+      final data = rawData is Map
+          ? rawData.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+          : <String, String>{};
 
       if (type.isNotEmpty) {
         return (type: type, data: data);
@@ -699,10 +741,12 @@ Future<void> _showAlternativaFromData(
 }) async {
   final zahtevId = (data['zahtev_id'] ?? '').trim();
   final altPre = V3BelgradeTime.normalizeToHHmm((data['alt_pre'] ?? '').trim());
-  final altPosle = V3BelgradeTime.normalizeToHHmm((data['alt_posle'] ?? '').trim());
+  final altPosle =
+      V3BelgradeTime.normalizeToHHmm((data['alt_posle'] ?? '').trim());
 
   if (zahtevId.isEmpty) {
-    debugPrint('⚠️ [alternativa] Nedostaje zahtevId u FCM data payload-u: $data');
+    debugPrint(
+        '⚠️ [alternativa] Nedostaje zahtevId u FCM data payload-u: $data');
     return;
   }
 
@@ -729,11 +773,13 @@ Future<void> _syncRefreshedPushToken(String token) async {
   final safeToken = token.trim();
   if (safeToken.isEmpty) return;
   if (_lastSyncedPushToken == safeToken) return;
-  final installationId = (await V3PushTokenProvider.getInstallationId())?.trim() ?? '';
+  final installationId =
+      (await V3PushTokenProvider.getInstallationId())?.trim() ?? '';
   final hardwareId = await V3DeviceIdentityService.getHardwareId();
 
   Future<bool> doSyncAttempt() async {
-    final putnikId = (V3PutnikService.currentPutnik?['id']?.toString() ?? '').trim();
+    final putnikId =
+        (V3PutnikService.currentPutnik?['id']?.toString() ?? '').trim();
     if (putnikId.isNotEmpty) {
       await V3PutnikService.writePushTokenOnLogin(
         putnikId: putnikId,
@@ -772,7 +818,8 @@ Future<void> _syncRefreshedPushToken(String token) async {
     unawaited(
       Future<void>.delayed(const Duration(seconds: 2), () async {
         try {
-          final synced = await doSyncAttempt().timeout(const Duration(seconds: 5));
+          final synced =
+              await doSyncAttempt().timeout(const Duration(seconds: 5));
           if (synced) {
             _lastSyncedPushToken = safeToken;
             _pushTokenConfirmed = true;
@@ -804,12 +851,14 @@ Future<void> _syncLocaleOnResume({bool force = false}) async {
       now.difference(_lastLocaleResumeSyncAt!) < const Duration(hours: 6);
   if (localeThrottled) return;
 
-  final putnikId = (V3PutnikService.currentPutnik?['id']?.toString() ?? '').trim();
+  final putnikId =
+      (V3PutnikService.currentPutnik?['id']?.toString() ?? '').trim();
   final vozacId = (V3VozacService.currentVozac?.id ?? '').trim();
   if (putnikId.isEmpty && vozacId.isEmpty) return;
 
   try {
-    final installationId = (await V3PushTokenProvider.getInstallationId())?.trim() ?? '';
+    final installationId =
+        (await V3PushTokenProvider.getInstallationId())?.trim() ?? '';
     if (installationId.isEmpty) return;
     final hardwareId = await V3DeviceIdentityService.getHardwareId();
 
@@ -903,7 +952,8 @@ Future<void> _initFcmHandlers() async {
       final data = _messageDataToStringMap(message.data);
       debugPrint('[FCM] onMessageOpenedApp type=$type data=$data');
       unawaited(
-        _handleFcmLaunch(type, data).catchError((Object e) => debugPrint('⚠️ [FCM] onMessageOpenedApp greška: $e')),
+        _handleFcmLaunch(type, data).catchError(
+            (Object e) => debugPrint('⚠️ [FCM] onMessageOpenedApp greška: $e')),
       );
     });
 
@@ -913,7 +963,8 @@ Future<void> _initFcmHandlers() async {
       final data = _messageDataToStringMap(initialMessage.data);
       debugPrint('[FCM] getInitialMessage type=$type data=$data');
       unawaited(
-        _handleFcmLaunch(type, data).catchError((Object e) => debugPrint('⚠️ [FCM] getInitialMessage greška: $e')),
+        _handleFcmLaunch(type, data).catchError(
+            (Object e) => debugPrint('⚠️ [FCM] getInitialMessage greška: $e')),
       );
     }
 
@@ -925,7 +976,8 @@ Future<void> _initFcmHandlers() async {
     });
 
     _fcmHandlersInitialized = true;
-    debugPrint('✅ [FCM] Unified Firebase Messaging handlers (${Platform.operatingSystem})');
+    debugPrint(
+        '✅ [FCM] Unified Firebase Messaging handlers (${Platform.operatingSystem})');
   }();
 
   _fcmHandlersInitInFlight = initFuture;
@@ -942,8 +994,10 @@ Future<void> _handleIncomingFcmMessage(
   required String source,
 }) async {
   final type = message.data['type']?.toString() ?? '';
-  final title = message.notification?.title ?? message.data['title']?.toString() ?? '';
-  final body = message.notification?.body ?? message.data['body']?.toString() ?? '';
+  final title =
+      message.notification?.title ?? message.data['title']?.toString() ?? '';
+  final body =
+      message.notification?.body ?? message.data['body']?.toString() ?? '';
   final data = _messageDataToStringMap(message.data);
   // Alternativa se deduplikuje po zahtevu (nova ponuda za isti zahtev zamenjuje
   // staru notifikaciju), ostale poruke po messageId-ju (FCM ACK retry),
@@ -1044,8 +1098,10 @@ Future<void> _handleFcmLaunch(String type, Map<String, String> data) async {
       {
         // Tap na telo otvara putnik profil — ponuda oslobođenog mesta je
         // vidljiva i u app-u (banner sa Prihvati/Ne dugmadima).
-        final putnikId = (data['v3_auth_id'] ?? data['recipient_id'] ?? '').trim();
-        final navPayload = putnikId.isNotEmpty ? 'zahtev_status:$putnikId' : 'zahtev_status';
+        final putnikId =
+            (data['v3_auth_id'] ?? data['recipient_id'] ?? '').trim();
+        final navPayload =
+            putnikId.isNotEmpty ? 'zahtev_status:$putnikId' : 'zahtev_status';
         await _openPutnikProfilFromNotification(navPayload);
         return;
       }
@@ -1057,8 +1113,10 @@ Future<void> _handleFcmLaunch(String type, Map<String, String> data) async {
     case 'putnik_eta_start':
       // Svi ovi tipovi vode na putnik profil ekran.
       // recipient_id ili v3_auth_id identifikuju putnika.
-      final putnikId = (data['v3_auth_id'] ?? data['recipient_id'] ?? '').trim();
-      final payload = putnikId.isNotEmpty ? 'zahtev_status:$putnikId' : 'zahtev_status';
+      final putnikId =
+          (data['v3_auth_id'] ?? data['recipient_id'] ?? '').trim();
+      final payload =
+          putnikId.isNotEmpty ? 'zahtev_status:$putnikId' : 'zahtev_status';
       await _openPutnikProfilFromNotification(payload);
       return;
 
@@ -1077,14 +1135,16 @@ Future<void> _initPushLaunchChannel() async {
   _pushLaunchChannelInitialized = true;
 
   Future<void> handle(Map<dynamic, dynamic> raw) async {
-    final data = raw.map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
+    final data = raw
+        .map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
     final type = data['type'] ?? '';
     debugPrint('[HMS] push launch type=$type data=$data');
     await _handleFcmLaunch(type, data);
   }
 
   _pushTokenChannel.setMethodCallHandler((call) async {
-    if (call.method == AppPlatform.methodOnPushLaunchData && call.arguments is Map) {
+    if (call.method == AppPlatform.methodOnPushLaunchData &&
+        call.arguments is Map) {
       await handle(call.arguments as Map);
       return true;
     }
@@ -1092,7 +1152,8 @@ Future<void> _initPushLaunchChannel() async {
   });
 
   try {
-    final pending = await _pushTokenChannel.invokeMethod<dynamic>(AppPlatform.methodConsumePushLaunchData);
+    final pending = await _pushTokenChannel
+        .invokeMethod<dynamic>(AppPlatform.methodConsumePushLaunchData);
     if (pending is Map) await handle(pending);
   } catch (e) {
     debugPrint('[HMS] consumePushLaunchData error: $e');
@@ -1106,7 +1167,8 @@ Future<void> _initIosPushActionBridge() async {
     if (call.method != 'pushAction') return;
     final args = call.arguments;
     if (args is! Map) return;
-    final mapped = args.map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
+    final mapped = args
+        .map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
     await _handleNativeRemotePushAction(
       actionId: mapped['actionId'] ?? '',
       payload: mapped['payload'] ?? '',
@@ -1124,7 +1186,8 @@ Future<void> _consumePendingIosPushAction() async {
       AppPlatform.methodGetPendingPushAction,
     );
     if (pending is! Map) return;
-    final mapped = pending.map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
+    final mapped = pending
+        .map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
     await _handleNativeRemotePushAction(
       actionId: mapped['actionId'] ?? '',
       payload: mapped['payload'] ?? '',
@@ -1152,7 +1215,8 @@ bool _shouldSkipDuplicatePushAction(String actionId, String payload) {
   final now = DateTime.now();
   if (_lastProcessedPushActionKey == key &&
       _lastProcessedPushActionAt != null &&
-      now.difference(_lastProcessedPushActionAt!) <= const Duration(seconds: 8)) {
+      now.difference(_lastProcessedPushActionAt!) <=
+          const Duration(seconds: 8)) {
     return true;
   }
   _lastProcessedPushActionKey = key;
@@ -1187,18 +1251,22 @@ Future<void> showAlternativaNotification({
   required String altPosle,
   String offerKind = '',
   String title = '🕒 Predlog alternativnog termina',
-  String body = 'Nema slobodnih mesta u traženom terminu. Izaberi dostupnu opciju.',
+  String body =
+      'Nema slobodnih mesta u traženom terminu. Izaberi dostupnu opciju.',
   int? notificationId,
 }) async {
   await _ensureLocalNotificationsInitialized();
 
   final isMesto = offerKind.trim() == 'mesto_oslobodjeno';
-  final payload = isMesto ? '$zahtevId|$altPre|$altPosle|mesto_oslobodjeno' : '$zahtevId|$altPre|$altPosle';
+  final payload = isMesto
+      ? '$zahtevId|$altPre|$altPosle|mesto_oslobodjeno'
+      : '$zahtevId|$altPre|$altPosle';
   final optionsText = [
     if (altPre.isNotEmpty) altPre,
     if (altPosle.isNotEmpty) altPosle,
   ].join('  •  ');
-  final modernBody = optionsText.isNotEmpty ? '$body\nDostupno: $optionsText' : body;
+  final modernBody =
+      optionsText.isNotEmpty ? '$body\nDostupno: $optionsText' : body;
 
   final actions = <AndroidNotificationAction>[
     if (isMesto)
@@ -1311,7 +1379,8 @@ Future<Map<String, dynamic>> _executeAlternativaEdgeAction({
 
   final data = response.data;
   if (response.status < 200 || response.status >= 300 || data is! Map) {
-    throw Exception('Edge alternativa action failed (status=${response.status}, data=$data)');
+    throw Exception(
+        'Edge alternativa action failed (status=${response.status}, data=$data)');
   }
 
   final map = Map<String, dynamic>.from(data);
@@ -1374,7 +1443,8 @@ Future<void> _processAlternativaNotificationAction({
     try {
       final ready = await _ensureSupabaseInitialized();
       if (!ready) {
-        await _showActionFeedback('⚠️ Greška', 'Servis trenutno nije dostupan. Pokušajte ponovo.');
+        await _showActionFeedback(
+            '⚠️ Greška', 'Servis trenutno nije dostupan. Pokušajte ponovo.');
         return;
       }
     } catch (e) {
@@ -1393,20 +1463,26 @@ Future<void> _processAlternativaNotificationAction({
       if (zahtevId.isNotEmpty) {
         final altPre = (decodedData['alt_pre'] ?? '').trim();
         final altPosle = (decodedData['alt_posle'] ?? '').trim();
-        final isMesto = (decodedData['offer_kind'] ?? '').trim() == 'mesto_oslobodjeno';
-        actionPayload = isMesto ? '$zahtevId|$altPre|$altPosle|mesto_oslobodjeno' : '$zahtevId|$altPre|$altPosle';
+        final isMesto =
+            (decodedData['offer_kind'] ?? '').trim() == 'mesto_oslobodjeno';
+        actionPayload = isMesto
+            ? '$zahtevId|$altPre|$altPosle|mesto_oslobodjeno'
+            : '$zahtevId|$altPre|$altPosle';
       }
     }
 
     final parts = actionPayload.split('|');
     if (parts.length < 3 || parts[0].trim().isEmpty) {
-      await _showActionFeedback('⚠️ Akcija nije izvršena', 'Neispravan format notifikacije.');
+      await _showActionFeedback(
+          '⚠️ Akcija nije izvršena', 'Neispravan format notifikacije.');
       return;
     }
 
     final zahtevId = parts[0].trim();
     final isMesto = parts.length > 3 && parts[3].trim() == 'mesto_oslobodjeno';
-    if (actionId == 'accept_pre' || actionId == 'accept_posle' || actionId == 'reject') {
+    if (actionId == 'accept_pre' ||
+        actionId == 'accept_posle' ||
+        actionId == 'reject') {
       final result = await _executeAlternativaEdgeAction(
         zahtevId: zahtevId,
         actionId: actionId,
@@ -1414,7 +1490,8 @@ Future<void> _processAlternativaNotificationAction({
 
       if (result['ok'] != true) {
         final reason = (result['reason'] ?? 'unknown_error').toString();
-        if (isMesto && (reason == 'selected_slot_full' || reason == 'no_capacity_slot')) {
+        if (isMesto &&
+            (reason == 'selected_slot_full' || reason == 'no_capacity_slot')) {
           await _showActionFeedback(
             '⚠️ Mesto je zauzeto',
             'Mesto je u međuvremenu zauzeto.',
@@ -1435,7 +1512,8 @@ Future<void> _processAlternativaNotificationAction({
           );
           return;
         }
-        if (reason == 'offer_expired' || reason == 'zahtev_not_in_alternativa') {
+        if (reason == 'offer_expired' ||
+            reason == 'zahtev_not_in_alternativa') {
           await _showActionFeedback(
             '⚠️ Ponuda više nije aktiva',
             'Ponuda je istekla ili je već obrađena.',
@@ -1449,7 +1527,8 @@ Future<void> _processAlternativaNotificationAction({
           );
           return;
         }
-        await _showActionFeedback('⚠️ Akcija nije izvršena', 'Akcija nije uspela: $reason');
+        await _showActionFeedback(
+            '⚠️ Akcija nije izvršena', 'Akcija nije uspela: $reason');
         return;
       }
 
@@ -1457,20 +1536,26 @@ Future<void> _processAlternativaNotificationAction({
         if (isMesto) {
           await _showActionFeedback('❌ Ne', 'Ponuda mesta je odbijena.');
         } else {
-          await _showActionFeedback('❌ Alternativa odbijena', 'Zahtev je postavljen na odbijeno.');
+          await _showActionFeedback(
+              '❌ Alternativa odbijena', 'Zahtev je postavljen na odbijeno.');
         }
       } else {
         final selectedTime = (result['selected_time'] ?? '').toString().trim();
         if (isMesto) {
-          final suffix = selectedTime.isNotEmpty ? 'Prihvaćen termin: $selectedTime' : 'Mesto je prihvaćeno.';
+          final suffix = selectedTime.isNotEmpty
+              ? 'Prihvaćen termin: $selectedTime'
+              : 'Mesto je prihvaćeno.';
           await _showActionFeedback('✅ Mesto prihvaćeno', suffix);
         } else {
-          final suffix = selectedTime.isNotEmpty ? 'Prihvaćen termin: $selectedTime' : 'Alternativa je prihvaćena.';
+          final suffix = selectedTime.isNotEmpty
+              ? 'Prihvaćen termin: $selectedTime'
+              : 'Alternativa je prihvaćena.';
           await _showActionFeedback('✅ Alternativa prihvaćena', suffix);
         }
       }
     } else {
-      await _showActionFeedback('⚠️ Akcija nije izvršena', 'Nepoznata akcija notifikacije.');
+      await _showActionFeedback(
+          '⚠️ Akcija nije izvršena', 'Nepoznata akcija notifikacije.');
     }
   } catch (e) {
     debugPrint('[onNotificationTap] Greška pri obradi akcije: $e');
@@ -1478,7 +1563,8 @@ Future<void> _processAlternativaNotificationAction({
   }
 }
 
-Future<void> _showActionFeedback(String title, String body, {int? notificationId}) async {
+Future<void> _showActionFeedback(String title, String body,
+    {int? notificationId}) async {
   await _ensureLocalNotificationsInitialized();
   final androidDetails = AndroidNotificationDetails(
     'gavra_push_v2',
@@ -1513,14 +1599,16 @@ Future<void> _openPutnikProfilFromNotification(String payload) async {
     if (!isSupabaseReady) {
       final ready = await _ensureSupabaseInitialized();
       if (!ready) {
-        debugPrint('⚠️ [Push] Ne mogu da otvorim putnik profil (Supabase nije spreman).');
+        debugPrint(
+            '⚠️ [Push] Ne mogu da otvorim putnik profil (Supabase nije spreman).');
         return;
       }
     }
 
     final nav = navigatorKey.currentState;
     if (nav == null) {
-      debugPrint('⚠️ [Push] Ne mogu da otvorim putnik profil (nema navigatora).');
+      debugPrint(
+          '⚠️ [Push] Ne mogu da otvorim putnik profil (nema navigatora).');
       return;
     }
 
@@ -1534,7 +1622,7 @@ Future<void> _openPutnikProfilFromNotification(String payload) async {
       putnikData ??= await V3PutnikService.getActiveById(payloadPutnikId);
     }
 
-    // 2) Push token fallback: nađi putnika po push_token ili push_token_2
+    // 2) Push token fallback: nađi putnika po bilo kojoj push_token koloni (3 slota, fcm+hms)
     if (putnikData == null) {
       final tokenResult = await V3PushTokenProvider.getBestToken();
       final token = tokenResult?.token.trim() ?? '';
@@ -1548,21 +1636,32 @@ Future<void> _openPutnikProfilFromNotification(String payload) async {
       await V3MasterRealtimeManager.instance.initV3().timeout(
         const Duration(seconds: 15),
         onTimeout: () {
-          debugPrint('⚠️ [Push] initV3 timeout nakon 15s; nastavljam bez cache refresh-a.');
+          debugPrint(
+              '⚠️ [Push] initV3 timeout nakon 15s; nastavljam bez cache refresh-a.');
         },
       );
       final tokenResult = await V3PushTokenProvider.getBestToken();
       final token = tokenResult?.token.trim() ?? '';
       if (token.isNotEmpty) {
-        putnikData = V3MasterRealtimeManager.instance.putniciCache.values.cast<Map<String, dynamic>?>().firstWhere(
-              (p) => p != null && (p['push_token'] == token || p['push_token_2'] == token),
+        putnikData = V3MasterRealtimeManager.instance.putniciCache.values
+            .cast<Map<String, dynamic>?>()
+            .firstWhere(
+              (p) =>
+                  p != null &&
+                  (p['push_token'] == token ||
+                      p['push_token_2'] == token ||
+                      p['push_token_3'] == token ||
+                      p['push_token_hms'] == token ||
+                      p['push_token_hms_2'] == token ||
+                      p['push_token_hms_3'] == token),
               orElse: () => null,
             );
       }
     }
 
     if (putnikData == null) {
-      debugPrint('⚠️ [Push] Ne mogu da otvorim putnik profil (putnik nije pronađen).');
+      debugPrint(
+          '⚠️ [Push] Ne mogu da otvorim putnik profil (putnik nije pronađen).');
       return;
     }
 
@@ -1587,7 +1686,8 @@ Future<void> _initAppServices() async {
     try {
       await _ensureSupabaseInitialized().timeout(const Duration(seconds: 3));
     } catch (e) {
-      debugPrint('⚠️ [main] Preskačem app services init (Supabase nije spreman): $e');
+      debugPrint(
+          '⚠️ [main] Preskačem app services init (Supabase nije spreman): $e');
       return;
     }
   }
@@ -1621,7 +1721,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  Locale? _resolveSupportedLocale(Locale? locale, Iterable<Locale> supportedLocales) {
+  Locale? _resolveSupportedLocale(
+      Locale? locale, Iterable<Locale> supportedLocales) {
     if (locale == null) return null;
 
     for (final supportedLocale in supportedLocales) {
@@ -1633,7 +1734,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return null;
   }
 
-  Locale? _resolveSupportedLocaleFromList(List<Locale>? locales, Iterable<Locale> supportedLocales) {
+  Locale? _resolveSupportedLocaleFromList(
+      List<Locale>? locales, Iterable<Locale> supportedLocales) {
     if (locales == null || locales.isEmpty) return null;
 
     for (final locale in locales) {
@@ -1696,9 +1798,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ],
               supportedLocales: V3LocaleManager.supportedLocales,
               localeListResolutionCallback: (locales, supportedLocales) =>
-                  _resolveSupportedLocaleFromList(locales, supportedLocales) ?? V3LocaleManager.supportedLocales.first,
+                  _resolveSupportedLocaleFromList(locales, supportedLocales) ??
+                  V3LocaleManager.supportedLocales.first,
               localeResolutionCallback: (locale, supportedLocales) =>
-                  _resolveSupportedLocale(locale, supportedLocales) ?? V3LocaleManager.supportedLocales.first,
+                  _resolveSupportedLocale(locale, supportedLocales) ??
+                  V3LocaleManager.supportedLocales.first,
               locale: locale,
               theme: themeData,
               home: const V3WelcomeScreen(),

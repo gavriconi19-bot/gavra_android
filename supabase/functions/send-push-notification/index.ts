@@ -514,14 +514,14 @@ async function clearDeadTokens(tokens: string[]): Promise<void> {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    const tokenColumns = ['push_token', 'push_token_2', 'push_token_3', 'push_token_hms', 'push_token_hms_2', 'push_token_hms_3'];
     for (const token of tokens) {
-      try {
-        await client.from('v3_auth').update({ push_token: null }).eq('push_token', token);
-        await client.from('v3_auth').update({ push_token_2: null }).eq('push_token_2', token);
-        await client.from('v3_auth').update({ push_token_hms: null }).eq('push_token_hms', token);
-        await client.from('v3_auth').update({ push_token_hms_2: null }).eq('push_token_hms_2', token);
-      } catch (e) {
-        console.error('clearDeadTokens per-token failed', e);
+      for (const col of tokenColumns) {
+        try {
+          await client.from('v3_auth').update({ [col]: null }).eq(col, token);
+        } catch (e) {
+          console.error('clearDeadTokens per-token failed', e);
+        }
       }
     }
 
@@ -555,28 +555,16 @@ async function resolveLocalesByToken(
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const [{ data: rows1 }, { data: rows2 }, { data: rows3 }, { data: rows4 }] = await Promise.all([
-      client.from('v3_auth').select('push_token, locale_code').in('push_token', tokens),
-      client.from('v3_auth').select('push_token_2, locale_code').in('push_token_2', tokens),
-      client.from('v3_auth').select('push_token_hms, locale_code').in('push_token_hms', tokens),
-      client.from('v3_auth').select('push_token_hms_2, locale_code').in('push_token_hms_2', tokens),
-    ]);
+    const tokenColumns = ['push_token', 'push_token_2', 'push_token_3', 'push_token_hms', 'push_token_hms_2', 'push_token_hms_3'];
+    const results = await Promise.all(
+      tokenColumns.map((col) => client.from('v3_auth').select(`${col}, locale_code`).in(col, tokens)),
+    );
 
-    for (const row of rows1 ?? []) {
-      const token = String(row?.push_token ?? '').trim();
-      if (token) localeByToken.set(token, normalizeLocaleCode(row?.locale_code));
-    }
-    for (const row of rows2 ?? []) {
-      const token = String(row?.push_token_2 ?? '').trim();
-      if (token) localeByToken.set(token, normalizeLocaleCode(row?.locale_code));
-    }
-    for (const row of rows3 ?? []) {
-      const token = String(row?.push_token_hms ?? '').trim();
-      if (token) localeByToken.set(token, normalizeLocaleCode(row?.locale_code));
-    }
-    for (const row of rows4 ?? []) {
-      const token = String(row?.push_token_hms_2 ?? '').trim();
-      if (token) localeByToken.set(token, normalizeLocaleCode(row?.locale_code));
+    for (const [i, col] of tokenColumns.entries()) {
+      for (const row of results[i]?.data ?? []) {
+        const token = String(row?.[col] ?? '').trim();
+        if (token) localeByToken.set(token, normalizeLocaleCode(row?.locale_code));
+      }
     }
   } catch {
     // fallback sr per token below

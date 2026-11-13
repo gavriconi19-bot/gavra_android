@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
       .eq("id", targetId)
       .eq("tip", "vozac")
       .select(
-        "id, ime, telefon, telefon_2, boja, push_token, push_token_2, pin_hash, uloga, created_at, updated_at, tip",
+        "id, ime, telefon, telefon_2, boja, push_token, push_token_2, push_token_3, pin_hash, uloga, created_at, updated_at, tip",
       )
       .single();
 

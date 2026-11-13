@@ -17,12 +17,14 @@ class V3Putnik {
 
   final String? pushToken;
   final String? pushToken2;
+  final String? pushToken3;
   final String? pushDeviceId;
   final String? pushDeviceId2;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? lastSeenAt;
   final DateTime? lastSeenAt2;
+  final DateTime? lastSeenAt3;
 
   V3Putnik({
     required this.id,
@@ -38,12 +40,14 @@ class V3Putnik {
     this.cenaPoPokupljenju = 0.0,
     this.pushToken,
     this.pushToken2,
+    this.pushToken3,
     this.pushDeviceId,
     this.pushDeviceId2,
     this.createdAt,
     this.updatedAt,
     this.lastSeenAt,
     this.lastSeenAt2,
+    this.lastSeenAt3,
   });
 
   factory V3Putnik.fromJson(Map<String, dynamic> json) {
@@ -58,15 +62,18 @@ class V3Putnik {
       adresaBcId2: json['adresa_bc_id_2'] as String?,
       adresaVsId2: json['adresa_vs_id_2'] as String?,
       cenaPoDanu: (json['cena_po_danu'] as num?)?.toDouble() ?? 0.0,
-      cenaPoPokupljenju: (json['cena_po_pokupljenju'] as num?)?.toDouble() ?? 0.0,
+      cenaPoPokupljenju:
+          (json['cena_po_pokupljenju'] as num?)?.toDouble() ?? 0.0,
       pushToken: json['push_token'] as String?,
       pushToken2: json['push_token_2'] as String?,
+      pushToken3: json['push_token_3'] as String?,
       pushDeviceId: json['push_device_id'] as String?,
       pushDeviceId2: json['push_device_id_2'] as String?,
       createdAt: V3BelgradeTime.parseTs(json['created_at'] as String?),
       updatedAt: V3BelgradeTime.parseTs(json['updated_at'] as String?),
       lastSeenAt: V3BelgradeTime.parseTs(json['last_seen_at'] as String?),
       lastSeenAt2: V3BelgradeTime.parseTs(json['last_seen_at_2'] as String?),
+      lastSeenAt3: V3BelgradeTime.parseTs(json['last_seen_at_3'] as String?),
     );
   }
 
@@ -85,6 +92,7 @@ class V3Putnik {
       'cena_po_pokupljenju': cenaPoPokupljenju,
       if (pushToken != null) 'push_token': pushToken,
       if (pushToken2 != null) 'push_token_2': pushToken2,
+      if (pushToken3 != null) 'push_token_3': pushToken3,
       if (pushDeviceId != null) 'push_device_id': pushDeviceId,
       if (pushDeviceId2 != null) 'push_device_id_2': pushDeviceId2,
     };

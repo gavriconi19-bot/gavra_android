@@ -50,11 +50,14 @@ class _V3PendingPazarEntry {
 /// V3MasterRealtimeManager - Centralized cache and realtime manager for v3 tables.
 class V3MasterRealtimeManager {
   V3MasterRealtimeManager._internal();
-  static final V3MasterRealtimeManager _instance = V3MasterRealtimeManager._internal();
+  static final V3MasterRealtimeManager _instance =
+      V3MasterRealtimeManager._internal();
   static V3MasterRealtimeManager get instance => _instance;
-  static final V3RealtimeBootstrapRepository _bootstrapRepository = V3RealtimeBootstrapRepository();
+  static final V3RealtimeBootstrapRepository _bootstrapRepository =
+      V3RealtimeBootstrapRepository();
 
-  static final DateTime _defaultPazarPolicyStartDate = V3BelgradeTime.dateTime(2026, 9, 4);
+  static final DateTime _defaultPazarPolicyStartDate =
+      V3BelgradeTime.dateTime(2026, 9, 4);
   static const int _pazarDailyTriggerHour = 16;
   static const int _pazarDailyTriggerMinute = 30;
   static const double _pazarIznosEps = 0.009;
@@ -62,7 +65,8 @@ class V3MasterRealtimeManager {
 
   final V3CacheStore _cacheStore = V3CacheStore();
   final V3EventBus _eventBus = V3EventBus();
-  late final V3BootstrapLoader _bootstrapLoader = V3BootstrapLoader(repository: _bootstrapRepository);
+  late final V3BootstrapLoader _bootstrapLoader =
+      V3BootstrapLoader(repository: _bootstrapRepository);
   bool _cacheStoreRegistered = false;
 
   // --- REALTIME ---
@@ -81,7 +85,8 @@ class V3MasterRealtimeManager {
   int _deltaResyncFailures = 0;
   static const int _maxDeltaResyncFailuresBeforeFull = 3;
 
-  final StreamController<V3PazarPromptEvent> _pazarPromptController = StreamController<V3PazarPromptEvent>.broadcast();
+  final StreamController<V3PazarPromptEvent> _pazarPromptController =
+      StreamController<V3PazarPromptEvent>.broadcast();
   StreamSubscription<int>? _pazarRevisionSub;
   StreamSubscription<int>? _pazarFinansijeRevisionSub;
   Timer? _pazarAutoCheckTimer;
@@ -139,7 +144,8 @@ class V3MasterRealtimeManager {
       if (val is! Map) return result;
 
       for (final entry in val.entries) {
-        final normalizedDay = V3DanHelper.normalizeToWorkdayFull(entry.key.toString());
+        final normalizedDay =
+            V3DanHelper.normalizeToWorkdayFull(entry.key.toString());
         if (normalizedDay.isEmpty) continue;
         result[normalizedDay] = _toList(entry.value);
       }
@@ -148,8 +154,10 @@ class V3MasterRealtimeManager {
     }
 
     final customByDayUpdated = {
-      'bc': Map<String, List<String>>.from(customRasporedByDayNotifier.value['bc'] ?? {}),
-      'vs': Map<String, List<String>>.from(customRasporedByDayNotifier.value['vs'] ?? {}),
+      'bc': Map<String, List<String>>.from(
+          customRasporedByDayNotifier.value['bc'] ?? {}),
+      'vs': Map<String, List<String>>.from(
+          customRasporedByDayNotifier.value['vs'] ?? {}),
     };
     bool customByDayChanged = false;
 
@@ -180,7 +188,8 @@ class V3MasterRealtimeManager {
       if (awsParsed != null) {
         V3AppSettingsState.instance.setActiveWeekStart(awsParsed);
       } else {
-        debugPrint('[V3MasterRealtimeManager] active_week_start je nevažeći, zadržavam postojeću vrednost.');
+        debugPrint(
+            '[V3MasterRealtimeManager] active_week_start je nevažeći, zadržavam postojeću vrednost.');
       }
     }
 
@@ -189,16 +198,19 @@ class V3MasterRealtimeManager {
       if (aweParsed != null) {
         V3AppSettingsState.instance.setActiveWeekEnd(aweParsed);
       } else {
-        debugPrint('[V3MasterRealtimeManager] active_week_end je nevažeći, zadržavam postojeću vrednost.');
+        debugPrint(
+            '[V3MasterRealtimeManager] active_week_end je nevažeći, zadržavam postojeću vrednost.');
       }
     }
 
     if (row.containsKey('pazar_policy_start_date')) {
-      final pazarStartParsed = V3BelgradeTime.parseDatum(row['pazar_policy_start_date']);
+      final pazarStartParsed =
+          V3BelgradeTime.parseDatum(row['pazar_policy_start_date']);
       if (pazarStartParsed != null) {
         V3AppSettingsState.instance.setPazarPolicyStartDate(pazarStartParsed);
       } else {
-        debugPrint('[V3MasterRealtimeManager] pazar_policy_start_date je nevažeći, zadržavam postojeću vrednost.');
+        debugPrint(
+            '[V3MasterRealtimeManager] pazar_policy_start_date je nevažeći, zadržavam postojeću vrednost.');
       }
     }
 
@@ -224,8 +236,9 @@ class V3MasterRealtimeManager {
     }
 
     unawaited(
-      V3AppUpdateService.refreshUpdateInfo(appSettingsRow: row)
-          .catchError((Object e) => debugPrint('[V3MasterRealtimeManager] app update info error: $e')),
+      V3AppUpdateService.refreshUpdateInfo(appSettingsRow: row).catchError(
+          (Object e) => debugPrint(
+              '[V3MasterRealtimeManager] app update info error: $e')),
     );
   }
 
@@ -234,7 +247,8 @@ class V3MasterRealtimeManager {
   Future<void>? _initInFlight;
   bool _isInitialized = false;
 
-  void _scheduleEmit({Set<String>? tables, bool immediate = false}) => _eventBus.scheduleEmit(
+  void _scheduleEmit({Set<String>? tables, bool immediate = false}) =>
+      _eventBus.scheduleEmit(
         tables: tables,
         immediate: immediate,
         revisions: _cacheStore.revisionsSnapshot(),
@@ -253,11 +267,13 @@ class V3MasterRealtimeManager {
     _cacheStore.registerTable('v3_uplata_pazara', uplataPazaraCache);
     _cacheStore.registerTable('v3_racuni', racuniCache);
     _cacheStore.registerTable('v3_trenutna_dodela', trenutnaDodelaCache);
-    _cacheStore.registerTable('v3_trenutna_dodela_slot', trenutnaDodelaSlotCache);
+    _cacheStore.registerTable(
+        'v3_trenutna_dodela_slot', trenutnaDodelaSlotCache);
     _cacheStore.registerTable('v3_operativna_nedelja', operativnaNedeljaCache);
     _cacheStore.registerTable('v3_kapacitet_slots', kapacitetSlotsCache);
     _cacheStore.registerTable('v3_app_settings', appSettingsCache);
-    _cacheStore.registerTable('v3_operativna_assigned', operativnaAssignedCache);
+    _cacheStore.registerTable(
+        'v3_operativna_assigned', operativnaAssignedCache);
     _cacheStore.registerTable('v3_eta_results', etaResultsCache);
     _cacheStore.registerTable('v3_vozac_location', vozacLocationCache);
 
@@ -279,6 +295,10 @@ class V3MasterRealtimeManager {
                 'boja': row['boja'],
                 'push_token': row['push_token'],
                 'push_token_2': row['push_token_2'],
+                'push_token_3': row['push_token_3'],
+                'push_token_hms': row['push_token_hms'],
+                'push_token_hms_2': row['push_token_hms_2'],
+                'push_token_hms_3': row['push_token_hms_3'],
                 'pin_hash': row['pin_hash'],
                 'uloga': row['uloga'],
                 'created_at': row['created_at'],
@@ -292,7 +312,8 @@ class V3MasterRealtimeManager {
       ..addAll(
         {
           for (final row in authCache.values)
-            if ((row['tip']?.toString().trim().toLowerCase() ?? '').isNotEmpty &&
+            if ((row['tip']?.toString().trim().toLowerCase() ?? '')
+                    .isNotEmpty &&
                 (row['tip']?.toString().trim().toLowerCase() ?? '') != 'vozac')
               (row['id']?.toString() ?? ''): <String, dynamic>{
                 'id': row['id'],
@@ -308,11 +329,16 @@ class V3MasterRealtimeManager {
                 'cena_po_pokupljenju': row['cena_po_pokupljenju'],
                 'push_token': row['push_token'],
                 'push_token_2': row['push_token_2'],
+                'push_token_3': row['push_token_3'],
+                'push_token_hms': row['push_token_hms'],
+                'push_token_hms_2': row['push_token_hms_2'],
+                'push_token_hms_3': row['push_token_hms_3'],
                 'pin_hash': row['pin_hash'],
                 'created_at': row['created_at'],
                 'updated_at': row['updated_at'],
                 'last_seen_at': row['last_seen_at'],
                 'last_seen_at_2': row['last_seen_at_2'],
+                'last_seen_at_3': row['last_seen_at_3'],
               }
         }..removeWhere((key, value) => key.isEmpty),
       );
@@ -336,7 +362,8 @@ class V3MasterRealtimeManager {
   Future<void> _initV3Internal() async {
     debugPrint('[V3MasterRealtimeManager] ⚡ STARTED initV3()');
     if (!isSupabaseReady) {
-      debugPrint('[V3MasterRealtimeManager] Supabase nije spreman, preskačem initV3.');
+      debugPrint(
+          '[V3MasterRealtimeManager] Supabase nije spreman, preskačem initV3.');
       return;
     }
     try {
@@ -356,9 +383,9 @@ class V3MasterRealtimeManager {
       // Pre-geocodiramo koordinate gradova u pozadini — bez blokiranja bootstrapa.
       // Time se izbjegava Nominatim poziv pri prvom kliku na Start/Mapa.
       unawaited(
-        V3AddressCoordinateService.instance
-            .warmUpCities()
-            .catchError((Object e) => debugPrint('[V3MasterRealtimeManager] warmUpCities error: $e')),
+        V3AddressCoordinateService.instance.warmUpCities().catchError(
+            (Object e) =>
+                debugPrint('[V3MasterRealtimeManager] warmUpCities error: $e')),
       );
       debugPrint('[V3MasterRealtimeManager] Initialized successfully');
     } catch (e) {
@@ -415,7 +442,8 @@ class V3MasterRealtimeManager {
           _lastSubscribedAt = V3BelgradeTime.now();
           final isFirstSubscribe = !_hasConnectedBefore;
           _reconnectAttempts = 0;
-          debugPrint('[RT] subscribed (hasConnectedBefore=$_hasConnectedBefore)');
+          debugPrint(
+              '[RT] subscribed (hasConnectedBefore=$_hasConnectedBefore)');
           if (isFirstSubscribe) {
             _hasConnectedBefore = true;
             _scheduleEmit(tables: {'*'}, immediate: true);
@@ -448,7 +476,8 @@ class V3MasterRealtimeManager {
     }
 
     _deltaResyncFailures += 1;
-    debugPrint('[RT] reconnect → delta sync failed ($_deltaResyncFailures/$_maxDeltaResyncFailuresBeforeFull)');
+    debugPrint(
+        '[RT] reconnect → delta sync failed ($_deltaResyncFailures/$_maxDeltaResyncFailuresBeforeFull)');
 
     if (_deltaResyncFailures < _maxDeltaResyncFailuresBeforeFull) {
       return;
@@ -456,15 +485,18 @@ class V3MasterRealtimeManager {
 
     final inFlight = _fullResyncInFlight;
     if (inFlight != null) {
-      debugPrint('[RT] reconnect full-resync već u toku, preskačem dupli poziv');
+      debugPrint(
+          '[RT] reconnect full-resync već u toku, preskačem dupli poziv');
       return;
     }
 
     final now = V3BelgradeTime.now();
     final lastRun = _lastFullResyncAt;
-    final canRunFullResync = lastRun == null || now.difference(lastRun) >= _fullResyncCooldown;
+    final canRunFullResync =
+        lastRun == null || now.difference(lastRun) >= _fullResyncCooldown;
     if (!canRunFullResync) {
-      debugPrint('[RT] reconnect full-resync cooldown aktivan, preskačem fallback.');
+      debugPrint(
+          '[RT] reconnect full-resync cooldown aktivan, preskačem fallback.');
       return;
     }
 
@@ -543,7 +575,8 @@ class V3MasterRealtimeManager {
         await Future<void>.delayed(Duration(milliseconds: 350 * attempt));
       }
     }
-    throw StateError('Bootstrap init failed after $maxAttempts attempts: $lastError');
+    throw StateError(
+        'Bootstrap init failed after $maxAttempts attempts: $lastError');
   }
 
   void _applyBootstrapResults(Map<String, List<dynamic>> results) {
@@ -571,7 +604,8 @@ class V3MasterRealtimeManager {
       final cappedAttempt = _reconnectAttempts > 6 ? 6 : _reconnectAttempts;
       final baseMs = 500 * (1 << cappedAttempt);
       final jitter = Random().nextInt(250);
-      await Future<void>.delayed(Duration(milliseconds: (baseMs + jitter).toInt()));
+      await Future<void>.delayed(
+          Duration(milliseconds: (baseMs + jitter).toInt()));
 
       if (_isSubscribing) return;
 
@@ -595,7 +629,8 @@ class V3MasterRealtimeManager {
     debugPrint('[RT] _applyMissedDelta → pulling missed rows...');
     try {
       final watermarks = {
-        for (final t in V3RealtimeTableRegistry.defaults) t.name: _cacheStore.watermark(t.name),
+        for (final t in V3RealtimeTableRegistry.defaults)
+          t.name: _cacheStore.watermark(t.name),
       };
       final deltas = await _bootstrapLoader.loadDeltaAll(watermarks);
       if (deltas.isEmpty) {
@@ -603,7 +638,8 @@ class V3MasterRealtimeManager {
         return true;
       }
       for (final entry in deltas.entries) {
-        final config = V3RealtimeTableRegistry.defaults.firstWhere((t) => t.name == entry.key);
+        final config = V3RealtimeTableRegistry.defaults
+            .firstWhere((t) => t.name == entry.key);
         for (final row in entry.value) {
           final normalized = _normalizeRowForTable(entry.key, row);
           _cacheStore.applyDeltaRow(
@@ -684,8 +720,12 @@ class V3MasterRealtimeManager {
     _scheduleEmit(tables: affected);
   }
 
-  Stream<T> v3StreamFromRevisions<T>({required List<String> tables, required T Function() build}) {
-    final normalized = tables.map((t) => t.trim()).where((t) => t.isNotEmpty).toList(growable: false);
+  Stream<T> v3StreamFromRevisions<T>(
+      {required List<String> tables, required T Function() build}) {
+    final normalized = tables
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
 
     return Stream<T>.multi(
       (controller) {
@@ -705,11 +745,14 @@ class V3MasterRealtimeManager {
     return Stream<int>.multi(
       (controller) {
         controller.add(_cacheStore.revision(normalized));
-        final sub =
-            onRevisions.map((snapshot) => snapshot[normalized] ?? _cacheStore.revision(normalized)).distinct().listen(
-                  controller.add,
-                  onError: controller.addError,
-                );
+        final sub = onRevisions
+            .map((snapshot) =>
+                snapshot[normalized] ?? _cacheStore.revision(normalized))
+            .distinct()
+            .listen(
+              controller.add,
+              onError: controller.addError,
+            );
         controller.onCancel = sub.cancel;
       },
       isBroadcast: true,
@@ -717,7 +760,10 @@ class V3MasterRealtimeManager {
   }
 
   Stream<int> tablesRevisionStream(List<String> tables) {
-    final normalized = tables.map((t) => t.trim()).where((t) => t.isNotEmpty).toList(growable: false);
+    final normalized = tables
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
     if (normalized.isEmpty) {
       return onRevisions.map((_) => 0).distinct();
     }
@@ -783,14 +829,17 @@ class V3MasterRealtimeManager {
     _scheduleEmit(tables: {table});
   }
 
-  Map<String, dynamic> _normalizeRowForTable(String table, Map<String, dynamic> row) {
+  Map<String, dynamic> _normalizeRowForTable(
+      String table, Map<String, dynamic> row) {
     if (row.isEmpty) return row;
     final normalized = Map<String, dynamic>.from(row);
 
     if (table == 'v3_trenutna_dodela') {
       final fallbackId = normalized['termin_id']?.toString();
       final currentId = normalized['id']?.toString();
-      if ((currentId == null || currentId.isEmpty) && fallbackId != null && fallbackId.isNotEmpty) {
+      if ((currentId == null || currentId.isEmpty) &&
+          fallbackId != null &&
+          fallbackId.isNotEmpty) {
         normalized['id'] = fallbackId;
       }
     }
@@ -817,7 +866,8 @@ class V3MasterRealtimeManager {
 
   Map<String, dynamic>? getPutnik(String id) => putniciCache[id];
 
-  Stream<V3PazarPromptEvent> get pazarPromptStream => _pazarPromptController.stream;
+  Stream<V3PazarPromptEvent> get pazarPromptStream =>
+      _pazarPromptController.stream;
 
   void startPazarMonitoring() {
     _pazarMonitoringSubscribers++;
@@ -827,12 +877,14 @@ class V3MasterRealtimeManager {
     debugPrint('[V3MasterRealtimeManager] pazar monitoring start');
     unawaited(_checkPazarForCurrentDriver());
 
-    _pazarRevisionSub = tableRevisionStream('v3_uplata_pazara').listen((revision) {
+    _pazarRevisionSub =
+        tableRevisionStream('v3_uplata_pazara').listen((revision) {
       debugPrint('[V3MasterRealtimeManager] pazar revision=$revision');
       unawaited(_checkPazarForCurrentDriver());
     });
 
-    _pazarFinansijeRevisionSub = tableRevisionStream('v3_finansije').listen((revision) {
+    _pazarFinansijeRevisionSub =
+        tableRevisionStream('v3_finansije').listen((revision) {
       debugPrint('[V3MasterRealtimeManager] finansije revision hash=$revision');
       unawaited(_checkPazarForCurrentDriver());
     });
@@ -859,8 +911,10 @@ class V3MasterRealtimeManager {
   }
 
   bool _isPazarPolicyActiveFor(DateTime dayBelgrade) {
-    final dayOnly = V3BelgradeTime.dateTime(dayBelgrade.year, dayBelgrade.month, dayBelgrade.day);
-    final configuredStart = V3AppSettingsState.instance.pazarPolicyStartDateValue;
+    final dayOnly = V3BelgradeTime.dateTime(
+        dayBelgrade.year, dayBelgrade.month, dayBelgrade.day);
+    final configuredStart =
+        V3AppSettingsState.instance.pazarPolicyStartDateValue;
     final effectiveStart = configuredStart ?? _defaultPazarPolicyStartDate;
     return !dayOnly.isBefore(effectiveStart);
   }
@@ -914,7 +968,8 @@ class V3MasterRealtimeManager {
     required double trenutnoUkupno,
     required Map<String, V3UplataPazara?> mesecMemo,
   }) async {
-    var uplata = await _uplataZaMesec(vozacId: vozacId, day: day, memo: mesecMemo);
+    var uplata =
+        await _uplataZaMesec(vozacId: vozacId, day: day, memo: mesecMemo);
     var dnevna = uplata?.uplataZaDan(day.day);
     var naknadna = false;
 
@@ -984,7 +1039,8 @@ class V3MasterRealtimeManager {
         if ((row['vozac_id']?.toString() ?? '').trim() != vozacId) continue;
         final uplata = V3UplataPazara.fromJson(row);
         for (final dnevna in uplata.dnevneUplate) {
-          kandidati.add(V3BelgradeTime.toIsoDate(DateTime(uplata.godina, uplata.mesec, dnevna.dan)));
+          kandidati.add(V3BelgradeTime.toIsoDate(
+              DateTime(uplata.godina, uplata.mesec, dnevna.dan)));
         }
       }
 
@@ -996,7 +1052,8 @@ class V3MasterRealtimeManager {
       for (final iso in sorted) {
         final parsed = V3BelgradeTime.parseDatum(iso);
         if (parsed == null) continue;
-        final day = V3BelgradeTime.dateTime(parsed.year, parsed.month, parsed.day);
+        final day =
+            V3BelgradeTime.dateTime(parsed.year, parsed.month, parsed.day);
         if (day.isAfter(today)) continue;
         if (!_isPazarPolicyActiveFor(day)) continue;
 
@@ -1008,7 +1065,9 @@ class V3MasterRealtimeManager {
           mesecMemo: mesecMemo,
         );
         final pending = result.pending;
-        if (pending != null && (oldestPending == null || pending.datum.isBefore(oldestPending.datum))) {
+        if (pending != null &&
+            (oldestPending == null ||
+                pending.datum.isBefore(oldestPending.datum))) {
           oldestPending = pending;
           oldestNaknadna = result.naknadna;
         }
@@ -1025,7 +1084,9 @@ class V3MasterRealtimeManager {
           v3UpsertToCache('v3_uplata_pazara', fresh.toJson());
         }
         final dnevna = fresh?.uplataZaDan(oldestPending.datum.day);
-        if (dnevna != null && dnevna.zahtevanUnos == true && dnevna.ukupno > 0) {
+        if (dnevna != null &&
+            dnevna.zahtevanUnos == true &&
+            dnevna.ukupno > 0) {
           _pazarPromptController.add(
             V3PazarPromptEvent(
               datum: oldestPending.datum,
@@ -1124,10 +1185,13 @@ class V3MasterRealtimeManager {
 
     Map<String, dynamic>? activeSlot;
     for (final row in trenutnaDodelaSlotCache.values) {
-      final rowDatum = V3BelgradeTime.parseIsoDatePart(row['datum']?.toString() ?? '');
+      final rowDatum =
+          V3BelgradeTime.parseIsoDatePart(row['datum']?.toString() ?? '');
       final rowGrad = (row['grad']?.toString() ?? '').trim().toUpperCase();
       final rowVreme = V3BelgradeTime.normalizeToHHmm(row['vreme']?.toString());
-      if (rowDatum == wantDatum && rowGrad == wantGrad && rowVreme == wantVreme) {
+      if (rowDatum == wantDatum &&
+          rowGrad == wantGrad &&
+          rowVreme == wantVreme) {
         activeSlot = row;
         break;
       }
@@ -1137,12 +1201,14 @@ class V3MasterRealtimeManager {
     final slotId = activeSlot['id']?.toString() ?? '';
     if (slotId.isEmpty) return null;
 
-    if (trenutnaDodelaCache.isEmpty && operativnaNedeljaCache.isEmpty) return null;
+    if (trenutnaDodelaCache.isEmpty && operativnaNedeljaCache.isEmpty)
+      return null;
 
     final terminIds = <String>{};
     for (final row in trenutnaDodelaCache.values) {
       if (row['slot_id']?.toString() != slotId) continue;
-      if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() != wantVozac) continue;
+      if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() != wantVozac)
+        continue;
       final tid = row['termin_id']?.toString();
       if (tid != null && tid.isNotEmpty) terminIds.add(tid);
     }

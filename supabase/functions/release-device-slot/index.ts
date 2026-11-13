@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
     const { data: account, error: lookupError } = await client
       .from("v3_auth")
-      .select("id, installation_id, installation_id_2")
+      .select("id, installation_id, installation_id_2, installation_id_3")
       .eq("id", userId)
       .maybeSingle();
 
@@ -52,12 +52,15 @@ Deno.serve(async (req) => {
 
     const slot1 = String(account.installation_id ?? "").trim();
     const slot2 = String(account.installation_id_2 ?? "").trim();
+    const slot3 = String(account.installation_id_3 ?? "").trim();
 
-    let slot: 1 | 2 | null = null;
+    let slot: 1 | 2 | 3 | null = null;
     if (slot1 && slot1 === installationId) {
       slot = 1;
     } else if (slot2 && slot2 === installationId) {
       slot = 2;
+    } else if (slot3 && slot3 === installationId) {
+      slot = 3;
     }
 
     if (slot === null) {
@@ -72,17 +75,28 @@ Deno.serve(async (req) => {
     if (slot === 1) {
       patch.installation_id = null;
       patch.push_token = null;
+      patch.push_token_hms = null;
+      patch.push_token_provider = null;
       patch.hardware_id = null;
       patch.platform = null;
       patch.app_version = null;
       patch.last_seen_at = null;
-    } else {
+    } else if (slot === 2) {
       patch.installation_id_2 = null;
       patch.push_token_2 = null;
+      patch.push_token_hms_2 = null;
       patch.hardware_id_2 = null;
       patch.platform_2 = null;
       patch.app_version_2 = null;
       patch.last_seen_at_2 = null;
+    } else {
+      patch.installation_id_3 = null;
+      patch.push_token_3 = null;
+      patch.push_token_hms_3 = null;
+      patch.hardware_id_3 = null;
+      patch.platform_3 = null;
+      patch.app_version_3 = null;
+      patch.last_seen_at_3 = null;
     }
 
     const { error: updateError } = await client

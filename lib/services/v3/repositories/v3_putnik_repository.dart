@@ -5,17 +5,22 @@ import '../../../globals.dart';
 
 class V3PutnikRepository {
   static const String _authRawSelect =
-      'id, ime, telefon, telefon_2, tip, adresa_primary_bc_id, adresa_primary_vs_id, adresa_secondary_bc_id, adresa_secondary_vs_id, cena_po_danu, cena_po_pokupljenju, push_token, push_token_2, created_at, updated_at';
+      'id, ime, telefon, telefon_2, tip, adresa_primary_bc_id, adresa_primary_vs_id, adresa_secondary_bc_id, adresa_secondary_vs_id, cena_po_danu, cena_po_pokupljenju, push_token, push_token_2, push_token_3, created_at, updated_at';
 
   static const String _putnikSelectProjection =
-      'id:id, ime_prezime:ime, telefon_1:telefon, telefon_2, tip_putnika:tip, adresa_bc_id:adresa_primary_bc_id, adresa_vs_id:adresa_primary_vs_id, adresa_bc_id_2:adresa_secondary_bc_id, adresa_vs_id_2:adresa_secondary_vs_id, cena_po_danu, cena_po_pokupljenju, push_token, push_token_2, pin_hash, created_at, updated_at';
+      'id:id, ime_prezime:ime, telefon_1:telefon, telefon_2, tip_putnika:tip, adresa_bc_id:adresa_primary_bc_id, adresa_vs_id:adresa_primary_vs_id, adresa_bc_id_2:adresa_secondary_bc_id, adresa_vs_id_2:adresa_secondary_vs_id, cena_po_danu, cena_po_pokupljenju, push_token, push_token_2, push_token_3, pin_hash, created_at, updated_at';
 
   Future<Map<String, dynamic>?> getActiveById(String id) async {
     debugPrint('[V3PutnikRepository] Querying v3_auth for id: $id');
     try {
-      final result =
-          await supabase.from('v3_auth').select(_putnikSelectProjection).eq('id', id).neq('tip', 'vozac').maybeSingle();
-      debugPrint('[V3PutnikRepository] Query result: ${result != null ? 'found' : 'null'}');
+      final result = await supabase
+          .from('v3_auth')
+          .select(_putnikSelectProjection)
+          .eq('id', id)
+          .neq('tip', 'vozac')
+          .maybeSingle();
+      debugPrint(
+          '[V3PutnikRepository] Query result: ${result != null ? 'found' : 'null'}');
       if (result != null) {
         debugPrint('[V3PutnikRepository] tip: ${result['tip_putnika']}');
       }
@@ -30,7 +35,7 @@ class V3PutnikRepository {
     return supabase
         .from('v3_auth')
         .select(_putnikSelectProjection)
-        .or('push_token.eq.$token,push_token_2.eq.$token')
+        .or('push_token.eq.$token,push_token_2.eq.$token,push_token_3.eq.$token,push_token_hms.eq.$token,push_token_hms_2.eq.$token,push_token_hms_3.eq.$token')
         .neq('tip', 'vozac')
         .maybeSingle();
   }
@@ -50,7 +55,11 @@ class V3PutnikRepository {
     if (isNew) {
       mapped['uloga'] = 'putnik';
     }
-    return supabase.from('v3_auth').upsert(mapped, onConflict: 'id').select(_authRawSelect).single();
+    return supabase
+        .from('v3_auth')
+        .upsert(mapped, onConflict: 'id')
+        .select(_authRawSelect)
+        .single();
   }
 
   Future<void> deleteById(String id) {
@@ -63,18 +72,29 @@ class V3PutnikRepository {
     if (payload.containsKey('id')) out['id'] = payload['id'];
     if (payload.containsKey('ime_prezime')) out['ime'] = payload['ime_prezime'];
     if (payload.containsKey('telefon_1')) out['telefon'] = payload['telefon_1'];
-    if (payload.containsKey('telefon_2')) out['telefon_2'] = payload['telefon_2'];
+    if (payload.containsKey('telefon_2'))
+      out['telefon_2'] = payload['telefon_2'];
     if (payload.containsKey('tip_putnika')) out['tip'] = payload['tip_putnika'];
 
-    if (payload.containsKey('adresa_bc_id')) out['adresa_primary_bc_id'] = payload['adresa_bc_id'];
-    if (payload.containsKey('adresa_vs_id')) out['adresa_primary_vs_id'] = payload['adresa_vs_id'];
-    if (payload.containsKey('adresa_bc_id_2')) out['adresa_secondary_bc_id'] = payload['adresa_bc_id_2'];
-    if (payload.containsKey('adresa_vs_id_2')) out['adresa_secondary_vs_id'] = payload['adresa_vs_id_2'];
+    if (payload.containsKey('adresa_bc_id'))
+      out['adresa_primary_bc_id'] = payload['adresa_bc_id'];
+    if (payload.containsKey('adresa_vs_id'))
+      out['adresa_primary_vs_id'] = payload['adresa_vs_id'];
+    if (payload.containsKey('adresa_bc_id_2'))
+      out['adresa_secondary_bc_id'] = payload['adresa_bc_id_2'];
+    if (payload.containsKey('adresa_vs_id_2'))
+      out['adresa_secondary_vs_id'] = payload['adresa_vs_id_2'];
 
-    if (payload.containsKey('cena_po_danu')) out['cena_po_danu'] = payload['cena_po_danu'];
-    if (payload.containsKey('cena_po_pokupljenju')) out['cena_po_pokupljenju'] = payload['cena_po_pokupljenju'];
-    if (payload.containsKey('push_token')) out['push_token'] = payload['push_token'];
-    if (payload.containsKey('push_token_2')) out['push_token_2'] = payload['push_token_2'];
+    if (payload.containsKey('cena_po_danu'))
+      out['cena_po_danu'] = payload['cena_po_danu'];
+    if (payload.containsKey('cena_po_pokupljenju'))
+      out['cena_po_pokupljenju'] = payload['cena_po_pokupljenju'];
+    if (payload.containsKey('push_token'))
+      out['push_token'] = payload['push_token'];
+    if (payload.containsKey('push_token_2'))
+      out['push_token_2'] = payload['push_token_2'];
+    if (payload.containsKey('push_token_3'))
+      out['push_token_3'] = payload['push_token_3'];
 
     return out;
   }

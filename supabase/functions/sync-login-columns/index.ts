@@ -25,6 +25,7 @@ function deriveIncomingInstallationId(params: {
     payload.incoming_installation_id,
     payload.installation_id,
     payload.installation_id_2,
+    payload.installation_id_3,
   );
 }
 
@@ -32,6 +33,43 @@ function normalizeLocaleCode(value: unknown): string {
   const code = String(value ?? "").trim().toLowerCase();
   return ["sr", "en", "ru", "de", "zh"].includes(code) ? code : "";
 }
+
+// Slot 1 nema sufiks u imenima kolona (istorijski), slotovi 2 i 3 imaju _2/_3.
+const SLOTS = [
+  {
+    n: 1,
+    inst: "installation_id",
+    fcm: "push_token",
+    hms: "push_token_hms",
+    hw: "hardware_id",
+    seen: "last_seen_at",
+    platform: "platform",
+    appVersion: "app_version",
+    hasProvider: true,
+  },
+  {
+    n: 2,
+    inst: "installation_id_2",
+    fcm: "push_token_2",
+    hms: "push_token_hms_2",
+    hw: "hardware_id_2",
+    seen: "last_seen_at_2",
+    platform: "platform_2",
+    appVersion: "app_version_2",
+    hasProvider: false,
+  },
+  {
+    n: 3,
+    inst: "installation_id_3",
+    fcm: "push_token_3",
+    hms: "push_token_hms_3",
+    hw: "hardware_id_3",
+    seen: "last_seen_at_3",
+    platform: "platform_3",
+    appVersion: "app_version_3",
+    hasProvider: false,
+  },
+];
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -59,9 +97,16 @@ Deno.serve(async (req) => {
 
     const pinVerified = payload.pin_verified === true;
 
+    const selectColumns = [
+      "id",
+      "locale_code",
+      "push_token_provider",
+      ...SLOTS.flatMap((s) => [s.inst, s.fcm, s.hms, s.hw, s.seen]),
+    ].join(", ");
+
     const { data: existing, error: existingError } = await client
       .from("v3_auth")
-      .select("id, installation_id, installation_id_2, push_token, push_token_2, push_token_hms, push_token_hms_2, push_token_provider, hardware_id, hardware_id_2, locale_code, last_seen_at, last_seen_at_2")
+      .select(selectColumns)
       .eq("id", userId)
       .maybeSingle();
 
@@ -86,6 +131,7 @@ Deno.serve(async (req) => {
       payload.incoming_installation_id,
       payload.installation_id,
       payload.installation_id_2,
+      payload.installation_id_3,
     );
     const incomingInstallationIdResolved = deriveIncomingInstallationId({
       payload,
@@ -107,52 +153,38 @@ Deno.serve(async (req) => {
       return json(200, { ok: false, updated: false, reason: "missing_incoming_installation_id" });
     }
 
-    const slot1Installation = String(existing.installation_id ?? "").trim();
-    const slot2Installation = String(existing.installation_id_2 ?? "").trim();
-    const slot1Token = String(existing.push_token ?? "").trim();
-    const slot2Token = String(existing.push_token_2 ?? "").trim();
-    const slot1HmsToken = String(existing.push_token_hms ?? "").trim();
-    const slot2HmsToken = String(existing.push_token_hms_2 ?? "").trim();
-    const slot1Hardware = String(existing.hardware_id ?? "").trim();
-    const slot2Hardware = String(existing.hardware_id_2 ?? "").trim();
+    const slotStates = SLOTS.map((s) => ({
+      ...s,
+      installation: String(existing[s.inst] ?? "").trim(),
+      fcmToken: String(existing[s.fcm] ?? "").trim(),
+      hmsToken: String(existing[s.hms] ?? "").trim(),
+      hardware: String(existing[s.hw] ?? "").trim(),
+      lastSeen: existing[s.seen] ? new Date(existing[s.seen]).getTime() : 0,
+    }));
 
-    let slot: 1 | 2 | null = null;
+    let chosen: (typeof slotStates)[number] | undefined;
     let reason = "";
 
-    if (slot1Installation && slot1Installation === incomingInstallationIdResolved) {
-      slot = 1;
+    if ((chosen = slotStates.find((s) => s.installation && s.installation === incomingInstallationIdResolved))) {
       reason = "slot_matched";
-    } else if (slot2Installation && slot2Installation === incomingInstallationIdResolved) {
-      slot = 2;
-      reason = "slot_matched";
-    } else if (incomingHardwareId && slot1Hardware && incomingHardwareId === slot1Hardware) {
-      slot = 1;
+    } else if (
+      incomingHardwareId &&
+      (chosen = slotStates.find((s) => s.hardware && s.hardware === incomingHardwareId))
+    ) {
       reason = "hardware_matched";
-    } else if (incomingHardwareId && slot2Hardware && incomingHardwareId === slot2Hardware) {
-      slot = 2;
-      reason = "hardware_matched";
-    } else if (incomingPushToken && incomingPushProvider === "fcm" && slot1Token && incomingPushToken === slot1Token) {
-      slot = 1;
+    } else if (
+      incomingPushToken &&
+      (chosen = slotStates.find((s) =>
+        incomingPushProvider === "hms"
+          ? s.hmsToken && s.hmsToken === incomingPushToken
+          : s.fcmToken && s.fcmToken === incomingPushToken
+      ))
+    ) {
       reason = "token_matched";
-    } else if (incomingPushToken && incomingPushProvider === "fcm" && slot2Token && incomingPushToken === slot2Token) {
-      slot = 2;
-      reason = "token_matched";
-    } else if (incomingPushToken && incomingPushProvider === "hms" && slot1HmsToken && incomingPushToken === slot1HmsToken) {
-      slot = 1;
-      reason = "token_matched";
-    } else if (incomingPushToken && incomingPushProvider === "hms" && slot2HmsToken && incomingPushToken === slot2HmsToken) {
-      slot = 2;
-      reason = "token_matched";
-    } else if (!slot1Installation) {
-      slot = 1;
-      reason = "slot_assigned";
-    } else if (!slot2Installation) {
-      slot = 2;
+    } else if ((chosen = slotStates.find((s) => !s.installation))) {
       reason = "slot_assigned";
     } else if (pinVerified) {
-      const slot1LastSeen = existing.last_seen_at ? new Date(existing.last_seen_at).getTime() : 0;
-      const slot2LastSeen = existing.last_seen_at_2 ? new Date(existing.last_seen_at_2).getTime() : 0;
-      slot = slot1LastSeen <= slot2LastSeen ? 1 : 2;
+      chosen = [...slotStates].sort((a, b) => a.lastSeen - b.lastSeen)[0];
       reason = "slot_replaced_pin_verified";
     } else {
       return json(200, {
@@ -163,11 +195,11 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date().toISOString();
-    const patch: Record<string, string> = {
+    const patch: Record<string, unknown> = {
       updated_at: now,
     };
 
-    // Ako se slot prepisuje zbog PIN potvrde (oba slota su bila puna), zabelezi audit
+    // Ako se slot prepisuje zbog PIN potvrde (svi slotovi puni), zabelezi audit
     // dogadjaj i pokusaj da obavestis izbaceni uredjaj push notifikacijom (best effort).
     let replacedPushToken = "";
     let replacedPushProvider = "fcm";
@@ -175,53 +207,37 @@ Deno.serve(async (req) => {
     if (reason === "slot_replaced_pin_verified") {
       // Izbaceni uredjaj moze biti HMS (Huawei) — uzmi bilo koji token iz slota
       // i prosledi odgovarajuci provider da push stigne i na HMS.
-      replacedPushToken = slot === 1
-        ? (slot1Token || slot1HmsToken)
-        : (slot2Token || slot2HmsToken);
-      replacedPushProvider = slot === 1
-        ? (slot1Token ? "fcm" : "hms")
-        : (slot2Token ? "fcm" : "hms");
-      replacedInstallationId = slot === 1 ? slot1Installation : slot2Installation;
+      replacedPushToken = chosen.fcmToken || chosen.hmsToken;
+      replacedPushProvider = chosen.fcmToken ? "fcm" : "hms";
+      replacedInstallationId = chosen.installation;
+
+      // Ocisti sidrene podatke izbacenog uredjaja — inace se tiho vrati preko
+      // hardware_matched/token_matched bez PIN-a i bez audit eventa.
+      patch[chosen.fcm] = null;
+      patch[chosen.hms] = null;
+      patch[chosen.hw] = null;
+      if (chosen.hasProvider) patch.push_token_provider = null;
     }
 
-    if (slot === 1) {
-      if (incomingPushToken) {
-        if (incomingPushProvider === "hms") {
-          patch.push_token_hms = incomingPushToken;
-          patch.push_token = null;
-        } else {
-          patch.push_token = incomingPushToken;
-          patch.push_token_hms = null;
-        }
-        patch.push_token_provider = incomingPushProvider;
+    if (incomingPushToken) {
+      if (incomingPushProvider === "hms") {
+        patch[chosen.hms] = incomingPushToken;
+        patch[chosen.fcm] = null;
+      } else {
+        patch[chosen.fcm] = incomingPushToken;
+        patch[chosen.hms] = null;
       }
-      patch.installation_id = incomingInstallationIdResolved;
-      if (incomingHardwareId) patch.hardware_id = incomingHardwareId;
-      if (incomingLocaleCode) patch.locale_code = incomingLocaleCode;
-      patch.last_seen_at = now;
-      if (incomingPlatform) patch.platform = incomingPlatform;
-      if (incomingAppVersion) patch.app_version = incomingAppVersion;
+      if (chosen.hasProvider) patch.push_token_provider = incomingPushProvider;
     }
-
-    if (slot === 2) {
-      if (incomingPushToken) {
-        if (incomingPushProvider === "hms") {
-          patch.push_token_hms_2 = incomingPushToken;
-          patch.push_token_2 = null;
-        } else {
-          patch.push_token_2 = incomingPushToken;
-          patch.push_token_hms_2 = null;
-        }
-      }
-      patch.installation_id_2 = incomingInstallationIdResolved;
-      if (incomingHardwareId) patch.hardware_id_2 = incomingHardwareId;
-      if (incomingLocaleCode) patch.locale_code = incomingLocaleCode;
-      patch.last_seen_at_2 = now;
-      if (incomingPlatform) patch.platform_2 = incomingPlatform;
-      if (incomingAppVersion) patch.app_version_2 = incomingAppVersion;
-    }
+    patch[chosen.inst] = incomingInstallationIdResolved;
+    if (incomingHardwareId) patch[chosen.hw] = incomingHardwareId;
+    if (incomingLocaleCode) patch.locale_code = incomingLocaleCode;
+    patch[chosen.seen] = now;
+    if (incomingPlatform) patch[chosen.platform] = incomingPlatform;
+    if (incomingAppVersion) patch[chosen.appVersion] = incomingAppVersion;
 
     const columns = Object.keys(patch);
+    const slot = chosen.n;
 
     const { error: updateError } = await client.from("v3_auth").update(patch).eq("id", userId);
 
@@ -270,6 +286,23 @@ Deno.serve(async (req) => {
             },
           }),
         }).catch((e: unknown) => console.error("send-push-notification failed", e));
+      }
+    } else if (reason === "hardware_matched" || reason === "token_matched") {
+      // Tihi re-ulazak: uredjaj se vratio u slot preko zatecenog hardware/push
+      // kredencijala i promenio installation_id — loguj radi audita.
+      const prevInstallation = chosen.installation;
+      if (prevInstallation && prevInstallation !== incomingInstallationIdResolved) {
+        client
+          .from("v3_device_events")
+          .insert({
+            v3_auth_id: userId,
+            event_type: reason,
+            replaced_slot: slot,
+            replaced_installation_id: prevInstallation,
+            new_installation_id: incomingInstallationIdResolved,
+          })
+          .then(() => {})
+          .catch((e: unknown) => console.error("v3_device_events rebound insert failed", e));
       }
     }
 

@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
 
     const { data: account, error: lookupError } = await client
       .from("v3_auth")
-      .select("id, telefon, telefon_2, installation_id, installation_id_2, hardware_id, hardware_id_2, pin_hash")
+      .select("id, telefon, telefon_2, installation_id, installation_id_2, installation_id_3, hardware_id, hardware_id_2, hardware_id_3, pin_hash")
       .eq("id", userId)
       .maybeSingle();
 
@@ -116,16 +116,22 @@ Deno.serve(async (req) => {
     } else if (incomingInstallationId || incomingHardwareId) {
       const slot1Installation = String(account.installation_id ?? "").trim();
       const slot2Installation = String(account.installation_id_2 ?? "").trim();
+      const slot3Installation = String(account.installation_id_3 ?? "").trim();
       const slot1Hardware = String(account.hardware_id ?? "").trim();
       const slot2Hardware = String(account.hardware_id_2 ?? "").trim();
+      const slot3Hardware = String(account.hardware_id_3 ?? "").trim();
 
       const installationMatched = incomingInstallationId &&
-        (incomingInstallationId === slot1Installation || incomingInstallationId === slot2Installation);
+        (incomingInstallationId === slot1Installation ||
+          incomingInstallationId === slot2Installation ||
+          incomingInstallationId === slot3Installation);
       const hardwareMatched = incomingHardwareId &&
-        (incomingHardwareId === slot1Hardware || incomingHardwareId === slot2Hardware);
+        (incomingHardwareId === slot1Hardware ||
+          incomingHardwareId === slot2Hardware ||
+          incomingHardwareId === slot3Hardware);
 
       deviceRecognized = installationMatched || hardwareMatched;
-      deviceSlotsFull = slot1Installation !== "" && slot2Installation !== "";
+      deviceSlotsFull = slot1Installation !== "" && slot2Installation !== "" && slot3Installation !== "";
       // Ako korisnik već ima podešen PIN, svaki neprepoznat uređaj mora da
       // potvrdi identitet PIN-om (bez obzira da li ima slobodan slot).
       // Ako PIN još nije podešen, zadržava se stari fallback: dozvoli ako
