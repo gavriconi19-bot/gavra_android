@@ -119,6 +119,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.9'
           cache: true
 
       - name: Flutter dependencies
@@ -304,6 +305,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.9'
           cache: true
 
       - name: Flutter dependencies
@@ -463,6 +465,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.9'
           cache: true
 
       - name: Install iOS signing tools
