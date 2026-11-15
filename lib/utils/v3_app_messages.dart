@@ -78,18 +78,6 @@ class V3PutnikProfilMessages {
         _ => '⛔ Neradan dan ($datumIso). Razlog: $reason',
       };
 
-  static String dnevniDateWindowLocked(String allowedLabel) => switch (_lang) {
-        'en' =>
-          '📅 Scheduling for daily passengers is only possible for $allowedLabel.\nBefore 16:00 you schedule for the current day, after 16:00 – for the next working day.',
-        'ru' =>
-          '📅 Планирование для ежедневных пассажиров возможно только на $allowedLabel.\nДо 16:00 планируется на текущий день, после 16:00 — на следующий рабочий день.',
-        'de' =>
-          '📅 Die Planung für Tagesfahrgäste ist nur für $allowedLabel möglich.\nVor 16:00 Uhr wird für den aktuellen Tag geplant, nach 16:00 Uhr – für den nächsten Arbeitstag.',
-        'zh' => '📅 每日乘客的排期仅适用于 $allowedLabel。\n16:00 之前安排当天，16:00 之后安排下一个工作日。',
-        _ =>
-          '📅 Zakazivanje za dnevne putnike je moguće samo za $allowedLabel.\nPre 16:00 zakazuje se za tekući dan, posle 16:00 – za sledeći radni dan.',
-      };
-
   static String previousMonthDebtLocked(String giroRacun) => switch (_lang) {
         'en' =>
           '⛔ You have outstanding debt from previous months. You can make a payment to the giro account $giroRacun, after which uninterrupted app usage will be enabled.',

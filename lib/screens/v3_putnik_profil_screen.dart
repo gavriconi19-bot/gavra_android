@@ -459,15 +459,6 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       return;
     }
 
-    final tipPutnika = (_putnikData['tip_putnika'] as String? ?? '').toLowerCase();
-    if (validNovoVreme != null && tipPutnika == 'dnevni' && !_isDnevniDatumAllowed(datumPolaska)) {
-      final allowedLabel = _allowedDnevniDateLabel(grad: grad);
-      if (mounted) {
-        V3AppSnackBar.info(context, V3PutnikProfilMessages.dnevniDateWindowLocked(allowedLabel));
-      }
-      return;
-    }
-
     // Sveži pogled u keš neposredno pre slanja: ako već postoji zahtev u
     // obradi/ponudi za ovaj kontekst (npr. iz prethodnog klika koji je već
     // stigao na server ali UI dijalog to još nije prikazao), ne dozvoli novi.
@@ -529,19 +520,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       return;
     }
 
-    final tipPutnika = (_putnikData['tip_putnika'] as String? ?? '').toLowerCase();
     final datumPolaska = V3DanHelper.datumZaDanAbbrUTekucojSedmici(
       dan,
       anchor: V3DanHelper.schedulingWeekAnchor(),
     );
-
-    if (tipPutnika == 'dnevni' && !_isDnevniDatumAllowed(datumPolaska)) {
-      final allowedLabel = _allowedDnevniDateLabel(grad: grad);
-      if (mounted) {
-        V3AppSnackBar.info(ctx, V3PutnikProfilMessages.dnevniDateWindowLocked(allowedLabel));
-      }
-      return;
-    }
 
     // Scenario 2: zahtev u obradi — blokirati sve akcije
     if (V3StatusPolicy.isPending(info?.status)) {
@@ -805,55 +787,6 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         ),
       ),
     );
-  }
-
-  bool _isDnevniDatumAllowed(DateTime datumPolaska, {DateTime? now}) {
-    final current = now ?? V3BelgradeTime.now();
-    final today = DateTime(current.year, current.month, current.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final target = DateTime(datumPolaska.year, datumPolaska.month, datumPolaska.day);
-
-    if (current.hour < 16) {
-      return target == today;
-    }
-    return target == tomorrow;
-  }
-
-  bool _isWorkingDateForGrad(DateTime date, String grad) {
-    if (date.weekday < DateTime.monday || date.weekday > DateTime.friday) {
-      return false;
-    }
-    final datumIso = V3DanHelper.toIsoDate(date);
-    return getNeradanDanRazlog(datumIso: datumIso, grad: grad.toLowerCase()) == null;
-  }
-
-  DateTime _nextWorkingDateForGrad(DateTime startDate, String grad) {
-    var candidate = DateTime(startDate.year, startDate.month, startDate.day);
-    for (var i = 0; i < 14; i++) {
-      if (_isWorkingDateForGrad(candidate, grad)) {
-        return candidate;
-      }
-      candidate = candidate.add(const Duration(days: 1));
-    }
-    return candidate;
-  }
-
-  String _allowedDnevniDateLabel({DateTime? now, required String grad}) {
-    final current = now ?? V3BelgradeTime.now();
-    final today = DateTime(current.year, current.month, current.day);
-    final baseDate = current.hour < 16 ? today : today.add(const Duration(days: 1));
-    final allowedDate = _nextWorkingDateForGrad(baseDate, grad);
-    final tomorrow = today.add(const Duration(days: 1));
-    final dateLabel = V3DanHelper.formatDatumPuni(allowedDate);
-
-    if (allowedDate == today) {
-      return '${_tr('danas')} ($dateLabel)';
-    }
-    if (allowedDate == tomorrow) {
-      return '${_tr('sutra')} ($dateLabel)';
-    }
-
-    return '${_trDanFullName(V3DanHelper.fullName(allowedDate))}, $dateLabel';
   }
 
   /// Helper za konverziju kratice dana u puni naziv (fiksno pon–pet).
