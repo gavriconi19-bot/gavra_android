@@ -420,11 +420,20 @@ void main() async {
 
   // FIREBASE BACKGROUND HANDLER - MORA biti registrovan pre runApp() da bi
   // iOS ispravno hvatao background/killed push notifikacije.
+  // Na HMS-only Android uredjajima preskacemo ceo Firebase init — FCM tu
+  // ne moze da radi, a init podize GMS native procese koji mogu da obore app.
   try {
     debugPrint('🚀 [main] 4c. Firebase background handler start');
-    await _ensureFirebaseInitialized().timeout(const Duration(seconds: 5));
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    debugPrint('🚀 [main] 4c. Firebase background handler completed');
+    final gmsAvailable = await _isGmsAvailable();
+    if (gmsAvailable) {
+      await _ensureFirebaseInitialized().timeout(const Duration(seconds: 5));
+      FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler);
+      debugPrint('🚀 [main] 4c. Firebase background handler completed');
+    } else {
+      debugPrint(
+          'ℹ️ [main] 4c. GMS nedostupan — preskacem Firebase/FCM (HMS uredjaj)');
+    }
   } catch (e) {
     debugPrint('⚠️ [main] Firebase background handler greška: $e');
   }
@@ -619,6 +628,22 @@ Future<bool> _ensureFirebaseInitialized() async {
   } catch (e) {
     debugPrint('⚠️ [main] Firebase init nije uspeo: $e');
     return Firebase.apps.isNotEmpty;
+  }
+}
+
+/// false = HMS-only Android uredjaj (bez Google Play Services). Na takvim
+/// uredjajima se ceo Firebase/FCM lanac preskace — push ide kroz HMS-a.
+/// Channel timeout -> false (radije pokreni bez FCM nego init FCM bez GMS-a).
+Future<bool> _isGmsAvailable() async {
+  if (!Platform.isAndroid) return true;
+  try {
+    final available = await _pushTokenChannel
+        .invokeMethod<bool>(AppPlatform.methodIsGmsAvailable)
+        .timeout(const Duration(seconds: 2), onTimeout: () => false);
+    return available == true;
+  } catch (e) {
+    debugPrint('⚠️ [main] isGmsAvailable greška: $e');
+    return false;
   }
 }
 
@@ -925,6 +950,10 @@ Future<void> _initFcmHandlers() async {
   }
 
   final initFuture = () async {
+    if (!await _isGmsAvailable()) {
+      debugPrint('ℹ️ [FCM] GMS nedostupan — preskacem FCM handlers (HMS).');
+      return;
+    }
     final firebaseReady = await _ensureFirebaseInitialized();
     if (!firebaseReady) {
       debugPrint('⚠️ [FCM] Preskačem handlers: Firebase nije spreman.');

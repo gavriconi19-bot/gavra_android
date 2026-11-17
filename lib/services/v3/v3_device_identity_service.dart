@@ -22,7 +22,14 @@ class V3DeviceIdentityService {
 
   /// UUID po instalaciji aplikacije. Menja se nakon reinstall-a.
   static Future<String> getStableDeviceId() async {
-    final cached = _clean(await _storage.read(key: _installationIdKey));
+    String? cached;
+    try {
+      cached = _clean(await _storage.read(key: _installationIdKey));
+    } catch (e) {
+      // EMUI/HMS uredjaji ponekad bacaju keystore greške pri čitanju —
+      // nastavi sa novim UUID-om umesto da se izuzetak propagira.
+      debugPrint('[V3DeviceIdentityService] SecureStorage read error: $e');
+    }
     if (cached != null) return cached;
 
     final id = const Uuid().v4();

@@ -203,27 +203,33 @@ class V3PushTokenProvider {
   }
 
   static Future<V3PushTokenResult?> _fallbackToken({bool isIos = false}) async {
-    // Prvo pokušaj HMS fallback za Android
-    if (!isIos && Platform.isAndroid) {
-      final hmsFallback = (await _storage.read(key: _lastHmsTokenStorageKey) ?? '').trim();
-      if (hmsFallback.isNotEmpty) {
-        debugPrint('[PushTokenProvider] Using last known HMS token fallback.');
-        return V3PushTokenResult(
-          token: hmsFallback,
-          provider: 'hms',
-        );
+    try {
+      // Prvo pokušaj HMS fallback za Android
+      if (!isIos && Platform.isAndroid) {
+        final hmsFallback = (await _storage.read(key: _lastHmsTokenStorageKey) ?? '').trim();
+        if (hmsFallback.isNotEmpty) {
+          debugPrint('[PushTokenProvider] Using last known HMS token fallback.');
+          return V3PushTokenResult(
+            token: hmsFallback,
+            provider: 'hms',
+          );
+        }
       }
-    }
 
-    final fallbackToken = (await _storage.read(key: _lastFcmTokenStorageKey) ?? '').trim();
-    if (fallbackToken.isEmpty) return null;
-    debugPrint('[PushTokenProvider] Using last known FCM token fallback.');
-    final apns = isIos ? (await _storage.read(key: _lastApnsTokenStorageKey) ?? '').trim() : '';
-    return V3PushTokenResult(
-      token: fallbackToken,
-      apnsToken: apns.isEmpty ? null : apns,
-      provider: 'fcm',
-    );
+      final fallbackToken = (await _storage.read(key: _lastFcmTokenStorageKey) ?? '').trim();
+      if (fallbackToken.isEmpty) return null;
+      debugPrint('[PushTokenProvider] Using last known FCM token fallback.');
+      final apns = isIos ? (await _storage.read(key: _lastApnsTokenStorageKey) ?? '').trim() : '';
+      return V3PushTokenResult(
+        token: fallbackToken,
+        apnsToken: apns.isEmpty ? null : apns,
+        provider: 'fcm',
+      );
+    } catch (e) {
+      // EMUI/HMS keystore greške — nema fallback tokena.
+      debugPrint('[PushTokenProvider] fallbackToken storage error: $e');
+      return null;
+    }
   }
 
   static Future<void> _writeTokenSafely(String key, String value) async {

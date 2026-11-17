@@ -84,10 +84,12 @@ class MainActivity : FlutterActivity() {
                 channel.setMethodCallHandler { call, result ->
                     when (call.method) {
                         "isGmsAvailable" -> result.success(isGmsAvailable())
-                        // HmsInstanceId.getToken() je blokirajuci network poziv — ne sme na UI thread.
+                        // HmsInstanceId.getToken() je blokirajuci network poziv — ne sme na UI thread,
+                        // ali Result.success mora nazad na platform (main) thread.
                         "getHmsPushToken" ->
                             Thread {
-                                result.success(getHmsPushToken())
+                                val token = getHmsPushToken()
+                                runOnUiThread { result.success(token) }
                             }.start()
                         "getAndroidId" -> result.success(getAndroidId())
                         "consumePushLaunchData" -> {

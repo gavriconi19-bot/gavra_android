@@ -264,45 +264,77 @@ class V3ClosedAuthService {
     required String normalizedPhone,
     required String authId,
   }) async {
-    await _storage.write(key: _manualSmsPutnikPhoneKey, value: normalizedPhone);
-    await _storage.write(key: _manualSmsPutnikAuthIdKey, value: authId.trim());
+    try {
+      await _storage.write(key: _manualSmsPutnikPhoneKey, value: normalizedPhone);
+      await _storage.write(key: _manualSmsPutnikAuthIdKey, value: authId.trim());
+    } catch (e) {
+      // EMUI/HMS keystore greške ne smeju da obore login — sesija se samo
+      // neće sačuvati (nema auto-logina sledeći put).
+      debugPrint('[V3ClosedAuthService] saveManualSmsPutnikSession error: $e');
+    }
   }
 
   static Future<void> saveManualSmsVozacSession({
     required String normalizedPhone,
     required String authId,
   }) async {
-    await _storage.write(key: _manualSmsVozacPhoneKey, value: normalizedPhone);
-    await _storage.write(key: _manualSmsVozacAuthIdKey, value: authId.trim());
+    try {
+      await _storage.write(key: _manualSmsVozacPhoneKey, value: normalizedPhone);
+      await _storage.write(key: _manualSmsVozacAuthIdKey, value: authId.trim());
+    } catch (e) {
+      debugPrint('[V3ClosedAuthService] saveManualSmsVozacSession error: $e');
+    }
   }
 
   static Future<Set<String>> getStoredManualSmsAuthIds() async {
-    final putnikAuthId = (await _storage.read(key: _manualSmsPutnikAuthIdKey))?.trim() ?? '';
-    final vozacAuthId = (await _storage.read(key: _manualSmsVozacAuthIdKey))?.trim() ?? '';
+    try {
+      final putnikAuthId = (await _storage.read(key: _manualSmsPutnikAuthIdKey))?.trim() ?? '';
+      final vozacAuthId = (await _storage.read(key: _manualSmsVozacAuthIdKey))?.trim() ?? '';
 
-    return <String>{
-      if (putnikAuthId.isNotEmpty) putnikAuthId,
-      if (vozacAuthId.isNotEmpty) vozacAuthId,
-    };
+      return <String>{
+        if (putnikAuthId.isNotEmpty) putnikAuthId,
+        if (vozacAuthId.isNotEmpty) vozacAuthId,
+      };
+    } catch (e) {
+      debugPrint('[V3ClosedAuthService] getStoredManualSmsAuthIds error: $e');
+      return <String>{};
+    }
   }
 
   /// Obriši sačuvani putnik telefon (pri odjavi).
   static Future<void> clearManualSmsPutnikPhone() async {
-    await _storage.delete(key: _manualSmsPutnikPhoneKey);
-    await _storage.delete(key: _manualSmsPutnikAuthIdKey);
+    try {
+      await _storage.delete(key: _manualSmsPutnikPhoneKey);
+      await _storage.delete(key: _manualSmsPutnikAuthIdKey);
+    } catch (e) {
+      debugPrint('[V3ClosedAuthService] clearManualSmsPutnikPhone error: $e');
+    }
   }
 
   /// Obriši sačuvani vozač telefon (pri odjavi).
   static Future<void> clearManualSmsVozacPhone() async {
-    await _storage.delete(key: _manualSmsVozacPhoneKey);
-    await _storage.delete(key: _manualSmsVozacAuthIdKey);
+    try {
+      await _storage.delete(key: _manualSmsVozacPhoneKey);
+      await _storage.delete(key: _manualSmsVozacAuthIdKey);
+    } catch (e) {
+      debugPrint('[V3ClosedAuthService] clearManualSmsVozacPhone error: $e');
+    }
   }
 
   /// Auto-login: telefon je sačuvan u SecureStorage.
   /// Direktno čita v3_auth tabelu.
   static Future<Map<String, dynamic>?> restorePutnikFromManualSmsSession() async {
-    final storedPhone = await _storage.read(key: _manualSmsPutnikPhoneKey);
-    final storedAuthId = (await _storage.read(key: _manualSmsPutnikAuthIdKey))?.trim() ?? '';
+    String? storedPhone;
+    String storedAuthId = '';
+    try {
+      storedPhone = await _storage.read(key: _manualSmsPutnikPhoneKey);
+      storedAuthId = (await _storage.read(key: _manualSmsPutnikAuthIdKey))?.trim() ?? '';
+    } catch (e) {
+      // EMUI/HMS keystore greška → nema sačuvane sesije, korisnik se
+      // prijavljuje ručno umesto da app pukne.
+      debugPrint('[V3ClosedAuthService] restorePutnik storage error: $e');
+      return null;
+    }
     if (storedPhone == null || storedPhone.isEmpty) return null;
     if (storedAuthId.isEmpty) return null;
 
@@ -324,8 +356,15 @@ class V3ClosedAuthService {
 
   /// Auto-login: sačuvan telefon vozača u SecureStorage.
   static Future<void> restoreVozacFromManualSmsSession() async {
-    final storedPhone = await _storage.read(key: _manualSmsVozacPhoneKey);
-    final storedAuthId = (await _storage.read(key: _manualSmsVozacAuthIdKey))?.trim() ?? '';
+    String? storedPhone;
+    String storedAuthId = '';
+    try {
+      storedPhone = await _storage.read(key: _manualSmsVozacPhoneKey);
+      storedAuthId = (await _storage.read(key: _manualSmsVozacAuthIdKey))?.trim() ?? '';
+    } catch (e) {
+      debugPrint('[V3ClosedAuthService] restoreVozac storage error: $e');
+      return;
+    }
     if (storedPhone == null || storedPhone.isEmpty) return;
     if (storedAuthId.isEmpty) return;
 
