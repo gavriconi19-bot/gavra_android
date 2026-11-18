@@ -22,6 +22,11 @@ const OSRM_REQUEST_TIMEOUT_MS = 12000;
 /// OSRM /trip endpoint po default-u odbija vise od 100 waypoint-a
 const OSRM_MAX_WAYPOINTS = 100;
 
+/// Cap standstill kazne iz payload-a (usklađeno sa v3StandstillPenaltyCap u
+/// v3_tracking_config.dart). Tracking može ostati upaljen dok vozač pauzira —
+/// bez cap-a ETA bi rastao neograničeno.
+const STANDSTILL_PENALTY_MAX_SECONDS = 20 * 60;
+
 type ComputeEtaPayload = {
   vozac_id?: string;
   grad?: string;
@@ -30,6 +35,8 @@ type ComputeEtaPayload = {
   /** Svež GPS iz istog tick-a (preferiran nad v3_vozac_location). */
   lat?: number | string;
   lng?: number | string;
+  /** Sekunde koliko vozač stoji u mestu (akumulacija na klijentu, od polaska). */
+  standstill_seconds?: number | string;
 };
 
 type PassengerEntry = {
@@ -77,7 +84,7 @@ function parseCoord(value: unknown): number | null {
 function etaRowsFromFixedOrder(
   ordered: PassengerEntry[],
   legs: any[],
-  ctx: { slotId: string; vozacId: string; now: string },
+  ctx: { slotId: string; vozacId: string; now: string; standstillSeconds?: number },
 ): Array<{
   slot_id: string;
   termin_id: string;
@@ -107,7 +114,7 @@ function etaRowsFromFixedOrder(
       termin_id: ordered[i].termin_id,
       putnik_id: ordered[i].putnik_id,
       vozac_id: ctx.vozacId,
-      eta_seconds: cumulative,
+      eta_seconds: cumulative + (ctx.standstillSeconds ?? 0),
       computed_at: ctx.now,
     });
   }
@@ -399,6 +406,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Standstill kazna: klijent akumulira sekunde stajanja od polaska; ovde se
+    // samo clamp-uje i dodaje ravnomerno na sve eta_seconds (svima kasni isto).
+    const standstillRaw = Number(payload.standstill_seconds);
+    const standstillPenalty = Number.isFinite(standstillRaw) && standstillRaw > 0
+      ? Math.min(Math.round(standstillRaw), STANDSTILL_PENALTY_MAX_SECONDS)
+      : 0;
+
     // 1. Obriši ETA redove starije od celog tracking prozora (55 min).
     // Poslednja ETA ostaje dostupna putniku i kad vozač ugasi app.
     const retentionThreshold = new Date(Date.now() - ETA_RETENTION_SECONDS * 1000).toISOString();
@@ -575,7 +589,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const upsertCtx = { slotId: activeSlot.id, vozacId, now };
+    const upsertCtx = { slotId: activeSlot.id, vozacId, now, standstillSeconds: standstillPenalty };
     let upsertRows: Array<{
       slot_id: string;
       termin_id: string;

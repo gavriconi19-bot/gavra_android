@@ -226,6 +226,23 @@ class V3SelfReschedulingTicker {
   return (etaMap: etaMap, order: order);
 }
 
+/// Prag brzine (m/s) ispod kojeg se vozač računa da stoji — 1 m/s ≈ 3.6 km/h,
+/// ispod tipičnog GPS jitter-a na stajanju.
+const double _v3StandstillSpeedMps = 1.0;
+
+/// Pomeraj (m) za detekciju stajanja kad `position.speed` nije validan.
+const double _v3StandstillMovedMeters = 15;
+
+/// Cap standstill kazne — tracking može ostati upaljen i dok vozač pauzira;
+/// bez cap-a ETA bi rastao neograničeno. Uskladiti sa edge funkcijom.
+const Duration v3StandstillPenaltyCap = Duration(minutes: 20);
+
+/// Akumulirane sekunde stajanja od polaska — po isolate-u (main i FGS imaju
+/// svoje kopije; prelazak FG↔BG resetuje brojač, ETA se nakratko vrati).
+int _standstillSeconds = 0;
+DateTime? _standstillPrevTickAt;
+Position? _standstillPrevPos;
+
 /// Jedan tick: live GPS fix + upsert `v3_vozac_location` + `v3-compute-eta`.
 ///
 /// Uvek se izvršava u celini — nema distance/speed/idle uslova koji bi
@@ -256,6 +273,34 @@ Future<({Map<String, int> etaMap, List<String> order})> v3RunTrackingTick({
     position = last;
   }
 
+  // Standstill kazna: akumulira se tek od polaska (T-15 čekanje je planirano)
+  // i samo na svežem fix-u — stale fallback pozicija ne sme da "dokaže" stajanje.
+  final polazakAt = v3PolazakDateTime(datumIso: datumIso, vreme: vreme);
+  final departureReached = polazakAt == null || !V3BelgradeTime.now().isBefore(polazakAt);
+  if (DateTime.now().difference(position.timestamp).inSeconds.abs() < 30) {
+    final now = DateTime.now();
+    final elapsedSec =
+        _standstillPrevTickAt == null ? 0 : now.difference(_standstillPrevTickAt!).inSeconds.clamp(0, 30);
+    final standing = position.speed >= 0
+        ? position.speed < _v3StandstillSpeedMps
+        : _standstillPrevPos != null &&
+            Geolocator.distanceBetween(
+                  _standstillPrevPos!.latitude,
+                  _standstillPrevPos!.longitude,
+                  position.latitude,
+                  position.longitude,
+                ) <
+                _v3StandstillMovedMeters;
+    if (departureReached && standing) {
+      _standstillSeconds =
+          (_standstillSeconds + elapsedSec).clamp(0, v3StandstillPenaltyCap.inSeconds).toInt();
+    } else {
+      _standstillSeconds = 0;
+    }
+    _standstillPrevTickAt = now;
+    _standstillPrevPos = position;
+  }
+
   // Mora uspeti pre compute-eta — inače edge bi računao na staroj lokaciji.
   await v3UpdateVozacLocation(
     client: client,
@@ -275,6 +320,7 @@ Future<({Map<String, int> etaMap, List<String> order})> v3RunTrackingTick({
     'lat': position.latitude,
     'lng': position.longitude,
     if (datumIso.isNotEmpty) 'datum_iso': datumIso,
+    'standstill_seconds': _standstillSeconds,
   };
   debugPrint('$logTag computeEta request: $requestBody');
 
