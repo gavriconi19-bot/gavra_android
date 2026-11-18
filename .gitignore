@@ -147,3 +147,9 @@ ios/ios_cert_key_pkcs8.pem
 __pycache__/
 *.pyc
 *.db
+
+# Lokalni supabase dump backup
+remote_*_dump.sql
+.env.cloud_backup
+supabase-service/.supabase_watchdog_ok
+supabase-service/*.log*
