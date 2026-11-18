@@ -272,11 +272,13 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     final anchor = V3DanHelper.schedulingWeekAnchor();
     final rm = V3MasterRealtimeManager.instance;
     // Aktivne ponude oslobođenih mesta za ovog putnika (odbijeni zahtevi sa
-    // mesto_ponuda flagom) — prikazuju se kao banner van rasporeda.
+    // mesto_ponuda flagom, kao i odobreni zahtevi sa upgrade ponudom za
+    // prvobitno traženi termin) — prikazuju se kao banner van rasporeda.
     final ponude = rm.zahteviCache.values
         .where((z) =>
             (z['created_by']?.toString() ?? '') == putnikId &&
-            V3StatusPolicy.isRejected(z['status']?.toString()) &&
+            (V3StatusPolicy.isRejected(z['status']?.toString()) ||
+                V3StatusPolicy.normalizeStatus(z['status']?.toString()) == 'odobreno') &&
             z['mesto_ponuda'] == true)
         .map((z) => Map<String, dynamic>.from(z))
         .toList()
