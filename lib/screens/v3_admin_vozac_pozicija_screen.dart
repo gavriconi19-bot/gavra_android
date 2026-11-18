@@ -50,7 +50,7 @@ class _V3AdminVozacPozicijaScreenState extends State<V3AdminVozacPozicijaScreen>
 
   /// Lokacija starija od ovoga = vozač više ne track-uje.
   /// Usklađeno sa DRIVER_LOCATION_MAX_AGE_MS (130s) u v3-compute-eta —
-  /// tick ide na 20s, pa je ovo ~6 propuštenih tick-ova.
+  /// tick ide na 5s, pa je ovo ~26 propuštenih tick-ova.
   static const Duration _locationMaxAge = Duration(seconds: 130);
 
   /// Red se nikad ne briše iz v3_vozac_location — bez timera bi zastarela

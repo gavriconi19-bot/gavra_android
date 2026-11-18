@@ -12,7 +12,7 @@ const ETA_RETENTION_SECONDS = (15 + 40) * 60; // 3300
 
 /// Maksimalna starost lokacije vozača u `v3_vozac_location` pre nego što se
 /// smatra zastarelom za NOVI live ETA — samo fallback kada tick NE pošalje
-/// lat/lng u payload-u. Tracking tick šalje lokaciju svakih 20s.
+/// lat/lng u payload-u. Tracking tick šalje lokaciju svakih 5s.
 const DRIVER_LOCATION_MAX_AGE_MS = 130 * 1000;
 
 /// OSRM retry konfiguracija

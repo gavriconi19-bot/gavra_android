@@ -44,7 +44,7 @@ extension V3TrackingStartResultX on V3TrackingStartResult {
 /// GPS/ETA tracking vozača — jedan izvor istine za FG i BG.
 ///
 /// Start: V3VozacScreen auto-start (T-15). Zahteva GPS + **Always**.
-/// Tick (20s): live GPS → `v3_vozac_location` → `v3-compute-eta`.
+/// Tick (5s): live GPS → `v3_vozac_location` → `v3-compute-eta`.
 /// Stop: svi putnici gotovi, hard-stop (polazak+[v3TrackingHardStop]),
 /// ili ručni stop.
 ///

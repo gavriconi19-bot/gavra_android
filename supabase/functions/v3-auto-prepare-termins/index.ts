@@ -65,7 +65,7 @@ function coordStr(lat: number, lng: number): string {
 /// Pokušava da pronađe poslednju poznatu (dovoljno svežu) GPS poziciju
 /// vozača iz tabele v3_vozac_location — jedini izvor istine za trenutnu
 /// lokaciju vozača. Edge funkcija nema direktan pristup live GPS-u van onog
-/// što vozačev telefon upisuje direktno u bazu svakih 20s.
+/// što vozačev telefon upisuje direktno u bazu svakih 5s.
 async function findDriverLastLocation(
   client: ReturnType<typeof createClient>,
   vozacId: string,

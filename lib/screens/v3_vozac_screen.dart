@@ -612,7 +612,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       if (result.order.isEmpty && result.etaMap.isEmpty) return;
       debugPrint('[ETA_TICK] order=${result.order} etaKeys=${result.etaMap.length}');
       _refreshPutniciOrderFromEtaCache();
-      unawaited(_syncMapRouteIfNeeded(reason: 'eta_tick_20s'));
+      unawaited(_syncMapRouteIfNeeded(reason: 'eta_tick'));
     });
     _runningSub = V3VozacLocationTrackingService.instance.onRunningChanged.listen((running) {
       if (!mounted) return;

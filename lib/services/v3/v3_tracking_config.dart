@@ -13,7 +13,7 @@ import '../realtime/v3_master_realtime_manager.dart';
 /// Auto-start koliko pre polaska (T-15). Uskladiti sa `v3-auto-prepare-termins`.
 const Duration v3AutoStartLeadTime = Duration(minutes: 15);
 
-const Duration v3TrackingTickInterval = Duration(seconds: 20);
+const Duration v3TrackingTickInterval = Duration(seconds: 5);
 
 /// Sigurnosni hard-stop: tracking se gasi ovoliko posle polaska čak i ako
 /// putnici ostanu nefinalizovani (stuck podatak) — inače bi FGS, GPS i
@@ -47,7 +47,7 @@ LocationSettings get v3TrackingLocationSettings {
     return AndroidSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 0,
-      intervalDuration: const Duration(seconds: 10),
+      intervalDuration: const Duration(seconds: 3),
       timeLimit: const Duration(seconds: 12),
     );
   }
@@ -58,7 +58,7 @@ LocationSettings get v3TrackingLocationSettings {
 }
 
 /// iOS continuous stream — drži proces živim u pozadini (UIBackgroundModes=location).
-/// `distanceFilter` smanjuje wake-upove; tick i dalje ide na 20s tajmeru / throttle.
+/// `distanceFilter` smanjuje wake-upove; tick i dalje ide na [v3TrackingTickInterval] tajmeru / throttle.
 LocationSettings get v3IosBackgroundStreamSettings {
   return AppleSettings(
     accuracy: LocationAccuracy.high,
