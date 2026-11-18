@@ -122,6 +122,12 @@ function Invoke-FullStart {
 
 Rotate-LogIfNeeded
 
+# Kanonski izvor istine: <repo>/.env.admin; User env varijabla je fallback.
+$AdminEnv = Join-Path $ServiceDir "..\.env.admin"
+if (Test-Path $AdminEnv) {
+    $line = Get-Content $AdminEnv | Where-Object { $_ -match '^GAVRA013_API_KEY=' } | Select-Object -First 1
+    if ($line) { $env:GAVRA013_API_KEY = $line -replace '^GAVRA013_API_KEY=', '' }
+}
 if (-not $env:GAVRA013_API_KEY) {
     $env:GAVRA013_API_KEY = [Environment]::GetEnvironmentVariable("GAVRA013_API_KEY", "User")
 }

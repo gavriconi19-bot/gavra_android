@@ -151,5 +151,6 @@ __pycache__/
 # Lokalni supabase dump backup
 remote_*_dump.sql
 .env.cloud_backup
+.env.admin
 supabase-service/.supabase_watchdog_ok
 supabase-service/*.log*

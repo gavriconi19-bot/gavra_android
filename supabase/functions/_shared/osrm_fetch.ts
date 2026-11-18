@@ -195,11 +195,25 @@ async function fetchViaDenoClient(
   }
 }
 
+// Kanonski izvor istine: /gavra/.env.admin (bind mount repo root-a, ro).
+// Čita se po zahtevu — rotacija ključa ne zahteva recreate kontejnera.
+// Container env varijabla GAVRA013_API_KEY je fallback.
+async function getOsrmApiKey(): Promise<string> {
+  try {
+    const text = await Deno.readTextFile("/gavra/.env.admin");
+    const m = text.match(/^GAVRA013_API_KEY=(.+)$/m);
+    if (m) return m[1].trim();
+  } catch {
+    // fallback na env varijablu
+  }
+  return Deno.env.get("GAVRA013_API_KEY")?.trim() ?? "";
+}
+
 export async function fetchOsrmWithRetry(
   urlStr: string,
   options: OsrmFetchOptions,
 ): Promise<Response> {
-  const apiKey = Deno.env.get("GAVRA013_API_KEY")?.trim() ?? "";
+  const apiKey = await getOsrmApiKey();
   const headers: Record<string, string> = {
     Accept: "application/json",
     "User-Agent": options.userAgent,

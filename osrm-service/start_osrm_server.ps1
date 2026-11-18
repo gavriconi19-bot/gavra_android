@@ -41,7 +41,13 @@ try {
 }
 
 # Proveri neophodne environment varijable pre pokretanja
+# Kanonski izvor istine: <repo>/.env.admin; User env varijabla je fallback.
+$AdminEnv = Join-Path $ServiceDir "..\.env.admin"
 $apiKey = $env:GAVRA013_API_KEY
+if (Test-Path $AdminEnv) {
+    $line = Get-Content $AdminEnv | Where-Object { $_ -match '^GAVRA013_API_KEY=' } | Select-Object -First 1
+    if ($line) { $apiKey = $line -replace '^GAVRA013_API_KEY=', '' }
+}
 if (-not $apiKey) {
     $apiKey = [Environment]::GetEnvironmentVariable("GAVRA013_API_KEY", "User")
     $env:GAVRA013_API_KEY = $apiKey

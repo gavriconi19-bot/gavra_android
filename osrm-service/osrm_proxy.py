@@ -20,8 +20,11 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from fastapi.security import APIKeyHeader
+from pathlib import Path
 
-load_dotenv()
+# Kanonski izvor istine: <repo>/.env.admin (override=True da fajl ima prioritet
+# nad zastarelom User env varijablom; ako fajl ne postoji koristi se env).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env.admin", override=True)
 
 GAVRA013_API_KEY = os.environ.get("GAVRA013_API_KEY")
 PORT = int(os.environ.get("PORT", "8000"))

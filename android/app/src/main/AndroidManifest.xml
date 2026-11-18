@@ -62,7 +62,7 @@
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="https" android:host="gjtabtwudbrmfeyjiicu.supabase.co" />
+        <data android:scheme="https" android:host="win-vfeglqf71ss.tail61b7a2.ts.net" />
       </intent-filter>
 
       <intent-filter>
