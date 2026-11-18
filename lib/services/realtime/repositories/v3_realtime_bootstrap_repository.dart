@@ -3,8 +3,8 @@ import 'dart:async';
 import '../../../globals.dart';
 
 class V3RealtimeBootstrapRepository {
-  static const Duration _requestTimeout = Duration(seconds: 15);
-  static const Duration _criticalRequestTimeout = Duration(seconds: 20);
+  static const Duration _requestTimeout = Duration(seconds: 45);
+  static const Duration _criticalRequestTimeout = Duration(seconds: 60);
 
   Future<List<dynamic>> fetchInitialData() async {
     return Future.wait<dynamic>([

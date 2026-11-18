@@ -40,7 +40,7 @@ class _V3WelcomeScreenState extends State<V3WelcomeScreen> with TickerProviderSt
   static const String _fadeAnimationKey = 'welcome_fade';
   static const String _slideAnimationKey = 'welcome_slide';
   static const String _pulseAnimationKey = 'welcome_pulse';
-  static const Duration _startupTimeout = Duration(seconds: 5);
+  static const Duration _startupTimeout = Duration(seconds: 15);
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isAudioPlaying = false;

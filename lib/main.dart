@@ -473,7 +473,7 @@ Future<void> _postRunAppInitialization() async {
   // 1. Kritični app servisi (settings + update gate) pre ostalih background taskova
   try {
     debugPrint('🚀 [main] 6. _initAppServices start (critical)');
-    await _initAppServices().timeout(const Duration(seconds: 8));
+    await _initAppServices().timeout(const Duration(seconds: 20));
     debugPrint('🚀 [main] 6. _initAppServices completed');
     if (startupPhaseNotifier.value != V3StartupPhase.realtimeReady) {
       startupPhaseNotifier.value = V3StartupPhase.dbReady;
@@ -506,7 +506,7 @@ Future<void> _postRunAppInitialization() async {
           rethrow;
         }
       },
-      timeout: const Duration(seconds: 12),
+      timeout: const Duration(seconds: 120),
       retries: 1,
     );
   } else {
