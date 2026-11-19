@@ -116,6 +116,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         unawaited(stop());
       } else {
         unawaited(v3ClearBgTrackingSession());
+        unawaited(_stopBg());
       }
     });
     unawaited(tryRestoreFromSession());
@@ -200,8 +201,9 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       if (saved == null) {
         if (bgRunning) {
           debugPrint('$_tag restore: orphan BG bez sesije — gasim');
-          await _stopBg();
         }
+        // Uvek: uklanja i orphan FGS notifikaciju kad servis ne radi.
+        await _stopBg();
         return false;
       }
 
@@ -212,7 +214,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       if (id.isEmpty || datum.isEmpty || g.isEmpty || v.isEmpty) {
         debugPrint('$_tag restore: neispravna sesija');
         await v3ClearBgTrackingSession();
-        if (bgRunning) await _stopBg();
+        await _stopBg();
         return false;
       }
 
@@ -223,7 +225,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
         debugPrint('$_tag restore: sesija istekla');
         await v3ClearBgTrackingSession();
-        if (bgRunning) await _stopBg();
+        await _stopBg();
         return false;
       }
 
@@ -231,7 +233,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       if (prereq != V3LocationPrereqResult.ok) {
         debugPrint('$_tag restore: nema Always GPS ($prereq) — stop');
         await v3ClearBgTrackingSession();
-        if (bgRunning) await _stopBg();
+        await _stopBg();
         return false;
       }
 
@@ -377,6 +379,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     _optimizedPutnikIds.clear();
     _setRunning(false);
     await v3ClearBgTrackingSession();
+    await _stopBg();
   }
 
   Future<void> stop() async {
