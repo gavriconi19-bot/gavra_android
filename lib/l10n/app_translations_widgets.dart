@@ -522,6 +522,41 @@ const Map<String, Map<String, Map<String, String>>> _widgetsAndUtils = {
       'zh': '稍后',
     },
   },
+  'batteryOptimization': {
+    'title': {
+      'sr': 'Isključi uštedu baterije',
+      'en': 'Disable battery optimization',
+      'ru': 'Отключить экономию батареи',
+      'de': 'Akkuoptimierung deaktivieren',
+      'zh': '关闭电池优化',
+    },
+    'message': {
+      'sr':
+          'Da bi praćenje vožnje radilo pouzdano i kad je aplikacija u pozadini ili je ekran ugašen, isključi optimizaciju baterije za Gavru 013.\n\nU listi pronađi Gavra 013 → izaberi „Ne optimizuj“ / „Don\'t optimize“.\n\nNa nekim telefonima (Xiaomi, Huawei, Samsung) sistem inače može zaustaviti praćenje lokacije.',
+      'en':
+          'To keep trip tracking reliable while the app is in the background or the screen is off, disable battery optimization for Gavra 013.\n\nIn the list, find Gavra 013 → choose "Don\'t optimize".\n\nOn some phones (Xiaomi, Huawei, Samsung) the system may otherwise stop location tracking.',
+      'ru':
+          'Чтобы отслеживание поездки работало надёжно в фоне и при выключенном экране, отключите оптимизацию батареи для Gavra 013.\n\nВ списке найдите Gavra 013 → выберите «Не оптимизировать» / «Don\'t optimize».\n\nНа некоторых телефонах (Xiaomi, Huawei, Samsung) система может иначе остановить отслеживание геолокации.',
+      'de':
+          'Damit die Fahrtverfolgung im Hintergrund und bei ausgeschaltetem Bildschirm zuverlässig läuft, deaktiviere die Akkuoptimierung für Gavra 013.\n\nIn der Liste Gavra 013 suchen → „Nicht optimieren“ / „Don\'t optimize“ wählen.\n\nAuf manchen Geräten (Xiaomi, Huawei, Samsung) kann das System sonst die Standortverfolgung stoppen.',
+      'zh':
+          '为使行程追踪在应用后台运行或屏幕关闭时保持稳定，请为 Gavra 013 关闭电池优化。\n\n在列表中找到 Gavra 013 → 选择“不优化”/“Don\'t optimize”。\n\n在部分手机（小米、华为、三星）上，系统否则可能会停止定位追踪。',
+    },
+    'allow': {
+      'sr': 'Otvori podešavanja',
+      'en': 'Open settings',
+      'ru': 'Открыть настройки',
+      'de': 'Einstellungen öffnen',
+      'zh': '打开设置',
+    },
+    'notNow': {
+      'sr': 'Kasnije',
+      'en': 'Not now',
+      'ru': 'Позже',
+      'de': 'Später',
+      'zh': '稍后',
+    },
+  },
   'notificationPermission': {
     'title': {
       'sr': 'Uključi obaveštenja',

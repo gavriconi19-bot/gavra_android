@@ -1,11 +1,13 @@
 ﻿import 'dart:async';
 import 'dart:io';
 
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/app_platform.dart';
 import '../../l10n/app_translations.dart';
@@ -33,7 +35,11 @@ class V3RolePermissionService {
   static Future<bool> ensureDriverPermissionsOnLogin(BuildContext context) async {
     await enforcePushPermission(context);
     if (!context.mounted) return false;
-    return enforceDriverAlwaysLocation(context);
+    final ok = await enforceDriverAlwaysLocation(context);
+    if (ok && context.mounted) {
+      await promptBatteryOptimizationExemption(context);
+    }
+    return ok;
   }
 
   static Future<void> ensurePassengerPermissionsOnLogin(BuildContext context) async {
@@ -225,6 +231,86 @@ class V3RolePermissionService {
     final code = V3LocaleManager().currentLocale.languageCode;
     final t = AppTranslations.ns('notificationPermission');
     return t[key]?[code] ?? t[key]?['sr'] ?? key;
+  }
+
+  static String _trBattery(String key) {
+    final code = V3LocaleManager().currentLocale.languageCode;
+    final t = AppTranslations.ns('batteryOptimization');
+    return t[key]?[code] ?? t[key]?['sr'] ?? key;
+  }
+
+  /// SharedPreferences ključ — prompt se prikazuje samo jednom po instalaciji.
+  static const _batteryOptPromptShownKey = 'v3_battery_opt_prompt_shown';
+
+  /// `isIgnoringBatteryOptimizations` je query API — ne zahteva manifest
+  /// dozvolu, pa koristimo mali native poziv umesto `Permission.` koji bi
+  /// bez deklarisane dozvole uvek vratio `denied`.
+  static Future<bool> _isIgnoringBatteryOptimizations() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _wakelockChannel.invokeMethod<bool>(
+            AppPlatform.methodIsIgnoringBatteryOptimizations,
+          ) ??
+          false;
+    } catch (e) {
+      debugPrint('[Permissions] isIgnoringBatteryOptimizations greška: $e');
+      return false;
+    }
+  }
+
+  /// Soft prompt za isključenje battery optimizacije (samo Android, samo vozači).
+  ///
+  /// Nije hard gate — tracking radi i bez toga na većini uređaja; exemption
+  /// štiti location FGS od Doze/OEM battery killera (Xiaomi/Huawei/Samsung).
+  ///
+  /// Namerno NE koristimo REQUEST_IGNORE_BATTERY_OPTIMIZATIONS — Play je
+  /// restriktuje (nije navedena kategorija za driver tracking), pa otvara-
+  /// mo battery optimization listu gde vozač ručno isključi app. Taj intent
+  /// ne zahteva nikakvu dozvolu. Prikazuje se jednom po instalaciji.
+  static Future<void> promptBatteryOptimizationExemption(BuildContext context) async {
+    if (!Platform.isAndroid || !context.mounted) return;
+    try {
+      if (await _isIgnoringBatteryOptimizations()) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_batteryOptPromptShownKey) ?? false) return;
+      await prefs.setBool(_batteryOptPromptShownKey, true);
+
+      if (!context.mounted) return;
+      final accepted = await V3DialogHelper.showBasicDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        title: _trBattery('title'),
+        content: _trBattery('message'),
+        titleIcon: Icons.battery_saver,
+        titleIconColor: Colors.amber,
+        actions: [
+          V3ButtonUtils.textButton(
+            onPressed: () => Navigator.pop(context, false),
+            text: _trBattery('notNow'),
+            foregroundColor: Colors.grey,
+          ),
+          V3ButtonUtils.textButton(
+            onPressed: () => Navigator.pop(context, true),
+            text: _trBattery('allow'),
+            foregroundColor: Colors.amber,
+          ),
+        ],
+      );
+      if (accepted != true || !context.mounted) return;
+      try {
+        await const AndroidIntent(
+          action: 'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
+        ).launch();
+        await _waitForResume();
+      } catch (e) {
+        // Stari Samsung i sl. nemaju taj screen — fallback na app details.
+        debugPrint('[Permissions] batteryOpt intent greška: $e');
+        await _openAppSettingsAndWaitForResume();
+      }
+    } catch (e) {
+      debugPrint('[Permissions] batteryOpt prompt greška: $e');
+    }
   }
 
   /// Uslov rada: Dozvoli ili Odustajem (nema skip u app).

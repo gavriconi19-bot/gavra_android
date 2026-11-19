@@ -75,6 +75,11 @@ class MainActivity : FlutterActivity() {
                     releaseWakeLock()
                     result.success(true)
                 }
+                "isIgnoringBatteryOptimizations" -> {
+                    // Query API — ne zahteva REQUEST_IGNORE_BATTERY_OPTIMIZATIONS.
+                    val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                    result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                }
                 else -> result.notImplemented()
             }
         }

@@ -32,6 +32,7 @@ class AppPlatform {
   static const String pushActionsChannel = 'com.gavra013.gavra_android/push_actions';
 
   static const String methodWakeScreen = 'wakeScreen';
+  static const String methodIsIgnoringBatteryOptimizations = 'isIgnoringBatteryOptimizations';
   static const String methodIsGmsAvailable = 'isGmsAvailable';
   static const String methodGetHmsPushToken = 'getHmsPushToken';
   static const String methodGetAndroidId = 'getAndroidId';
