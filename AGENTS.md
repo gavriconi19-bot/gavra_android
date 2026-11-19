@@ -24,6 +24,16 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
 - `supabase/migrations/20261118000001_ensure_all_v3_tables...` = idempotentni
   guard da sve v3_* tabele ostanu u supabase_realtime publikaciji.
 - pg_cron jobovi zive u baseline-u (8 jobova) — pg_dump ih ne hvata.
+  Svih 8 imaju jobname; jobovi 7/8 (`process_pending_zahtevi`,
+  `expire_unanswered_alternativa_10m`) imenovani tekstom komande u
+  `20261119000000_name_unnamed_cron_jobs.sql`.
+
+## Release (GitHub Actions)
+
+- Workflow cita `.env` iz `APP_ENV_BASE64` secret-a i bundle-uje ga u svaki
+  build. OBAVEZNO ga azurirati pri svakoj izmeni `.env`:
+  `gh secret set APP_ENV_BASE64 --body "$(base64 -w0 .env)"`
+  (poslednji put azuriran 2026-11-19 na self-hosted URL)
 
 ## Backup
 
@@ -32,6 +42,8 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   `GavraSupabase_Backup`), retention 14 dana.
 - Restore: `docker cp` dump u kontejner, pa
   `pg_restore -U supabase_admin -d postgres -c fajl.dump`
+- Dumpovi STARE cloud baze (schema + data, 2026-11-18) cuvaju se u
+  `C:\gavra-backups\migration_artifacts\` — ne vracati u repo.
 
 ## Watchdog / autostart (Scheduled Tasks)
 
