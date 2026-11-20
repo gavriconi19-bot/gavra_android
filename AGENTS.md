@@ -58,3 +58,81 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   mora vratiti 101
 - Publikacija: sve public.v3_* tabele moraju biti u supabase_realtime
 - Napomene: `supabase_pg_meta` kontejner je unhealthy (samo Studio, ne utice na app)
+
+## Cloud→local merge (2026-11-20)
+
+- Cloud projekat `gjtabtwudbrmfeyjiicu` je i dalje PRIMIO UPISE od starih
+  build-ova (bundle-ovan stari .env) do force update-a — nije "mrtav".
+- 2026-11-20 uradjen merge cloud→local (latest-wins po `updated_at` +
+  insert cloud-only redova; ~376 redova: operativna 167, zahtevi 60,
+  finansije 57, auth 51, dodela/slot 33, ostalo). Skripte + diff izvestaj:
+  `C:\gavra-backups\migration_artifacts\gavra_{diff,merge}.py` i
+  `gavra_diff_report.json`; pre-merge backup `pre_merge_cloud_sync_20261120.dump`.
+- Merge se radi sa `SET LOCAL session_replication_role='replica'` u tx —
+  zaobilazi triggere/FK da se upise verbatim cloud stanje (bez duplog
+  finansije/dodela sync-a).
+- Semantic-twin slucaj: `v3_operativna_nedelja` parcijalni unique indeks
+  `(created_by, datum, grad, polazak5) WHERE otkazano_at IS NULL` — isti
+  termin se moze pojaviti pod 2 id-a na dva sistema (lokalni `e8f3d317`
+  obrisan, kanonski cloud `e4425876` unet).
+- PRE force update-a ponoviti `gavra_diff.py` pa `gavra_merge.py` (cloud
+  akumulira nove upise svaki dan dok stari build-ovi voze).
+- Posle force update-a: ugasiti cloud pg_cron jobove i edge funkcije da
+  cloud vise ne mutira podatke, pa projekat pauzirati.
+
+### Status 2026-11-20 (force update aktiviran)
+
+- `gavra_merge.py` samo GENERISE SQL u `%TEMP%\gavra_merge.sql` — treba ga
+  rucno primeniti: `docker exec -i supabase_db_gavra_android psql -U
+  postgres -d postgres -v ON_ERROR_STOP=1 < gavra_merge.sql`.
+- Force update na cloud `v3_app_settings`: `force_update_ios=true`
+  (min 6.0.634 — iOS je LIVE), `force_update_android=false` dok
+  6.0.635 ne prodje Play review. Stari build-ovi citaju flag iz
+  CLOUD-a; novi citaju lokalni red (force=false — bez banner-a).
+- VAZNO: Play API `edits.tracks` status `completed` = rollout komitovan,
+  NE znaci da je release prosao review/live. 6.0.635 je commit-ovan
+  20.11 ~09:52 ali je u recenziji (vezano za "Dozvole za lokaciju"
+  deklaraciju "recenzija u toku") — na store-u je nema, 0 uredjaja je
+  ima, konzola je ne prikazuje kao objavljenu. Force-update dijalog je
+  HARD blokada (PopScope canPop:false) — flag ne sme biti ukljucen dok
+  verzija nije skinljiva, inace zakljuca sve korisnike.
+- Kad 6.0.635 prodje review: `UPDATE v3_app_settings SET
+  force_update_android=true` na cloud-u.
+- iOS 6.0.634 verifikovan da nosi self-hosted .env: v3_auth redovi sa
+  `app_version='6.0.634+60634', platform='ios'` pisu u LOKALNU bazu.
+- Svih 8 cloud pg_cron jobova DEAKTIVIRANO (`cron.alter_job active=false`,
+  reversibilno) — cloud vise ne mutira podatke server-side.
+- 2026-11-20 (update): prelazak cloud→local NIJE uspeo — svih 8 cloud
+  pg_cron jobova PONOVO AKTIVIRANO (`cron.alter_job active=true`),
+  verifikovano da rade (job_run_details, succeeded). Edge funkcije su
+  sve vreme bile ACTIVE (nisu gasene). `force_update_ios` je vracen
+  na false na cloud-u; `maintenance_mode_*` i dalje false.
+- Cloud edge funkcije + projekat OSTAJU UP dok rep stragglers-a ne uvene —
+  stari build-ovi ih koriste do update-a; njihovi upisi se povlace
+  ponovljenim merge-om. PRE pauziranja projekta: poslednji merge + provera
+  da vise nema cloud-only upisa.
+- Opcija za rep koji se ne updatuje: `maintenance_mode_*=true` na cloud-u
+  (app im postaje neupotrebljiv — ultimativni kill-switch).
+
+### Status 2026-11-20 (finalni prelazak — force update LIVE)
+
+- Cloud `v3_app_settings`: `force_update_android=true` i
+  `force_update_ios=true` (latest/min: android 6.0.636, ios 6.0.634) —
+  stari build-ovi su HARD blokirani na force-update dijalogu.
+- Finalni merge primenjen ~16h: 110 redova cloud→local (auth 29,
+  finansije 36, operativna 36, dodela_slot 7, zahtevi 1).
+  `v3_app_settings` NAMERNO iskljucen iz merge-a — lokalni red ostaje
+  `force_update_*=false` (novi build-ovi bez banner-a); lokalni
+  latest/min podignut na 6.0.636 radi konzistentnosti.
+- Post-merge diff verifikacija: `only_cloud=0` na svim tabelama;
+  preostali diff-ovi su iskljucivo "local noviji" (last_seen_at,
+  app_version, tracking polja) — lokalna baza je kanonska.
+- Svih 8 cloud pg_cron jobova DEAKTIVIRANO (`cron.alter_job
+  active=false`, reversibilno) — cloud vise ne mutira podatke
+  server-side. Lokalnih 8 jobova aktivno.
+- Cloud edge funkcije (10) i projekat OSTAJU UP — stari build-ovi
+  citaju force-update config sa cloud REST-a; pausiranje cloud-a bi
+  tiho pustilo stragglere dalje (row==null -> nema banner-a).
+- Sledeci korak kad stragglera nema (proveriti `v3_auth.app_version`/
+  `last_seen_at` na cloud-u): finalni merge, pa `pause_project`
+  (MCP) ili maintenance_mode kill-switch.
