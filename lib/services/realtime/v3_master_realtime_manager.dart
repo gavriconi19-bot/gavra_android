@@ -84,6 +84,13 @@ class V3MasterRealtimeManager {
   static const Duration _fullResyncCooldown = Duration(seconds: 20);
   int _deltaResyncFailures = 0;
   static const int _maxDeltaResyncFailuresBeforeFull = 3;
+  // Periodičan full resync — delta resync ne može da detektuje DELETE-ove
+  // propustene dok je kanal bio down (red više ne postoji u bazi), pa bi
+  // cache zadržao fantomske redove do restarta appa.
+  Timer? _periodicFullResyncTimer;
+  static const Duration _periodicFullResyncInterval = Duration(minutes: 30);
+  // Posle dužeg disconnecta preskačemo delta i idemo direktno na full resync.
+  static const Duration _fullResyncStaleThreshold = Duration(minutes: 15);
 
   final StreamController<V3PazarPromptEvent> _pazarPromptController =
       StreamController<V3PazarPromptEvent>.broadcast();
@@ -378,6 +385,10 @@ class V3MasterRealtimeManager {
       _lastFullResyncAt = V3BelgradeTime.now();
 
       await _setupRealtime();
+      _periodicFullResyncTimer ??= Timer.periodic(
+        _periodicFullResyncInterval,
+        (_) => unawaited(_runFullResync('periodic')),
+      );
       _isInitialized = true;
       _scheduleEmit(tables: {'*'}, immediate: true);
       // Pre-geocodiramo koordinate gradova u pozadini — bez blokiranja bootstrapa.
@@ -469,6 +480,17 @@ class V3MasterRealtimeManager {
   }
 
   Future<void> _resyncCachesAfterReconnectSmart() async {
+    // Delta ne može da vrati DELETE-ove propustene dok je kanal bio down —
+    // posle dužeg disconnecta idemo direktno na full resync.
+    final lastFull = _lastFullResyncAt;
+    if (lastFull != null &&
+        V3BelgradeTime.now().difference(lastFull) >=
+            _fullResyncStaleThreshold) {
+      await _runFullResync('reconnect-stale');
+      _deltaResyncFailures = 0;
+      return;
+    }
+
     final deltaOk = await _applyMissedDelta();
     if (deltaOk) {
       _deltaResyncFailures = 0;
@@ -483,10 +505,13 @@ class V3MasterRealtimeManager {
       return;
     }
 
+    await _runFullResync('reconnect-delta-failures');
+  }
+
+  Future<void> _runFullResync(String reason) async {
     final inFlight = _fullResyncInFlight;
     if (inFlight != null) {
-      debugPrint(
-          '[RT] reconnect full-resync već u toku, preskačem dupli poziv');
+      debugPrint('[RT] $reason full-resync već u toku, preskačem dupli poziv');
       return;
     }
 
@@ -495,8 +520,7 @@ class V3MasterRealtimeManager {
     final canRunFullResync =
         lastRun == null || now.difference(lastRun) >= _fullResyncCooldown;
     if (!canRunFullResync) {
-      debugPrint(
-          '[RT] reconnect full-resync cooldown aktivan, preskačem fallback.');
+      debugPrint('[RT] $reason full-resync cooldown aktivan, preskačem.');
       return;
     }
 

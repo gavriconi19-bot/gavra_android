@@ -27,6 +27,11 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   Svih 8 imaju jobname; jobovi 7/8 (`process_pending_zahtevi`,
   `expire_unanswered_alternativa_10m`) imenovani tekstom komande u
   `20261119000000_name_unnamed_cron_jobs.sql`.
+- `20261120000000_add_missing_updated_at_triggers.sql` = set_updated_at
+  triggeri na v3_krediti/v3_uplata_pazara/v3_vozac_location (delta resync).
+  `supabase migration up` odbija — u schema_migrations fale lokalni fajlovi
+  (arhivirani u baseline); nove migracije primenjivati docker exec psql +
+  rucni INSERT u supabase_migrations.schema_migrations.
 
 ## Release (GitHub Actions)
 

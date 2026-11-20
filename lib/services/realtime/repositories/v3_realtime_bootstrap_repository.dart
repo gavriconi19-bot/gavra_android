@@ -78,6 +78,10 @@ class V3RealtimeBootstrapRepository {
         table: 'v3_vozac_location',
         query: () => supabase.from('v3_vozac_location').select(),
       ),
+      _fetchTableRows(
+        table: 'v3_uplata_pazara',
+        query: () => supabase.from('v3_uplata_pazara').select(),
+      ),
     ]);
   }
 

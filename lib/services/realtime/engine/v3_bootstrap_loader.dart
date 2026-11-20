@@ -32,6 +32,7 @@ class V3BootstrapLoader {
       'v3_app_settings': (results[12] as List).cast<dynamic>(),
       'v3_eta_results': (results[13] as List).cast<dynamic>(),
       'v3_vozac_location': (results[14] as List).cast<dynamic>(),
+      'v3_uplata_pazara': (results[15] as List).cast<dynamic>(),
     };
   }
 
@@ -46,6 +47,7 @@ class V3BootstrapLoader {
       case 'v3_adrese':
       case 'v3_vozila':
       case 'v3_kapacitet_slots':
+      case 'v3_uplata_pazara':
         response = await _client.from(table).select().gte('updated_at', iso);
         break;
       case 'v3_finansije':
