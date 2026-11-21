@@ -35,6 +35,16 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   stvarno forsira, transfer_to_operativna odobreno grana otporna na
   duplikate (ranije unique-violation), anon/authenticated revoke na
   internim fn-ama. Primenjeno docker exec psql + schema_migrations insert.
+- `20261121000001_fix_oslobodjeno_mesto_logic.sql` = fix-ovi "oslobodjeno
+  mesto" toka: process_pending_zahtevi_slots racuna aktivne mesto_ponuda
+  ponude u zauzetost (approve ne krade ponudjeno mesto); mrtav guard
+  `d.termin_id = z.id` popravljen join-om kroz v3_operativna_nedelja
+  (termin_id je FK na operativnu stavku, ne zahtev); nova kolona
+  `mesto_ponuda_expired_at` — 10-min timeout vise nije trajna odbijenica
+  (cooldown 30 min + rescan u fn_v3_expire_mesto_ponuda); slot FOR UPDATE
+  u fn_v3_offer_freed_seats + SKIP LOCKED kandidati; trigger guard
+  pokriva sve statuse; latentni `''::time` parse bug koji je obarao svaki
+  upgrade accept. Verifikovano rollback testom T1–T5.
 - `20261120000000_add_missing_updated_at_triggers.sql` = set_updated_at
   triggeri na v3_krediti/v3_uplata_pazara/v3_vozac_location (delta resync).
   `supabase migration up` odbija — u schema_migrations fale lokalni fajlovi
