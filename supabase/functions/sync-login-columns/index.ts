@@ -260,32 +260,39 @@ Deno.serve(async (req) => {
         .then(() => {})
         .catch((e: unknown) => console.error("v3_device_events insert failed", e));
 
-      // Best-effort push obaveštenje izbačenom uređaju.
+      // Best-effort push obaveštenje izbačenom uređaju — kroz kanonski
+      // notify_push gateway (service_role), koji iz vault-a uzima i HMS
+      // kredencijale; direktan poziv edge fn bi HMS-only uredjaj ostavio bez
+      // obavestenja (edge nema HMS_* env).
       if (replacedPushToken) {
-        fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${anonKey}` },
-          body: JSON.stringify({
-            tokens: [{ token: replacedPushToken, provider: replacedPushProvider }],
-            recipient_id: userId,
-            title: "Bezbednosno obaveštenje",
-            body: "Vaš uređaj je odjavljen jer je prijavljen novi uređaj potvrđen PIN kodom.",
-            data: {
-              type: "v3_device_replaced",
-              locale_code: String(existing.locale_code ?? "").trim() || incomingLocaleCode || "sr",
-              title_sr: "Bezbednosno obaveštenje",
-              title_en: "Security notice",
-              title_ru: "Уведомление безопасности",
-              title_de: "Sicherheitsmeldung",
-              title_zh: "安全通知",
-              body_sr: "Vaš uređaj je odjavljen jer je prijavljen novi uređaj potvrđen PIN kodom.",
-              body_en: "Your device was signed out because a new device was approved with a PIN code.",
-              body_ru: "Ваше устройство было отключено, потому что новое устройство было подтверждено PIN-кодом.",
-              body_de: "Ihr Gerät wurde abgemeldet, weil ein neues Gerät per PIN-Code bestätigt wurde.",
-              body_zh: "您的设备已退出，因为新设备已通过 PIN 码确认。",
-            },
-          }),
-        }).catch((e: unknown) => console.error("send-push-notification failed", e));
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
+        if (serviceRoleKey) {
+          const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          serviceClient
+            .rpc("notify_push", {
+              tokens: [{ token: replacedPushToken, provider: replacedPushProvider }],
+              title: "Bezbednosno obaveštenje",
+              body: "Vaš uređaj je odjavljen jer je prijavljen novi uređaj potvrđen PIN kodom.",
+              data: {
+                type: "v3_device_replaced",
+                locale_code: String(existing.locale_code ?? "").trim() || incomingLocaleCode || "sr",
+                title_sr: "Bezbednosno obaveštenje",
+                title_en: "Security notice",
+                title_ru: "Уведомление безопасности",
+                title_de: "Sicherheitsmeldung",
+                title_zh: "安全通知",
+                body_sr: "Vaš uređaj je odjavljen jer je prijavljen novi uređaj potvrđen PIN kodom.",
+                body_en: "Your device was signed out because a new device was approved with a PIN code.",
+                body_ru: "Ваше устройство было отключено, потому что новое устройство было подтверждено PIN-кодом.",
+                body_de: "Ihr Gerät wurde abgemeldet, weil ein neues Gerät per PIN-Code bestätigt wurde.",
+                body_zh: "您的设备已退出，因为新设备已通过 PIN 码确认。",
+              },
+            })
+            .then(() => {})
+            .catch((e: unknown) => console.error("notify_push rpc failed", e));
+        }
       }
     } else if (reason === "hardware_matched" || reason === "token_matched") {
       // Tihi re-ulazak: uredjaj se vratio u slot preko zatecenog hardware/push

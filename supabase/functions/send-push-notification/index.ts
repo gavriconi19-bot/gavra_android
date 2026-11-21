@@ -581,6 +581,17 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Endpoint je javno dostupan preko Kong-a sa anon kljucem — bez internog
+  // x-api-key headera (GAVRA013_API_KEY, salje notify_push iz baze) odbijamo,
+  // inace bi svako sa bundle-ovanim anon kljucem mogao slati proizvoljan push.
+  const internalApiKey = Deno.env.get('GAVRA013_API_KEY')?.trim() ?? '';
+  if (internalApiKey && req.headers.get('x-api-key')?.trim() !== internalApiKey) {
+    return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
+      status: 401,
+      headers: jsonHeaders,
+    });
+  }
+
   try {
     const payload = (await req.json()) as PushPayload;
     const normalizedTokens = normalizeTokens(payload.tokens);

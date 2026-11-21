@@ -62,7 +62,10 @@ bool _isCanceledZahtevStatusPush({
   required String body,
   required Map<String, String> data,
 }) {
-  if (type.trim() != 'zahtev_status') return false;
+  // Dedup pokriva i legacy 'zahtev_status' i tipizirani 'v3_otkazano' push —
+  // bez ovoga bi ista otkazivanje poruka mogla doci dvaput (ACK retry).
+  final safeType = type.trim();
+  if (safeType != 'zahtev_status' && safeType != 'v3_otkazano') return false;
 
   final normalizedStatus =
       (data['status'] ?? data['zahtev_status'] ?? '').trim().toLowerCase();

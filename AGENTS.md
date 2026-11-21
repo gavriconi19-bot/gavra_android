@@ -45,6 +45,18 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   u fn_v3_offer_freed_seats + SKIP LOCKED kandidati; trigger guard
   pokriva sve statuse; latentni `''::time` parse bug koji je obarao svaki
   upgrade accept. Verifikovano rollback testom T1–T5.
+- `20261121000002_push_notification_fixes.sql` = push audit fix-ovi:
+  notify_push salje x-api-key (vault secret `gavra_api_key` — mora biti isti
+  kao GAVRA013_API_KEY u .env.admin; pri rotaciji kljuca azurirati OBA);
+  edge send-push-notification zahteva taj header (401 bez njega);
+  sync-login-columns device-replaced push ide kroz rpc notify_push (HMS fix);
+  zahtev/operativna notify f-j-e SECURITY DEFINER + GUC marker
+  `gavra.zahtev_cancel_notified` sprecava dupli push pri propagaciji
+  otkazivanja; NOVI trigger trg_v3_notify_putnik_on_operativna_otkazano
+  (putnik dobija push i kad se operativna otkaže direktno, ne samo kroz
+  zahtev); REVOKE EXECUTE sa anon/authenticated/PUBLIC na push fn-ama
+  (driver_started zadrzava anon — app ga zove); drop-ovan mrtav 11-param
+  weather overload. Verifikovano tx rollback testom (1 push, ne 2).
 - `20261120000000_add_missing_updated_at_triggers.sql` = set_updated_at
   triggeri na v3_krediti/v3_uplata_pazara/v3_vozac_location (delta resync).
   `supabase migration up` odbija — u schema_migrations fale lokalni fajlovi
