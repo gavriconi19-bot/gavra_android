@@ -1211,30 +1211,6 @@ class _V3AdminScreenState extends State<V3AdminScreen> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    // 💹 Finasnije
-                    Expanded(
-                      child: _NavBtn(
-                        color: Colors.indigo,
-                        onTap: () => V3NavigationUtils.pushScreen<void>(
-                          context,
-                          const V3FinansijeScreen(),
-                        ),
-                        child: const Text('💹', style: TextStyle(fontSize: 20)),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    // 📊 Statistika
-                    Expanded(
-                      child: _NavBtn(
-                        color: Colors.cyan,
-                        onTap: () => V3NavigationUtils.pushScreen<void>(
-                          context,
-                          const V3StatistikaScreen(),
-                        ),
-                        child: const Text('📊', style: TextStyle(fontSize: 20)),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
                     // 🔧 Kolska knjga
                     Expanded(
                       child: _NavBtn(
@@ -1317,12 +1293,58 @@ class _V3AdminScreenState extends State<V3AdminScreen> {
               ),
               const SizedBox(height: 6),
 
-              // ─── RED 2: Brojač učenika bez VS + Putnici ───
+              // ─── RED 2: Brojač učenika bez VS + Finansije + Statistika + Pozicija + Putnici ───
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
                 child: Row(
                   children: [
                     Expanded(child: _buildSaVsWidget(context)),
+                    const SizedBox(width: 6),
+                    // 💹 Finansije
+                    _NavBtn(
+                      color: Colors.green,
+                      height: V3ContainerUtils.responsiveHeight(context, 50),
+                      width: V3ContainerUtils.responsiveHeight(context, 50),
+                      onTap: () => V3NavigationUtils.pushScreen<void>(
+                        context,
+                        const V3FinansijeScreen(),
+                      ),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '💹',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 18,
+                            color: Colors.white,
+                            shadows: [Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black54)],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // 📊 Statistika
+                    _NavBtn(
+                      color: Colors.white,
+                      height: V3ContainerUtils.responsiveHeight(context, 50),
+                      width: V3ContainerUtils.responsiveHeight(context, 50),
+                      onTap: () => V3NavigationUtils.pushScreen<void>(
+                        context,
+                        const V3StatistikaScreen(),
+                      ),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '📊',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 18,
+                            color: Colors.white,
+                            shadows: [Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black54)],
+                          ),
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 6),
                     _NavBtn(
                       color: Colors.red,
