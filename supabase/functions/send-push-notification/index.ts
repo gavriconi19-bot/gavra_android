@@ -638,6 +638,23 @@ Deno.serve(async (req) => {
     const sent = results.filter((entry) => entry.ok).length;
     const failed = results.length - sent;
 
+    // Per-token razlog odbijanja — agregat ispod ne kaze zasto je send pao, a
+    // pg_net response se cesto izgubi na timeoutu pa se ovo jedino vidi u
+    // edge logovima. Token se loguje samo kao prefix (dovoljno za korelaciju
+    // sa v3_auth, bez full tokena u logovima).
+    for (const entry of results) {
+      if (entry.ok) continue;
+      console.log(
+        JSON.stringify({
+          event: 'push_send_error',
+          provider: entry.provider,
+          status: entry.status,
+          error: String(entry.error ?? '').slice(0, 300),
+          token_prefix: entry.token.slice(0, 12),
+        }),
+      );
+    }
+
     // Token je trajno nevažeći (app deinstaliran, podaci obrisani, token rotiran) — čistimo ga
     // iz baze da se u budućnosti ne pokušava slanje na mrtav token i da app pri sledećem
     // pokretanju upiše svež FCM token bez konflikta.
