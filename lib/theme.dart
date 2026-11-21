@@ -762,3 +762,310 @@ class PassionateRoseStyles {
     ],
   );
 }
+
+// CAVE GLOW - Boje osvetljene pecine (cyan + magenta + zlatna)!
+// Paleta uzeta direktno iz reference slike.
+const ColorScheme caveGlowColorScheme = ColorScheme(
+  brightness: Brightness.dark,
+
+  // Neon plava iz vode/refleksije
+  primary: Color(0xFF317BF2), // Bright blue
+  onPrimary: Colors.white,
+  primaryContainer: Color(0xFF2FACF3), // Cyan neon
+  onPrimaryContainer: Color(0xFF0A0023),
+
+  // Deep magenta iz stena
+  secondary: Color(0xFF8D257D), // Deep magenta
+  onSecondary: Colors.white,
+  secondaryContainer: Color(0xFFBA7CC2), // Lavender pink stena
+  onSecondaryContainer: Color(0xFF0A0023),
+
+  // Zlatna sa osvetljenog stuba
+  tertiary: Color(0xFFE9AB2A), // Gold
+  onTertiary: Color(0xFF0A0023),
+  tertiaryContainer: Color(0xFFFFDA59), // Bright gold
+  onTertiaryContainer: Color(0xFF0A0023),
+
+  // Tamne povrsine - duboke senke pecine
+  surface: Color(0xFF0A0023), // Najtanija tacka slike
+  onSurface: Colors.white,
+  surfaceContainerHighest: Color(0xFF281A74), // Dark indigo
+  onSurfaceVariant: Color(0xFFD3A2AF), // Pale pink tekst
+
+  outline: Color(0xFF6B1C89),
+  outlineVariant: Color(0xFF4F208D),
+
+  error: Color(0xFFFF4444),
+  onError: Colors.white,
+  errorContainer: Color(0xFF3D0A0A),
+  onErrorContainer: Color(0xFFFF8888),
+);
+
+// Cave Glow Gradient - kroz boje slike (cyan -> indigo -> purple -> pink -> magenta)
+const LinearGradient caveGlowGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [
+    Color(0xFF2FACF3), // Cyan neon - voda
+    Color(0xFF18065B), // Deep indigo - duboka senka
+    Color(0xFF6B1C89), // Purple - stene
+    Color(0xFFBA7CC2), // Lavender pink - svetla stena
+    Color(0xFF8D257D), // Deep magenta - neon akcent
+  ],
+  stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+);
+
+// Cave Glow Theme
+final ThemeData caveGlowTheme = ThemeData(
+  colorScheme: caveGlowColorScheme,
+  useMaterial3: true,
+  fontFamily: 'Inter',
+  fontFamilyFallback: SerbianTextStyle._fallbackFonts,
+  textTheme: createSerbianTextTheme(
+    bodyColor: caveGlowColorScheme.onSurface,
+    displayColor: caveGlowColorScheme.onSurface,
+  ),
+  scaffoldBackgroundColor: const Color(0xFF0A0023),
+  appBarTheme: AppBarTheme(
+    elevation: 0,
+    backgroundColor: const Color(0xFF281A74), // Dark indigo
+    foregroundColor: Colors.white,
+    systemOverlayStyle: const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
+    titleTextStyle: SerbianTextStyle.create(
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    ),
+  ),
+);
+
+// Cave Glow Styles - Tamna sa cyan glow akcentima!
+class CaveGlowStyles {
+  static BoxDecoration cardDecoration = BoxDecoration(
+    color: const Color(0xFF281A74), // Dark indigo pozadina
+    borderRadius: V3StyleHelper.radius20,
+    border: Border.all(
+      width: 2,
+      color: const Color(0xFF2FACF3).withOpacity(0.5), // Cyan border
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFF2FACF3).withOpacity(0.3), // Cyan glow
+        blurRadius: 24,
+        offset: const Offset(0, 8),
+        spreadRadius: 2,
+      ),
+    ],
+  );
+
+  static BoxDecoration gradientBackground = const BoxDecoration(
+    gradient: caveGlowGradient,
+  );
+
+  static BoxDecoration gradientButton = BoxDecoration(
+    gradient: caveGlowGradient,
+    borderRadius: V3StyleHelper.radius16,
+    border: Border.all(
+      width: 1.5,
+      color: const Color(0xFF2FACF3).withOpacity(0.6), // Cyan border
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFF2FACF3).withOpacity(0.4), // Cyan glow
+        blurRadius: 20,
+        offset: const Offset(0, 8),
+        spreadRadius: 2,
+      ),
+    ],
+  );
+
+  static BoxDecoration dropdownDecoration = BoxDecoration(
+    color: const Color(0xFF18065B), // Deep indigo pozadina
+    borderRadius: V3StyleHelper.radius16,
+    border: Border.all(
+      color: const Color(0xFF2FACF3).withOpacity(0.4), // Cyan border
+      width: 1.5,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFF2FACF3).withOpacity(0.2), // Cyan glow
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+
+  static BoxDecoration popupDecoration = BoxDecoration(
+    color: const Color(0xFF0A0023), // Skoro crna pozadina
+    borderRadius: V3StyleHelper.radius24,
+    border: Border.all(
+      color: const Color(0xFF2FACF3).withOpacity(0.5), // Cyan border
+      width: 2,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFF2FACF3).withOpacity(0.3), // Cyan glow
+        blurRadius: 32,
+        offset: const Offset(0, 12),
+        spreadRadius: 4,
+      ),
+    ],
+  );
+}
+
+// GUNMETAL GOLD - Elegantna metalik tema: celik + zlato!
+const ColorScheme gunmetalGoldColorScheme = ColorScheme(
+  brightness: Brightness.dark,
+
+  // Priguseno zlato kao glavni akcenat
+  primary: Color(0xFFC9A227), // Muted gold
+  onPrimary: Color(0xFF14171A),
+  primaryContainer: Color(0xFF8C7326), // Deep gold
+  onPrimaryContainer: Colors.white,
+
+  // Gunmetal kao secondary
+  secondary: Color(0xFF3A4149), // Gunmetal
+  onSecondary: Colors.white,
+  secondaryContainer: Color(0xFF5C646C), // Svetliji celik
+  onSecondaryContainer: Colors.white,
+
+  // Srebro/hrom kao tertiary
+  tertiary: Color(0xFF9AA5B1), // Silver
+  onTertiary: Color(0xFF14171A),
+  tertiaryContainer: Color(0xFFD8DEE4), // Light silver
+  onTertiaryContainer: Color(0xFF14171A),
+
+  // Tamne povrsine - skoro crna sa metalik tonom
+  surface: Color(0xFF14171A),
+  onSurface: Colors.white,
+  surfaceContainerHighest: Color(0xFF24282D), // Tamni gunmetal
+  onSurfaceVariant: Color(0xFFB9BEC5),
+
+  outline: Color(0xFF5C646C), // Celicni okvir
+  outlineVariant: Color(0xFF3A4149),
+
+  error: Color(0xFFFF4444),
+  onError: Colors.white,
+  errorContainer: Color(0xFF3D0A0A),
+  onErrorContainer: Color(0xFFFF8888),
+);
+
+// Gunmetal Gold Gradient - srebro -> crna -> gunmetal -> zlato -> duboko zlato
+const LinearGradient gunmetalGoldGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [
+    Color(0xFFB8C0C8), // Srebro - pocetak svetla
+    Color(0xFF0E1113), // Skoro crna - DUBOK SKOK
+    Color(0xFF333A42), // Gunmetal - sredina
+    Color(0xFFD4AF37), // Metalik zlato - svetlija
+    Color(0xFF8C7326), // Duboko zlato - TAMNIJI NEON
+  ],
+  stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+);
+
+// Gunmetal Gold Theme
+final ThemeData gunmetalGoldTheme = ThemeData(
+  colorScheme: gunmetalGoldColorScheme,
+  useMaterial3: true,
+  fontFamily: 'Inter',
+  fontFamilyFallback: SerbianTextStyle._fallbackFonts,
+  textTheme: createSerbianTextTheme(
+    bodyColor: gunmetalGoldColorScheme.onSurface,
+    displayColor: gunmetalGoldColorScheme.onSurface,
+  ),
+  scaffoldBackgroundColor: const Color(0xFF14171A),
+  appBarTheme: AppBarTheme(
+    elevation: 0,
+    backgroundColor: const Color(0xFF24282D), // Tamni gunmetal
+    foregroundColor: Colors.white,
+    systemOverlayStyle: const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
+    titleTextStyle: SerbianTextStyle.create(
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    ),
+  ),
+);
+
+// Gunmetal Gold Styles - Tamna sa zlatnim glow akcentima!
+class GunmetalGoldStyles {
+  static BoxDecoration cardDecoration = BoxDecoration(
+    color: const Color(0xFF24282D), // Gunmetal pozadina
+    borderRadius: V3StyleHelper.radius20,
+    border: Border.all(
+      width: 2,
+      color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni border
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFFC9A227).withOpacity(0.25), // Zlatni glow
+        blurRadius: 24,
+        offset: const Offset(0, 8),
+        spreadRadius: 2,
+      ),
+    ],
+  );
+
+  static BoxDecoration gradientBackground = const BoxDecoration(
+    gradient: gunmetalGoldGradient,
+  );
+
+  static BoxDecoration gradientButton = BoxDecoration(
+    gradient: gunmetalGoldGradient,
+    borderRadius: V3StyleHelper.radius16,
+    border: Border.all(
+      width: 1.5,
+      color: const Color(0xFFD4AF37).withOpacity(0.6), // Zlatni border
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni glow
+        blurRadius: 20,
+        offset: const Offset(0, 8),
+        spreadRadius: 2,
+      ),
+    ],
+  );
+
+  static BoxDecoration dropdownDecoration = BoxDecoration(
+    color: const Color(0xFF1C2126), // Tamni gunmetal pozadina
+    borderRadius: V3StyleHelper.radius16,
+    border: Border.all(
+      color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni border
+      width: 1.5,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFFC9A227).withOpacity(0.2), // Zlatni glow
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+
+  static BoxDecoration popupDecoration = BoxDecoration(
+    color: const Color(0xFF14171A), // Skoro crna pozadina
+    borderRadius: V3StyleHelper.radius24,
+    border: Border.all(
+      color: const Color(0xFFC9A227).withOpacity(0.5), // Zlatni border
+      width: 2,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFFC9A227).withOpacity(0.3), // Zlatni glow
+        blurRadius: 32,
+        offset: const Offset(0, 12),
+        spreadRadius: 4,
+      ),
+    ],
+  );
+}

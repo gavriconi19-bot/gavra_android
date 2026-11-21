@@ -82,6 +82,10 @@ class V3StyleHelper {
         return const Color(0xFFDC143C);
       case 'dark_pink':
         return const Color(0xFFE91E8C);
+      case 'cave_glow':
+        return const Color(0xFF2FACF3);
+      case 'gunmetal_gold':
+        return const Color(0xFFC9A227);
       default:
         return Colors.blue;
     }

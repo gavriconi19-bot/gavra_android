@@ -44,6 +44,24 @@ class V3ThemeRegistry {
       styles: DarkPinkStyles,
       gradient: darkPinkGradient,
     ),
+    'cave_glow': V3ThemeDefinition(
+      id: 'cave_glow',
+      name: '🌌 Neon Cave',
+      description: 'Boje osvetljene pećine: cyan + magenta + zlatna',
+      colorScheme: caveGlowColorScheme,
+      themeData: caveGlowTheme,
+      styles: CaveGlowStyles,
+      gradient: caveGlowGradient,
+    ),
+    'gunmetal_gold': V3ThemeDefinition(
+      id: 'gunmetal_gold',
+      name: '🏆 Gunmetal Gold',
+      description: 'Elegantna metalik tema: čelik + zlato',
+      colorScheme: gunmetalGoldColorScheme,
+      themeData: gunmetalGoldTheme,
+      styles: GunmetalGoldStyles,
+      gradient: gunmetalGoldGradient,
+    ),
   };
 
   // Keširane vrednosti — izracunavaju se jednom
