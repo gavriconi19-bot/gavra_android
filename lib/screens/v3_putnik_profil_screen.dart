@@ -987,7 +987,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         } else {
           V3AppSnackBar.info(context, V3PutnikProfilMessages.seatOfferDeclined);
         }
-      } else if (reason == 'offer_expired') {
+      } else if (reason == 'offer_expired' || reason == 'selected_slot_past') {
         V3AppSnackBar.info(context, V3PutnikProfilMessages.seatOfferExpired);
       } else if (reason == 'selected_slot_full' || reason == 'no_capacity_slot') {
         V3AppSnackBar.warning(context, V3PutnikProfilMessages.seatTaken);

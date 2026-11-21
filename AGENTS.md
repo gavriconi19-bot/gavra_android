@@ -27,6 +27,14 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   Svih 8 imaju jobname; jobovi 7/8 (`process_pending_zahtevi`,
   `expire_unanswered_alternativa_10m`) imenovani tekstom komande u
   `20261119000000_name_unnamed_cron_jobs.sql`.
+- `20261121000000_fix_alternativa_logic.sql` = fix-ovi alternativa toka:
+  neradni_dani scope (bc/vs) u server fn-ama, zabrana proslih termina
+  (process + accept RPC), FOR UPDATE na kapacitet slotu u approve path-u,
+  inline 10-min expiry za 'alternativa' u fn_v3_alternativa_action,
+  process_pending_zahtevi_slots(p_ignore_schedule) -> manual_process
+  stvarno forsira, transfer_to_operativna odobreno grana otporna na
+  duplikate (ranije unique-violation), anon/authenticated revoke na
+  internim fn-ama. Primenjeno docker exec psql + schema_migrations insert.
 - `20261120000000_add_missing_updated_at_triggers.sql` = set_updated_at
   triggeri na v3_krediti/v3_uplata_pazara/v3_vozac_location (delta resync).
   `supabase migration up` odbija — u schema_migrations fale lokalni fajlovi

@@ -1542,6 +1542,13 @@ Future<void> _processAlternativaNotificationAction({
           );
           return;
         }
+        if (reason == 'selected_slot_past') {
+          await _showActionFeedback(
+            '⚠️ Termin je prošao',
+            'Izabrani termin je u međuvremenu prošao.',
+          );
+          return;
+        }
         if (reason == 'offer_expired' ||
             reason == 'zahtev_not_in_alternativa') {
           await _showActionFeedback(
