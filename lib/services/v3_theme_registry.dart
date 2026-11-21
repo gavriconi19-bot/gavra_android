@@ -55,8 +55,8 @@ class V3ThemeRegistry {
     ),
     'gunmetal_gold': V3ThemeDefinition(
       id: 'gunmetal_gold',
-      name: '🏆 Gunmetal Gold',
-      description: 'Elegantna metalik tema: čelik + zlato',
+      name: '🌲 Emerald Gold',
+      description: 'Elegantna tema: smaragd + zlato',
       colorScheme: gunmetalGoldColorScheme,
       themeData: gunmetalGoldTheme,
       styles: GunmetalGoldStyles,
