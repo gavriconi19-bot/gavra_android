@@ -30,6 +30,7 @@ import 'v3_odrzavanje_screen.dart';
 import 'v3_posiljke_zahtevi_screen.dart';
 import 'v3_putnici_screen.dart';
 import 'v3_radnici_zahtevi_screen.dart';
+import 'v3_statistika_screen.dart';
 import 'v3_ucenici_zahtevi_screen.dart';
 import 'v3_zahtevi_dnevni_screen.dart';
 
@@ -1219,6 +1220,18 @@ class _V3AdminScreenState extends State<V3AdminScreen> {
                           const V3FinansijeScreen(),
                         ),
                         child: const Text('💹', style: TextStyle(fontSize: 20)),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // 📊 Statistika
+                    Expanded(
+                      child: _NavBtn(
+                        color: Colors.cyan,
+                        onTap: () => V3NavigationUtils.pushScreen<void>(
+                          context,
+                          const V3StatistikaScreen(),
+                        ),
+                        child: const Text('📊', style: TextStyle(fontSize: 20)),
                       ),
                     ),
                     const SizedBox(width: 6),

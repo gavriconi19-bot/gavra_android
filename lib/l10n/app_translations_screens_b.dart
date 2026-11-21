@@ -2475,4 +2475,195 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'zh': '等待回复...'
     },
   },
+  'statistikaScreen': {
+    'naslov': {
+      'sr': 'Statistika',
+      'en': 'Statistics',
+      'ru': 'Статистика',
+      'de': 'Statistik',
+      'zh': '统计'
+    },
+    'ukupnoPrevezeno': {
+      'sr': 'Ukupno prevezeno',
+      'en': 'Total transported',
+      'ru': 'Всего перевезено',
+      'de': 'Insgesamt befördert',
+      'zh': '总载客量'
+    },
+    'prosekPoDanu': {
+      'sr': 'Prosek po danu',
+      'en': 'Average per day',
+      'ru': 'В среднем за день',
+      'de': 'Ø pro Tag',
+      'zh': '日均'
+    },
+    'rekordDan': {
+      'sr': 'Najviše u danu',
+      'en': 'Best day',
+      'ru': 'Рекорд за день',
+      'de': 'Bester Tag',
+      'zh': '单日最高'
+    },
+    'rekordNedelja': {
+      'sr': 'Najviše u nedelji',
+      'en': 'Best week',
+      'ru': 'Рекорд за неделю',
+      'de': 'Beste Woche',
+      'zh': '单周最高'
+    },
+    'rekordMesec': {
+      'sr': 'Najviše u mesecu',
+      'en': 'Best month',
+      'ru': 'Рекорд за месяц',
+      'de': 'Bester Monat',
+      'zh': '单月最高'
+    },
+    'rekordGodina': {
+      'sr': 'Najviše u godini',
+      'en': 'Best year',
+      'ru': 'Рекорд за год',
+      'de': 'Bestes Jahr',
+      'zh': '单年最高'
+    },
+    'dan': {
+      'sr': 'Dan',
+      'en': 'Day',
+      'ru': 'День',
+      'de': 'Tag',
+      'zh': '日'
+    },
+    'nedelja': {
+      'sr': 'Nedelja',
+      'en': 'Week',
+      'ru': 'Неделя',
+      'de': 'Woche',
+      'zh': '周'
+    },
+    'mesec': {
+      'sr': 'Mesec',
+      'en': 'Month',
+      'ru': 'Месяц',
+      'de': 'Monat',
+      'zh': '月'
+    },
+    'godina': {
+      'sr': 'Godina',
+      'en': 'Year',
+      'ru': 'Год',
+      'de': 'Jahr',
+      'zh': '年'
+    },
+    'prosekPoNedelji': {
+      'sr': 'Prosek po nedelji',
+      'en': 'Average per week',
+      'ru': 'В среднем за неделю',
+      'de': 'Ø pro Woche',
+      'zh': '周均'
+    },
+    'prosekPoMesecu': {
+      'sr': 'Prosek po mesecu',
+      'en': 'Average per month',
+      'ru': 'В среднем за месяц',
+      'de': 'Ø pro Monat',
+      'zh': '月均'
+    },
+    'prosekPoGodini': {
+      'sr': 'Prosek po godini',
+      'en': 'Average per year',
+      'ru': 'В среднем за год',
+      'de': 'Ø pro Jahr',
+      'zh': '年均'
+    },
+    'prevezeniPoDanima': {
+      'sr': 'Prevezeni putnici po danima',
+      'en': 'Passengers transported per day',
+      'ru': 'Перевезено пассажиров по дням',
+      'de': 'Beförderte Fahrgäste pro Tag',
+      'zh': '每日载客量'
+    },
+    'prevezeniPoNedeljama': {
+      'sr': 'Prevezeni putnici po nedeljama',
+      'en': 'Passengers transported per week',
+      'ru': 'Перевезено пассажиров по неделям',
+      'de': 'Beförderte Fahrgäste pro Woche',
+      'zh': '每周载客量'
+    },
+    'prevezeniPoMesecima': {
+      'sr': 'Prevezeni putnici po mesecima',
+      'en': 'Passengers transported per month',
+      'ru': 'Перевезено пассажиров по месяцам',
+      'de': 'Beförderte Fahrgäste pro Monat',
+      'zh': '每月载客量'
+    },
+    'prevezeniPoGodinama': {
+      'sr': 'Prevezeni putnici po godinama',
+      'en': 'Passengers transported per year',
+      'ru': 'Перевезено пассажиров по годам',
+      'de': 'Beförderte Fahrgäste pro Jahr',
+      'zh': '每年载客量'
+    },
+    'd7': {
+      'sr': '7 dana',
+      'en': '7 days',
+      'ru': '7 дней',
+      'de': '7 Tage',
+      'zh': '7天'
+    },
+    'd30': {
+      'sr': '30 dana',
+      'en': '30 days',
+      'ru': '30 дней',
+      'de': '30 Tage',
+      'zh': '30天'
+    },
+    'd90': {
+      'sr': '90 dana',
+      'en': '90 days',
+      'ru': '90 дней',
+      'de': '90 Tage',
+      'zh': '90天'
+    },
+    'sve': {
+      'sr': 'Sve',
+      'en': 'All',
+      'ru': 'Всё',
+      'de': 'Alle',
+      'zh': '全部'
+    },
+    'sviGradovi': {
+      'sr': 'Svi',
+      'en': 'All',
+      'ru': 'Все',
+      'de': 'Alle',
+      'zh': '全部'
+    },
+    'otkazanoKr': {
+      'sr': 'otk.',
+      'en': 'canc.',
+      'ru': 'отм.',
+      'de': 'storn.',
+      'zh': '取消'
+    },
+    'danas': {
+      'sr': 'DANAS',
+      'en': 'TODAY',
+      'ru': 'СЕГОДНЯ',
+      'de': 'HEUTE',
+      'zh': '今天'
+    },
+    'tekuce': {
+      'sr': 'TEKUĆE',
+      'en': 'CURRENT',
+      'ru': 'ТЕКУЩИЙ',
+      'de': 'LAUFEND',
+      'zh': '当前'
+    },
+    'nemaPodataka': {
+      'sr': 'Nema podataka za izabrani period.',
+      'en': 'No data for the selected period.',
+      'ru': 'Нет данных за выбранный период.',
+      'de': 'Keine Daten für den gewählten Zeitraum.',
+      'zh': '所选期间无数据。'
+    },
+  },
 };

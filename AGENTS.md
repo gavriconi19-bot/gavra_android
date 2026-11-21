@@ -44,7 +44,10 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
 
 - `supabase-service/backup_supabase.ps1` — pg_dump -Fc cele baze + kopija
   .env.admin u `C:\gavra-backups`, dnevno 03:30 (Scheduled Task
-  `GavraSupabase_Backup`), retention 14 dana.
+  `GavraSupabase_Backup`), retention 14 dana. Task je do 2026-11-21 bio
+  pogresno registrovan (putanja skripte u WorkingDirectory umesto -File
+  argumenta, padao sa 0x8007010B) — popravljeno i verifikovano rucnim
+  run-om; StartWhenAvailable ukljucen.
 - Restore: `docker cp` dump u kontejner, pa
   `pg_restore -U supabase_admin -d postgres -c fajl.dump`
 - Dumpovi STARE cloud baze (schema + data, 2026-11-18) cuvaju se u
