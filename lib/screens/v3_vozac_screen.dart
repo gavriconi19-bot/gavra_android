@@ -76,7 +76,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
   bool _loadingDodela = false;
   StreamSubscription<int>? _trenutnaDodelaRevisionSub;
   StreamSubscription<int>? _tablesRevisionSub;
-  StreamSubscription<({Map<String, int> etaMap, List<String> order})>? _etaTickSub;
+  StreamSubscription<({Map<String, int> etaMap, List<String> order, String? reason})>? _etaTickSub;
   StreamSubscription<bool>? _runningSub;
   final V3RouteWaypointResolverService _routeWaypointResolverService = V3RouteWaypointResolverService();
   int? _lastRealtimeTick;
@@ -713,6 +713,22 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
 
     final termin = _findAutoStartTermin();
     if (termin == null) return;
+
+    // Cooldown: isti termin se ne restartuje odmah posle stop-a. Bez ovoga bi
+    // stop (allDone / no_active_slot) → onRunningChanged → auto-start pravio
+    // petlju dok se server-side stanje ne promeni.
+    final t = V3VozacLocationTrackingService.instance;
+    final stoppedAt = t.lastStoppedAt;
+    if (stoppedAt != null &&
+        t.lastStoppedSessionKey == '${termin.datumIso}|${termin.grad}|${termin.vreme}') {
+      const cooldown = Duration(seconds: 45);
+      final since = DateTime.now().difference(stoppedAt);
+      if (since < cooldown) {
+        debugPrint('[V3VozacScreen] auto-start cooldown ${(cooldown - since).inSeconds}s (${termin.grad} ${termin.vreme})');
+        _autoStartTimer = Timer(cooldown - since, () => unawaited(_scheduleAutoStart()));
+        return;
+      }
+    }
 
     final delay = termin.polazak.subtract(v3AutoStartLeadTime).difference(V3BelgradeTime.now());
     if (delay > Duration.zero) {

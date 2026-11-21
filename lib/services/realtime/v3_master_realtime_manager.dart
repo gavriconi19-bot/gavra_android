@@ -1207,7 +1207,9 @@ class V3MasterRealtimeManager {
     final wantVreme = V3BelgradeTime.normalizeToHHmm(vreme);
     final wantDatum = V3BelgradeTime.parseIsoDatePart(datumIso);
 
-    Map<String, dynamic>? activeSlot;
+    // Svi fizički duplikati slota (format vremena) — dodele mogu biti na
+    // bilo kom, isto kao u edge funkciji.
+    final matchingSlots = <Map<String, dynamic>>[];
     for (final row in trenutnaDodelaSlotCache.values) {
       final rowDatum =
           V3BelgradeTime.parseIsoDatePart(row['datum']?.toString() ?? '');
@@ -1216,27 +1218,61 @@ class V3MasterRealtimeManager {
       if (rowDatum == wantDatum &&
           rowGrad == wantGrad &&
           rowVreme == wantVreme) {
-        activeSlot = row;
-        break;
+        matchingSlots.add(row);
       }
     }
-    if (activeSlot == null) return null;
+    if (matchingSlots.isEmpty) return null;
 
-    final slotId = activeSlot['id']?.toString() ?? '';
-    if (slotId.isEmpty) return null;
+    final slotIds = matchingSlots
+        .map((s) => s['id']?.toString() ?? '')
+        .where((sid) => sid.isNotEmpty)
+        .toSet();
+    if (slotIds.isEmpty) return null;
 
     if (trenutnaDodelaCache.isEmpty && operativnaNedeljaCache.isEmpty)
       return null;
 
     final terminIds = <String>{};
+    final otherVozacTerminIds = <String>{};
     for (final row in trenutnaDodelaCache.values) {
-      if (row['slot_id']?.toString() != slotId) continue;
-      if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() != wantVozac)
-        continue;
+      final rowSlotId = row['slot_id']?.toString() ?? '';
+      if (!slotIds.contains(rowSlotId)) continue;
       final tid = row['termin_id']?.toString();
-      if (tid != null && tid.isNotEmpty) terminIds.add(tid);
+      if (tid == null || tid.isEmpty) continue;
+      if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() == wantVozac) {
+        terminIds.add(tid);
+      } else {
+        otherVozacTerminIds.add(tid);
+      }
     }
-    if (terminIds.isEmpty) return false;
+    if (terminIds.isEmpty) {
+      // Prazna dodela ≠ svi gotovi (auto-prepare race) — isto kao DB put u
+      // v3AllPassengersCompleted. Gasi kad ni jedan slot nije moj, ili kad
+      // termin nema aktivnih putnika koji nisu tuđi.
+      final slotIsMine = matchingSlots.any((s) =>
+          (s['vozac_v3_auth_id']?.toString() ?? '').trim() == wantVozac);
+      if (!slotIsMine) return true;
+      if (operativnaNedeljaCache.isEmpty) return null;
+      for (final row in operativnaNedeljaCache.values) {
+        final rowDatum =
+            V3BelgradeTime.parseIsoDatePart(row['datum']?.toString() ?? '');
+        final rowGrad = (row['grad']?.toString() ?? '').trim().toUpperCase();
+        final rowVreme =
+            V3BelgradeTime.normalizeToHHmm(row['polazak_at']?.toString());
+        if (rowDatum != wantDatum || rowGrad != wantGrad || rowVreme != wantVreme) {
+          continue;
+        }
+        final tid = row['id']?.toString() ?? '';
+        if (tid.isEmpty || otherVozacTerminIds.contains(tid)) continue;
+        final active = V3StatusPolicy.canAssign(
+          status: row['status']?.toString(),
+          otkazanoAt: row['otkazano_at'],
+          pokupljenAt: row['pokupljen_at'],
+        );
+        if (active) return false;
+      }
+      return true;
+    }
 
     for (final tid in terminIds) {
       final op = operativnaNedeljaCache[tid] ?? operativnaAssignedCache[tid];

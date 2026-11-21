@@ -74,6 +74,12 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
     return (etaSeconds / 60).round();
   }
 
+  DateTime? _parseRowTimestamp(dynamic raw) {
+    if (raw is DateTime) return raw;
+    if (raw is String && raw.trim().isNotEmpty) return V3BelgradeTime.parseTs(raw.trim());
+    return null;
+  }
+
   DateTime? _parseDepartureDateTime(Map<String, dynamic> row) {
     final datumRaw = row['datum'];
     final polazakRaw = row['polazak_at'];
@@ -308,14 +314,23 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
           final eta = row != null ? (row[_colEtaSeconds] as num?)?.toInt() : null;
           final etaVozacId = row?[_colVozacId]?.toString();
 
+          // Starenje: eta_seconds je snapshot u computed_at — odbrojava se,
+          // inače bi poslednji red pokazivao zamrznutu vrednost i do 55min
+          // posle prestanka trackinga (koliko traje retention u edge-u).
+          int? effectiveEta;
+          if (eta != null) {
+            final computedAt = _parseRowTimestamp(row?['computed_at']);
+            effectiveEta = computedAt == null ? eta : eta - now.difference(computedAt).inSeconds;
+          }
+
           final inTrackingWindow = nextRide != null && _isInEtaTrackingWindow(nextRide.departure, now);
           final vozacMismatch = assignedVozacId != null &&
               etaVozacId != null &&
               assignedVozacId.isNotEmpty &&
               etaVozacId.isNotEmpty &&
               assignedVozacId != etaVozacId;
-          final hasActiveEta = eta != null && inTrackingWindow && !vozacMismatch;
-          final minutes = hasActiveEta ? _buildEtaMinutes(eta) : null;
+          final hasActiveEta = effectiveEta != null && inTrackingWindow && !vozacMismatch;
+          final minutes = hasActiveEta ? _buildEtaMinutes(effectiveEta < 0 ? 0 : effectiveEta) : null;
           final nextRideLabel =
               nextRide == null ? _tr('nemaZakazaneVoznje') : _formatNextRide(nextRide.departure, nextRide.grad);
           final waitingAddress = nextRide == null ? null : _resolveWaitingAddressForRide(nextRide.row);

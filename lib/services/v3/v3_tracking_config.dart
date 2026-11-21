@@ -192,15 +192,26 @@ class V3SelfReschedulingTicker {
   }
 }
 
+/// Operativni region (Bela Crkva / Vršac + okolina) — OSRM mapa pokriva samo
+/// ovo područje, pa je pozicija van box-a loš GPS fix. Edge funkcija
+/// (`v3-compute-eta`) primenjuje isti box; tick sa takvom pozicijom se
+/// preskače (ne piše ni `v3_vozac_location`).
+bool v3IsInOperatingRegion(double lat, double lng) {
+  return lat >= 44.5 && lat <= 45.5 && lng >= 20.6 && lng <= 21.9;
+}
+
 /// Parsira odgovor edge funkcije `v3-compute-eta`.
 ///
 /// Jednostavno: ok=true → etaMap (putnik_id → sekunde) + optimized_order.
 /// ok=false / prazno → prazan rezultat (pozivalac zadržava prethodni order).
-({Map<String, int> etaMap, List<String> order}) v3ParseEtaResponse(dynamic data) {
+/// `reason` nosi edge razlog (`no_active_slot`, `fallback` razlozi...) ili
+/// klijentski razlog ranog izlaska (`out_of_region`).
+({Map<String, int> etaMap, List<String> order, String? reason}) v3ParseEtaResponse(dynamic data) {
   final etaMap = <String, int>{};
   final order = <String>[];
   if (data is! Map || data['ok'] != true) {
-    return (etaMap: etaMap, order: order);
+    final reason = data is Map ? data['reason']?.toString() : null;
+    return (etaMap: etaMap, order: order, reason: reason);
   }
 
   final etaList = data['eta_results'];
@@ -223,7 +234,7 @@ class V3SelfReschedulingTicker {
     }
   }
 
-  return (etaMap: etaMap, order: order);
+  return (etaMap: etaMap, order: order, reason: data['reason']?.toString());
 }
 
 /// Prag brzine (m/s) ispod kojeg se vozač računa da stoji — 1 m/s ≈ 3.6 km/h,
@@ -237,8 +248,9 @@ const double _v3StandstillMovedMeters = 15;
 /// bez cap-a ETA bi rastao neograničeno. Uskladiti sa edge funkcijom.
 const Duration v3StandstillPenaltyCap = Duration(minutes: 20);
 
-/// Akumulirane sekunde stajanja od polaska — po isolate-u (main i FGS imaju
-/// svoje kopije; prelazak FG↔BG resetuje brojač, ETA se nakratko vrati).
+/// Sekunde trenutnog stajanja (resetuje se kad vozač krene) — po isolate-u
+/// (main i FGS imaju svoje kopije; prelazak FG↔BG resetuje brojač, ETA se
+/// nakratko vrati).
 int _standstillSeconds = 0;
 DateTime? _standstillPrevTickAt;
 Position? _standstillPrevPos;
@@ -249,7 +261,7 @@ Position? _standstillPrevPos;
 /// preskočili ETA. Trenutna GPS lokacija ide u tabelu i u payload edge funkcije
 /// (payload je preferiran izvor da se izbegne race/clock na updated_at).
 /// Koriste ga i foreground servis i background isolate.
-Future<({Map<String, int> etaMap, List<String> order})> v3RunTrackingTick({
+Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTrackingTick({
   required SupabaseClient client,
   required String vozacId,
   required String grad,
@@ -271,6 +283,16 @@ Future<({Map<String, int> etaMap, List<String> order})> v3RunTrackingTick({
     if (last == null) rethrow;
     debugPrint('$logTag getCurrentPosition timeout — koristim getLastKnownPosition fallback');
     position = last;
+  }
+
+  // Loš fix van operativnog regiona ne sme ni u tabelu ni u ETA ni u
+  // standstill akumulaciju — OSRM mapa ne pokriva to područje, a
+  // `v3_vozac_location` bi dobila otrovane podatke.
+  if (!v3IsInOperatingRegion(position.latitude, position.longitude)) {
+    debugPrint(
+      '$logTag pozicija van regiona ${position.latitude},${position.longitude} — tick preskočen',
+    );
+    return (etaMap: <String, int>{}, order: <String>[], reason: 'out_of_region');
   }
 
   // Standstill kazna: akumulira se tek od polaska (T-15 čekanje je planirano)
@@ -364,35 +386,67 @@ Future<bool> v3AllPassengersCompleted({
   } catch (_) {}
 
   try {
-    // Isto kao edge: datum+grad, pa match HH:mm (DB može biti 07:00 ili 07:00:00).
-    final slotRows =
-        await client.from('v3_trenutna_dodela_slot').select('id, vreme').eq('datum', datumIso).eq('grad', grad);
+    // Isto kao edge: datum+grad, pa match HH:mm (DB može biti 07:00 ili
+    // 07:00:00). Svih fizičkih duplikata — dodele mogu biti na bilo kom.
+    final slotRows = await client
+        .from('v3_trenutna_dodela_slot')
+        .select('id, vreme, vozac_v3_auth_id')
+        .eq('datum', datumIso)
+        .eq('grad', grad);
 
     final wantVreme = V3BelgradeTime.normalizeToHHmm(vreme);
-    Map<String, dynamic>? activeSlot;
+    final matchingSlots = <Map<String, dynamic>>[];
     for (final raw in (slotRows as List<dynamic>? ?? const [])) {
       if (raw is! Map) continue;
       final row = Map<String, dynamic>.from(raw);
       if (V3BelgradeTime.normalizeToHHmm(row['vreme']?.toString()) == wantVreme) {
-        activeSlot = row;
-        break;
+        matchingSlots.add(row);
       }
     }
-    if (activeSlot == null) return false;
+    if (matchingSlots.isEmpty) return false;
+
+    final slotIds = matchingSlots
+        .map((s) => s['id']?.toString() ?? '')
+        .where((sid) => sid.isNotEmpty)
+        .toList();
+    if (slotIds.isEmpty) return false;
 
     final dodelaRows = await client
         .from('v3_trenutna_dodela')
-        .select('termin_id')
-        .eq('slot_id', activeSlot['id'])
-        .eq('vozac_v3_auth_id', id);
+        .select('termin_id, vozac_v3_auth_id')
+        .inFilter('slot_id', slotIds);
 
-    final slotTerminIds = (dodelaRows as List<dynamic>?)
-        ?.map((r) => (r as Map<String, dynamic>)['termin_id']?.toString())
-        .where((tid) => tid != null && tid.isNotEmpty)
-        .toSet();
+    final slotTerminIds = <String>{};
+    final otherVozacTerminIds = <String>{};
+    for (final raw in (dodelaRows as List<dynamic>? ?? const [])) {
+      if (raw is! Map) continue;
+      final row = Map<String, dynamic>.from(raw);
+      final tid = row['termin_id']?.toString() ?? '';
+      if (tid.isEmpty) continue;
+      if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() == id) {
+        slotTerminIds.add(tid);
+      } else {
+        otherVozacTerminIds.add(tid);
+      }
+    }
 
-    // Ako nema dodeljenih putnika, tracking se gasi.
-    if (slotTerminIds == null || slotTerminIds.isEmpty) return true;
+    if (slotTerminIds.isEmpty) {
+      // Prazna dodela ≠ svi gotovi: dodele mogu kasniti (auto-prepare race u
+      // T-15 prozoru). Gasi samo kad tracking nema šta da radi:
+      //  - nijedan fizički slot nije dodeljen ovom vozaču (transfer), ili
+      //  - termin nema aktivnih putnika koji nisu tuđi.
+      // Inače bi stop → auto-start → stop pravilo petlju.
+      final slotIsMine = matchingSlots
+          .any((s) => (s['vozac_v3_auth_id']?.toString() ?? '').trim() == id);
+      if (!slotIsMine) return true;
+      return !(await _v3TerminHasUnassignedActivePassengers(
+        client: client,
+        datumIso: datumIso,
+        grad: grad,
+        wantVreme: wantVreme,
+        otherVozacTerminIds: otherVozacTerminIds,
+      ));
+    }
 
     final rows = await client
         .from('v3_operativna_nedelja')
@@ -411,6 +465,43 @@ Future<bool> v3AllPassengersCompleted({
     debugPrint('[v3AllPassengersCompleted] greška: $e');
     return false;
   }
+}
+
+/// Ima li termin (datum+grad+vreme) bar jednog aktivnog putnika koji nije
+/// individualno dodeljen drugom vozaču — isti kriterijum kao
+/// `V3VozacScreen._terminHasActivePassengers`, ali direktno iz baze
+/// (BG isolate nema realtime cache).
+Future<bool> _v3TerminHasUnassignedActivePassengers({
+  required SupabaseClient client,
+  required String datumIso,
+  required String grad,
+  required String wantVreme,
+  required Set<String> otherVozacTerminIds,
+}) async {
+  try {
+    final rows = await client
+        .from('v3_operativna_nedelja')
+        .select('id, datum, polazak_at, pokupljen_at, otkazano_at, status')
+        .eq('grad', grad);
+
+    for (final raw in (rows as List<dynamic>? ?? const [])) {
+      if (raw is! Map) continue;
+      final row = Map<String, dynamic>.from(raw);
+      if (V3BelgradeTime.parseIsoDatePart(row['datum']?.toString() ?? '') != datumIso) continue;
+      if (V3BelgradeTime.normalizeToHHmm(row['polazak_at']?.toString()) != wantVreme) continue;
+      final terminId = row['id']?.toString() ?? '';
+      if (terminId.isEmpty || otherVozacTerminIds.contains(terminId)) continue;
+      final active = V3StatusPolicy.canAssign(
+        status: row['status']?.toString(),
+        otkazanoAt: row['otkazano_at'],
+        pokupljenAt: row['pokupljen_at'],
+      );
+      if (active) return true;
+    }
+  } catch (e) {
+    debugPrint('[_v3TerminHasUnassignedActivePassengers] greška: $e');
+  }
+  return false;
 }
 
 /// Rezultat provere GPS + Always dozvole pre starta trackinga.

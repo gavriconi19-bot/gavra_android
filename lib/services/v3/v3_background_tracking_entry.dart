@@ -25,6 +25,7 @@ Future<void> onStart(ServiceInstance service) async {
   String? vreme;
   DateTime? startedAt;
   DateTime? polazakAt;
+  int noSlotStrikes = 0;
   V3SelfReschedulingTicker? ticker;
   Timer? expiryWatchdog;
   SupabaseClient? client;
@@ -64,6 +65,7 @@ Future<void> onStart(ServiceInstance service) async {
     vreme = null;
     startedAt = null;
     polazakAt = null;
+    noSlotStrikes = 0;
   }
 
   void pauseTicks() {
@@ -96,15 +98,7 @@ Future<void> onStart(ServiceInstance service) async {
     if (client == null) return;
 
     try {
-      await v3RunTrackingTick(
-        client: client!,
-        vozacId: vozacId!,
-        grad: grad!,
-        vreme: vreme!,
-        datumIso: datumIso!,
-        logTag: '[BG_TRACKING]',
-      );
-
+      // allDone pre tick-a (kao FG): jeftinije, bez suvišnog compute-eta.
       final allDone = await v3AllPassengersCompleted(
         client: client!,
         vozacId: vozacId!,
@@ -114,6 +108,29 @@ Future<void> onStart(ServiceInstance service) async {
       );
       if (allDone) {
         finishAndStop('all_passengers_completed');
+        return;
+      }
+
+      final result = await v3RunTrackingTick(
+        client: client!,
+        vozacId: vozacId!,
+        grad: grad!,
+        vreme: vreme!,
+        datumIso: datumIso!,
+        logTag: '[BG_TRACKING]',
+      );
+
+      // Isti guard kao FG: slot obrisan u hodu → no_active_slot zauvek.
+      // Strikes se broje tek od polazka (pre toga auto-prepare može kasniti).
+      final postDeparture = polazakAt == null || !V3BelgradeTime.now().isBefore(polazakAt!);
+      if (result.reason == 'no_active_slot' && postDeparture) {
+        noSlotStrikes++;
+        if (noSlotStrikes >= 6) {
+          finishAndStop('no_active_slot');
+          return;
+        }
+      } else {
+        noSlotStrikes = 0;
       }
     } catch (e) {
       debugPrint('[BG_TRACKING] tick greška: $e');
@@ -136,6 +153,7 @@ Future<void> onStart(ServiceInstance service) async {
     datumIso = datum;
     grad = g;
     vreme = v;
+    noSlotStrikes = 0;
     startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();
     polazakAt = V3BelgradeTime.parseTs(m['polazak_at']?.toString()) ?? v3PolazakDateTime(datumIso: datum, vreme: v);
     debugPrint('[BG_TRACKING] start $g $v polazak=$polazakAt');

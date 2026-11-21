@@ -79,11 +79,17 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>?>? _bgEndedSub;
   StreamSubscription<Position>? _iosKeepAliveSub;
   bool _tickInFlight = false;
+  int _noSlotStrikes = 0;
+
+  /// Poslednja stop-ovana sesija — ekran je koristi za cooldown na auto-restart
+  /// istog termina (allDone/no_active_slot petlja).
+  String _lastStoppedSessionKey = '';
+  DateTime? _lastStoppedAt;
 
   final List<String> _optimizedPutnikIds = [];
 
-  final StreamController<({Map<String, int> etaMap, List<String> order})> _etaTickController =
-      StreamController<({Map<String, int> etaMap, List<String> order})>.broadcast();
+  final StreamController<({Map<String, int> etaMap, List<String> order, String? reason})> _etaTickController =
+      StreamController<({Map<String, int> etaMap, List<String> order, String? reason})>.broadcast();
 
   final StreamController<bool> _runningController = StreamController<bool>.broadcast();
 
@@ -95,7 +101,12 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   String get activeGrad => _isRunning ? _grad : '';
   String get activeVreme => _isRunning ? _vreme : '';
 
-  Stream<({Map<String, int> etaMap, List<String> order})> get onEtaTick => _etaTickController.stream;
+  /// Ključ poslednje stop-ovane sesije (`datum|grad|vreme`) i kada je stopovana.
+  String get lastStoppedSessionKey => _lastStoppedSessionKey;
+  DateTime? get lastStoppedAt => _lastStoppedAt;
+
+  Stream<({Map<String, int> etaMap, List<String> order, String? reason})> get onEtaTick =>
+      _etaTickController.stream;
   Stream<bool> get onRunningChanged => _runningController.stream;
 
   void _setRunning(bool value) {
@@ -388,6 +399,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     debugPrint('$_tag stop()');
     try {
       _startInProgress = false;
+      if (_vozacId.isNotEmpty) {
+        _lastStoppedSessionKey = '$_datumIso|$_grad|$_vreme';
+        _lastStoppedAt = DateTime.now();
+      }
       _vozacId = '';
       _datumIso = '';
       _grad = '';
@@ -396,6 +411,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _startedAt = null;
       _lastTickAt = null;
       _optimizedPutnikIds.clear();
+      _noSlotStrikes = 0;
       _setRunning(false);
 
       _fgTicker?.cancel();
@@ -412,13 +428,15 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   }
 
   /// Jednokratni GPS+ETA (UI resume / reoptimizacija).
-  Future<({Map<String, int> etaMap, List<String> order})> fetchPositionAndComputeEta() async {
-    if (_vozacId.isEmpty) return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds));
+  Future<({Map<String, int> etaMap, List<String> order, String? reason})> fetchPositionAndComputeEta() async {
+    if (_vozacId.isEmpty) {
+      return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds), reason: null);
+    }
     try {
       return await _runTick();
     } catch (e) {
       debugPrint('$_tag fetchPositionAndComputeEta error: $e');
-      return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds));
+      return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds), reason: null);
     }
   }
 
@@ -458,7 +476,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     debugPrint('$_tag iOS location keep-alive stop');
   }
 
-  Future<({Map<String, int> etaMap, List<String> order})> _runTick() async {
+  Future<({Map<String, int> etaMap, List<String> order, String? reason})> _runTick() async {
     final result = await v3RunTrackingTick(
       client: Supabase.instance.client,
       vozacId: _vozacId,
@@ -502,7 +520,23 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         await stop();
         return;
       }
-      await _runTick();
+      final result = await _runTick();
+
+      // Slot obrisan u hodu (admin) → edge vraća no_active_slot a
+      // allPassengersCompleted ne može da dokaze "gotovo". Pre polaska je
+      // no_active_slot legitiman (auto-prepare kasni), pa strikes brojimo
+      // tek od polazka; posle ~30s konzistentnog odgovora gasimo.
+      final postDeparture = _polazakAt == null || !V3BelgradeTime.now().isBefore(_polazakAt!);
+      if (result.reason == 'no_active_slot' && postDeparture) {
+        _noSlotStrikes++;
+        if (_noSlotStrikes >= 6) {
+          debugPrint('$_tag stop reason=no_active_slot strikes=$_noSlotStrikes');
+          await stop();
+          return;
+        }
+      } else {
+        _noSlotStrikes = 0;
+      }
     } catch (e) {
       debugPrint('$_tag tick error: $e');
     } finally {
@@ -646,7 +680,12 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       await v3SaveBgTrackingSession(_sessionPayload(ticksPaused: true));
       final service = FlutterBackgroundService();
       if (!await service.isRunning()) return;
-      service.invoke('pauseTicks');
+      // servicePipe može dropovati event — retry kao u _startBg, inače bi BG
+      // ticker nastavio paralelno sa FG (dupli upis lokacije + dupli ETA).
+      for (var i = 0; i < 3; i++) {
+        service.invoke('pauseTicks');
+        if (i < 2) await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
     } catch (e) {
       debugPrint('$_tag BG pause greška: $e');
     }

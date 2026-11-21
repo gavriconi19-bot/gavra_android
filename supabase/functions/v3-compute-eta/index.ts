@@ -15,6 +15,23 @@ const ETA_RETENTION_SECONDS = (15 + 40) * 60; // 3300
 /// lat/lng u payload-u. Tracking tick šalje lokaciju svakih 5s.
 const DRIVER_LOCATION_MAX_AGE_MS = 130 * 1000;
 
+/// Operativni region (Bela Crkva / Vršac + okolina) — OSRM mapa pokriva samo
+/// ovo područje, pa koordinate van box-a nisu rutabilne. Dodatno: endpoint
+/// nema user-JWT (app koristi anon key + custom PIN), pa je ovo i jedina
+/// zaštita od očiglednog spoofing-a driver lokacije kroz payload.
+/// Uskladiti sa `v3IsInOperatingRegion` u v3_tracking_config.dart.
+const REGION_LAT_MIN = 44.5;
+const REGION_LAT_MAX = 45.5;
+const REGION_LNG_MIN = 20.6;
+const REGION_LNG_MAX = 21.9;
+
+function inOperatingRegion(lat: number, lng: number): boolean {
+  return (
+    lat >= REGION_LAT_MIN && lat <= REGION_LAT_MAX &&
+    lng >= REGION_LNG_MIN && lng <= REGION_LNG_MAX
+  );
+}
+
 /// OSRM retry konfiguracija
 const OSRM_MAX_RETRIES = 3;
 const OSRM_BASE_DELAY_MS = 1000;
@@ -35,7 +52,7 @@ type ComputeEtaPayload = {
   /** Svež GPS iz istog tick-a (preferiran nad v3_vozac_location). */
   lat?: number | string;
   lng?: number | string;
-  /** Sekunde koliko vozač stoji u mestu (akumulacija na klijentu, od polaska). */
+  /** Trajanje trenutnog stajanja u sekundama (resetuje se kad vozač krene). */
   standstill_seconds?: number | string;
 };
 
@@ -92,7 +109,7 @@ function etaRowsFromFixedOrder(
   vozac_id: string;
   eta_seconds: number;
   computed_at: string;
-}> {
+}> | null {
   const upsertRows: Array<{
     slot_id: string;
     termin_id: string;
@@ -105,8 +122,10 @@ function etaRowsFromFixedOrder(
   for (let i = 0; i < ordered.length; i++) {
     const duration = Number(legs[i]?.duration ?? -1);
     if (!Number.isFinite(duration) || duration < 0) {
+      // null = fatalno: preskočen leg bi umanjio ETA svima iza njega —
+      // pozivalac pada na fallback (poslednji dobar order + ETA).
       console.warn(`[v3-compute-eta] leg[${i}] duration invalid: ${duration}`);
-      continue;
+      return null;
     }
     cumulative += Math.round(duration);
     upsertRows.push({
@@ -261,7 +280,9 @@ async function fillMissingPassengerGps(
 }
 
 /// Preferira lat/lng iz tick payload-a (isti request kao GPS fix).
-/// Fallback: v3_vozac_location ako je dovoljno sveža.
+/// Fallback: v3_vozac_location ako je dovoljno sveža i u regionu.
+/// Oba izvora prolaze `inOperatingRegion` — payload van regiona je loš fix
+/// ili spoof (endpoint nema auth), pa pada na tabelu / odbija se.
 async function resolveDriverLocation(
   client: ReturnType<typeof createClient>,
   vozacId: string,
@@ -270,8 +291,11 @@ async function resolveDriverLocation(
 ): Promise<{ lat: number; lng: number; source: "payload" | "table" } | null> {
   const pLat = parseCoord(payloadLat);
   const pLng = parseCoord(payloadLng);
-  if (pLat != null && pLng != null) {
+  if (pLat != null && pLng != null && inOperatingRegion(pLat, pLng)) {
     return { lat: pLat, lng: pLng, source: "payload" };
+  }
+  if (pLat != null && pLng != null) {
+    console.warn(`[v3-compute-eta] payload location out_of_region ${pLat},${pLng}`);
   }
 
   const { data: row, error } = await client
@@ -285,6 +309,10 @@ async function resolveDriverLocation(
   const lat = parseCoord(row.lat);
   const lng = parseCoord(row.lng);
   if (lat == null || lng == null) return null;
+  if (!inOperatingRegion(lat, lng)) {
+    console.warn(`[v3-compute-eta] table location out_of_region ${lat},${lng}`);
+    return null;
+  }
 
   const tsRaw = row.updated_at;
   const ts = typeof tsRaw === "string" ? Date.parse(tsRaw) : NaN;
@@ -633,7 +661,11 @@ Deno.serve(async (req) => {
       const entry = originalIndexToEntry[Number(pw.inputIndex)];
       if (entry) tripOrdered.push(entry);
     }
-    upsertRows = etaRowsFromFixedOrder(tripOrdered, legs, upsertCtx);
+    const builtRows = etaRowsFromFixedOrder(tripOrdered, legs, upsertCtx);
+    if (builtRows === null) {
+      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_invalid_leg");
+    }
+    upsertRows = builtRows;
 
     // Isti putnik može imati više termina na slotu (2+ reda u dodeli) —
     // upsert sa onConflict "slot_id,putnik_id" pada na duplikatu
