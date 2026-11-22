@@ -1990,7 +1990,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.onPrimary,
+                  color: Colors.white,
                   shadows: const [Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black54)],
                 ),
               ),
@@ -2037,7 +2037,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: Theme.of(context).colorScheme.onPrimary,
+                      color: Colors.white,
                       shadows: const [Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black54)],
                     ),
                   ),

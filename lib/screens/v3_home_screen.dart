@@ -1227,7 +1227,7 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w800,
-                                            color: Theme.of(context).colorScheme.onPrimary,
+                                            color: Colors.white,
                                             letterSpacing: 1.4,
                                             shadows: const [
                                               Shadow(blurRadius: 12, color: Colors.black87),
@@ -1242,7 +1242,7 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
                                 Text(
                                   aktivnaNedelja,
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.85),
+                                    color: Colors.white.withValues(alpha: 0.85),
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1263,7 +1263,7 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
                                         child: Center(
                                           child: V3LiveClockText(
                                             style: TextStyle(
-                                              color: Theme.of(context).colorScheme.onPrimary,
+                                              color: Colors.white,
                                               fontWeight: FontWeight.w700,
                                               fontSize: 14,
                                             ),
@@ -1287,7 +1287,7 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
                                               child: Text(
                                                 _trDan(_selectedDay),
                                                 style: TextStyle(
-                                                  color: Theme.of(context).colorScheme.onPrimary,
+                                                  color: Colors.white,
                                                   fontWeight: FontWeight.w600,
                                                   fontSize: 14,
                                                 ),
@@ -1433,7 +1433,7 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
                                         mainAxisSize: MainAxisSize.min,
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.print, color: Theme.of(context).colorScheme.onPrimary, size: 18),
+                                          Icon(Icons.print, color: Colors.white, size: 18),
                                           const SizedBox(height: 4),
                                           SizedBox(
                                             height: V3ContainerUtils.responsiveHeight(context, 16),
@@ -1626,7 +1626,7 @@ class _V3HomeButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.onPrimary, size: 18),
+            Icon(icon, color: Colors.white, size: 18),
             const SizedBox(height: 4),
             SizedBox(
               height: V3ContainerUtils.responsiveHeight(context, 16),
@@ -1635,7 +1635,7 @@ class _V3HomeButton extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimary,
+                    color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     shadows: const [
