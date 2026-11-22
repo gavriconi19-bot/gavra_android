@@ -317,8 +317,56 @@ class V3OperativnaNedeljaService {
     bool? koristiSekundarnu,
     String? adresaIdOverride,
   }) async {
+    final actor = V3UuidUtils.normalizeUuid(createdBy);
+
+    // Brza putanja: fn_v3_vozac_putnik_upsert radi ceo tok u 1 pozivu
+    // (zahtev 'odobreno' + trigger upsertuje kanonski operativna red i
+    // dodelu). Ranije: 4-6 sekvencijalnih REST poziva kroz Funnel.
     try {
-      final actor = V3UuidUtils.normalizeUuid(createdBy);
+      final data = await supabase.rpc('fn_v3_vozac_putnik_upsert', params: {
+        'p_putnik_id': putnikId,
+        'p_datum': datum,
+        'p_grad': grad,
+        'p_polazak_at': polazakAt,
+        'p_actor': actor,
+        'p_koristi_sekundarnu': koristiSekundarnu,
+        'p_adresa_override_id': adresaIdOverride,
+      });
+      if (data is Map && data['ok'] == true) {
+        final zahtev = data['zahtev'];
+        if (zahtev is Map) {
+          V3MasterRealtimeManager.instance.v3UpsertToCache(
+            'v3_zahtevi',
+            Map<String, dynamic>.from(zahtev),
+          );
+        }
+        final sve = data['operativna_sve'];
+        if (sve is List) {
+          for (final row in sve) {
+            if (row is Map) {
+              V3MasterRealtimeManager.instance.v3UpsertToCache(
+                'v3_operativna_nedelja',
+                Map<String, dynamic>.from(row),
+              );
+            }
+          }
+        } else {
+          final operativna = data['operativna'];
+          if (operativna is Map) {
+            V3MasterRealtimeManager.instance.v3UpsertToCache(
+              'v3_operativna_nedelja',
+              Map<String, dynamic>.from(operativna),
+            );
+          }
+        }
+        return;
+      }
+      debugPrint('[V3OperativnaNedeljaService] putnik_upsert RPC razlog: ${data is Map ? data['reason'] : data} — REST fallback');
+    } catch (e) {
+      debugPrint('[V3OperativnaNedeljaService] putnik_upsert RPC fallback: $e');
+    }
+
+    try {
       // Provjeri postoji li već zapis
       final cache = V3MasterRealtimeManager.instance.operativnaNedeljaCache.values;
       final postojeci = cache.where((r) {

@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+
+import '../../globals.dart';
 import '../../utils/v3_belgrade_time.dart';
 import '../../utils/v3_putnik_id_resolver.dart';
 import 'v3_trenutna_dodela_service.dart';
@@ -17,6 +20,26 @@ class V3DodelaOrchestratorService {
     required bool Function(Map<String, dynamic> row) includeRow,
   }) async {
     final normVreme = V3BelgradeTime.normalizeToHHmm(vreme);
+
+    // Brza putanja: fn_v3_dodela_termina radi delete + slot upsert +
+    // bulk dodelu u 1 pozivu (ranije 3 sekvencijalna REST poziva).
+    try {
+      final data = await supabase.rpc('fn_v3_dodela_termina', params: {
+        'p_datum': datumIso,
+        'p_grad': grad,
+        'p_vreme': normVreme,
+        'p_vozac_id': vozacId,
+        'p_vozilo_id': voziloId,
+        'p_actor': updatedBy,
+      });
+      if (data is Map && data['ok'] == true) {
+        final assigned = data['assigned'];
+        return assigned is int ? assigned : (assigned as num?)?.toInt() ?? 0;
+      }
+      debugPrint('[V3DodelaOrchestrator] dodela_termina RPC razlog: ${data is Map ? data['reason'] : data} — REST fallback');
+    } catch (e) {
+      debugPrint('[V3DodelaOrchestrator] dodela_termina RPC fallback: $e');
+    }
 
     final matchedRows = _rowsForSlot(
       operativnaRows: operativnaRows,
@@ -63,6 +86,25 @@ class V3DodelaOrchestratorService {
     required bool Function(Map<String, dynamic> row) includeRow,
   }) async {
     final normVreme = V3BelgradeTime.normalizeToHHmm(vreme);
+
+    // Brza putanja: p_vozac_id NULL = uklanjanje (slot + dodele u 1 pozivu).
+    try {
+      final data = await supabase.rpc('fn_v3_dodela_termina', params: {
+        'p_datum': datumIso,
+        'p_grad': grad,
+        'p_vreme': normVreme,
+        'p_vozac_id': null,
+        'p_vozilo_id': null,
+        'p_actor': null,
+      });
+      if (data is Map && data['ok'] == true) {
+        final cleared = data['cleared'];
+        return cleared is int ? cleared : (cleared as num?)?.toInt() ?? 0;
+      }
+      debugPrint('[V3DodelaOrchestrator] dodela_termina(clear) RPC razlog: ${data is Map ? data['reason'] : data} — REST fallback');
+    } catch (e) {
+      debugPrint('[V3DodelaOrchestrator] dodela_termina(clear) RPC fallback: $e');
+    }
 
     await V3TrenutnaDodelaSlotService.deleteBySlot(
       datumIso: datumIso,

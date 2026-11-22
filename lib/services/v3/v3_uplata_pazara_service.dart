@@ -107,6 +107,27 @@ class V3UplataPazaraService {
       debugPrint(
           '[V3UplataPazaraService] sacuvajDnevnuUplatu: vozacId=$id, dan=$dan.$mesec.$godina, predao=$predao, ukupno=$ukupno, zahtevanUnos=$zahtevanUnos, saberiSaPostojecimPredao=$saberiSaPostojecimPredao');
 
+      // Brza putanja: fn_v3_pazar_sacuvaj radi merge dnevne stavke na
+      // FOR UPDATE redu u 1 pozivu (ranije fetch + write kroz Funnel).
+      try {
+        final data = await supabase.rpc('fn_v3_pazar_sacuvaj', params: {
+          'p_vozac_id': id,
+          'p_datum': V3BelgradeTime.toIsoDate(datum),
+          'p_predao': predao,
+          'p_ukupno': ukupno,
+          'p_zahtevan_unos': zahtevanUnos,
+          'p_saberi_sa_postojecim': saberiSaPostojecimPredao,
+        });
+        if (data is Map && data['ok'] == true) {
+          final row = data['uplata'];
+          debugPrint('[V3UplataPazaraService] sacuvajDnevnuUplatu: uspešno (RPC)');
+          return row is Map ? V3UplataPazara.fromJson(Map<String, dynamic>.from(row)) : null;
+        }
+        debugPrint('[V3UplataPazaraService] pazar_sacuvaj RPC razlog: ${data is Map ? data['reason'] : data} — REST fallback');
+      } catch (e) {
+        debugPrint('[V3UplataPazaraService] pazar_sacuvaj RPC fallback: $e');
+      }
+
       try {
         final existing = await _fetchMonthRow(id, mesec, godina);
         final uplata = existing != null ? V3UplataPazara.fromJson(existing) : null;
@@ -165,6 +186,26 @@ class V3UplataPazaraService {
     final saveKey = '$id-$godina-$mesec-$dan';
 
     return _enqueue(saveKey, () async {
+      // Brza putanja: fn_v3_pazar_sync_zahtev radi merge na FOR UPDATE
+      // redu u 1 pozivu; bila_predaja dolazi iz baze.
+      try {
+        final data = await supabase.rpc('fn_v3_pazar_sync_zahtev', params: {
+          'p_vozac_id': id,
+          'p_datum': V3BelgradeTime.toIsoDate(datum),
+          'p_ukupno': ukupno,
+        });
+        if (data is Map && data['ok'] == true) {
+          final row = data['uplata'];
+          return (
+            uplata: row is Map ? V3UplataPazara.fromJson(Map<String, dynamic>.from(row)) : null,
+            bilaPredaja: data['bila_predaja'] == true,
+          );
+        }
+        debugPrint('[V3UplataPazaraService] pazar_sync_zahtev RPC razlog: ${data is Map ? data['reason'] : data} — REST fallback');
+      } catch (e) {
+        debugPrint('[V3UplataPazaraService] pazar_sync_zahtev RPC fallback: $e');
+      }
+
       try {
         final existing = await _fetchMonthRow(id, mesec, godina);
         final uplataPostojeca = existing != null ? V3UplataPazara.fromJson(existing) : null;

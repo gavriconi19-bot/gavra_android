@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../globals.dart';
 import '../../models/v3_dug.dart';
 import '../../models/v3_finansije.dart';
 import '../../utils/v3_belgrade_time.dart';
 import '../../utils/v3_putnik_id_resolver.dart';
+import '../../utils/v3_uuid_utils.dart';
 import '../realtime/v3_master_realtime_manager.dart';
 import 'repositories/v3_finansije_repository.dart';
 
@@ -1932,6 +1934,34 @@ class V3FinansijeService {
     };
 
     try {
+      // Brza putanja: fn_v3_mesecna_naplata radi ceo tok u 1 pozivu
+      // (preneti visak -> consume nenaplacenih -> append uplata -> skalari
+      // iz uplate_json), uz advisory lock po putnik+mesec koji zamenjuje
+      // _mesecnaNaplataLocks + unique-race retry ispod. Legacy REST
+      // putanja ostaje kao fallback.
+      try {
+        final data = await supabase.rpc('fn_v3_mesecna_naplata', params: {
+          'p_putnik_id': safePutnikId,
+          'p_naplatio_by': V3UuidUtils.normalizeUuid(naplacenoBy),
+          'p_iznos': iznos,
+          'p_mesec': mesec,
+          'p_godina': godina,
+        });
+        if (data is Map && data['ok'] == true) {
+          final fin = data['finansije'];
+          if (fin is Map) {
+            V3MasterRealtimeManager.instance.v3UpsertToCache(
+              'v3_finansije',
+              Map<String, dynamic>.from(fin),
+            );
+          }
+          return;
+        }
+        debugPrint('[V3FinansijeService] mesecna_naplata RPC razlog: ${data is Map ? data['reason'] : data} — REST fallback');
+      } catch (e) {
+        debugPrint('[V3FinansijeService] mesecna_naplata RPC fallback: $e');
+      }
+
       // Do 2 pokusaja: ako master red nastane u trci sa DB triggerom
       // (unique index na putnik+mesec+godina), osvezi kes iz baze i primeni
       // uplatu na postojeci red umesto da nastane duplikat.

@@ -977,17 +977,38 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       final tokenResult = await V3PushTokenProvider.getBestToken();
       final hardwareId = await V3DeviceIdentityService.getHardwareId();
       final installationId = await V3PushTokenProvider.getInstallationId();
-      final response = await supabase.functions.invoke(
-        'v3-alternativa-action',
-        body: {
-          'zahtev_id': zahtevId,
-          'action': prihvati ? 'accept_pre' : 'reject',
-          'device_token': tokenResult?.token.trim() ?? '',
-          'hardware_id': hardwareId ?? '',
-          'installation_id': installationId?.trim() ?? '',
-        },
-      );
-      final data = response.data;
+      final action = prihvati ? 'accept_pre' : 'reject';
+      final deviceToken = tokenResult?.token.trim() ?? '';
+      final hwId = hardwareId ?? '';
+      final instId = installationId?.trim() ?? '';
+
+      // Brza putanja: fn_v3_alternativa_action RPC radi istu device-identity
+      // proveru i kapacitet/expiry logiku u plpgsql (~0.3s vs 1-4s edge cold
+      // start). Edge invoke ostaje kao fallback (isti pattern kao
+      // fn_v3_verify_login).
+      dynamic data;
+      try {
+        data = await supabase.rpc('fn_v3_alternativa_action', params: {
+          'p_zahtev_id': zahtevId,
+          'p_action': action,
+          'p_device_token': deviceToken,
+          'p_hardware_id': hwId,
+          'p_installation_id': instId,
+        });
+      } catch (e) {
+        debugPrint('[Alternativa] RPC fallback na edge: $e');
+        final response = await supabase.functions.invoke(
+          'v3-alternativa-action',
+          body: {
+            'zahtev_id': zahtevId,
+            'action': action,
+            'device_token': deviceToken,
+            'hardware_id': hwId,
+            'installation_id': instId,
+          },
+        );
+        data = response.data;
+      }
       final ok = data is Map && data['ok'] == true;
       final reason = data is Map ? (data['reason'] ?? '').toString() : '';
       if (!mounted) return;

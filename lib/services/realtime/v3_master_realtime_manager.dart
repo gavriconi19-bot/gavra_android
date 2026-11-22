@@ -865,18 +865,6 @@ class V3MasterRealtimeManager {
       _rebuildRoleCachesFromAuth();
     }
 
-    if (config.name == 'v3_operativna_nedelja' &&
-        payload.eventType != PostgresChangeEvent.delete &&
-        payload.newRecord.isNotEmpty) {
-      unawaited(
-        V3OperativnaNedeljaService.syncTerminDodelaFromSlotForRow(
-          operativnaRow: normalizedNew,
-        ).catchError(
-          (Object e) => debugPrint('[RT] syncTerminDodela error: $e'),
-        ),
-      );
-    }
-
     final affected = <String>{config.name, ...config.dependsOn};
     _scheduleEmit(tables: affected);
   }

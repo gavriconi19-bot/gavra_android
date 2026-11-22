@@ -90,6 +90,44 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   (verifyLogin u v3_closed_auth_service) zove RPC-first, edge invoke je
   fallback (15s timeout). Ako se device-slot/PIN pravila menjaju — menjati
   NA OBA mesta (RPC + edge index.ts).
+- `20261122000002_mutation_rpcs.sql` = mutacioni RPC sloj — ubrzanje UI
+  akcija (Funnel RTT ~250-500ms × 4-9 sekvencijalnih REST poziva -> 1 poziv).
+  Sve funkcije SECURITY DEFINER + EXECUTE anon/authenticated; interni
+  helperi (fn_v3_nenaplacene_list / fn_v3_consume_nenaplacene /
+  fn_v3_apply_preneti_visak) REVOKE-ovani sa PUBLIC/anon/authenticated.
+  - `fn_v3_putnik_otkazi` — putnik otkaže: zahtev->'otkazano' + operativne
+    redove konteksta (count + `operativna` niz svih redova konteksta za
+    keš); 'nothing_to_cancel' je idempotentno ok.
+  - `fn_v3_putnik_polazak` — putnik menja polazak: reset na 'obrada' (port
+    resetToObrada) + `operativna` niz; trigger 'obrada' grana ponistava
+    operativne, cron process_pending_zahtevi ih ponovo uspostavlja.
+  - `fn_v3_vozac_putnik_upsert` — vozač doda/pomeri putnika: stale zahtevi
+    ->'otkazano' PRE primarnog 'odobreno' (trigger guši duplikate i
+    upsertuje kanonski operativna red); vraca `operativna` (aktivni red) +
+    `operativna_sve` (svi redovi konteksta).
+  - `fn_v3_vozac_otkazi` — otkaz operativne po id-u ('already_canceled').
+  - `fn_v3_pokupi` — pokupljenje + finansijska evidencija: visak trosi
+    cenu, ostatak->nenaplacene; po-danu guard (vecVozioDanas/postojeća
+    stavka->'skipped'). advisory lock 'fin:putnik:mesec:godina'.
+  - `fn_v3_mesecna_naplata` — uplata: preneti visak->consume nenaplacene->
+    append uplata->skalari iz uplate_json; advisory lock 'naplata:...'.
+  - `fn_v3_pazar_sacuvaj` / `fn_v3_pazar_sync_zahtev` — merge dnevne
+    stavke na FOR UPDATE mesecnom redu (sync: predao iz baze,
+    bila_predaja=reblokada zavrsenog unosa).
+  - `fn_v3_dodela_termina` — admin raspored: kandidati = aktivne operativne
+    stavke na slotu ciji created_by je u v3_auth tip∉('','vozac'); delete
+    dodele->slot upsert->bulk dodele; p_vozac_id NULL = uklanjanje.
+  - GRANT anon na fn_v3_alternativa_action — app zove RPC-first (edge
+    cold start 1-4s -> ~0.3s), edge invoke je fallback; device-identity
+    provera je u samoj funkciji.
+- App-side (isti commit): svi gornji RPC-ovi su RPC-first sa legacy REST
+  fallback-om (isti pattern kao fn_v3_verify_login). Uklonjen realtime
+  hook koji je na SVAKI operativna event zvao syncTerminDodelaFromSlotForRow
+  (1-2 REST poziva po event-u po uredjaju) — trigger
+  trg_v3_operativna_sync_dodela radi isto server-side. Uklonjen i mrtav
+  _syncOperativnaAssignmentsForContext. Keš se puni iz `zahtev`/
+  `operativna`/`operativna_sve`/`finansije`/`uplata` kljuceva RPC odgovora
+  (osim dodele — nju drzi realtime, kao i do sada).
 
 ## Release (GitHub Actions)
 

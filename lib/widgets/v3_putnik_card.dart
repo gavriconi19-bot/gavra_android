@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../globals.dart';
 import '../helpers/v3_placanje_dialog_helper.dart';
 import '../l10n/app_translations.dart';
 import '../models/v3_putnik.dart';
@@ -22,7 +23,6 @@ import '../utils/v3_app_snack_bar.dart';
 import '../utils/v3_belgrade_time.dart';
 import '../utils/v3_card_color_policy.dart';
 import '../utils/v3_container_utils.dart';
-import '../utils/v3_dan_helper.dart';
 import '../utils/v3_dialog_helper.dart';
 import '../utils/v3_error_utils.dart';
 import '../utils/v3_safe_text.dart';
@@ -31,6 +31,7 @@ import '../utils/v3_status_policy.dart';
 import '../utils/v3_stream_utils.dart';
 import '../utils/v3_style_helper.dart';
 import '../utils/v3_tip_putnika_utils.dart';
+import '../utils/v3_uuid_utils.dart';
 import '../utils/v3_validation_utils.dart';
 
 /// Widget za prikaz V3Putnik kartice sa podrškom za radnike, učenike, dnevne i pošiljke.
@@ -173,21 +174,55 @@ class _V3PutnikCardState extends State<V3PutnikCard> {
       V3HapticService.mediumImpact();
       final currentVozac = V3VozacService.currentVozac;
       if (currentVozac == null) throw _tr('notLoggedIn');
-      await V3ZahtevService.oznaciPokupljen(pokupljenBy: currentVozac.id, operativnaId: widget.entry?.id);
-      final tipPutnika = widget.putnik.tipPutnika.trim().toLowerCase();
-      if (tipPutnika != 'vozac') {
-        await V3FinansijeService.evidentirajRealizacijuPriPokupljanju(
-          putnikId: widget.putnik.id,
-          tipPutnika: widget.putnik.tipPutnika,
-          datum: widget.entry?.datum ?? widget.zahtev?.datum ?? V3BelgradeTime.now(),
-          operativnaId: widget.entry?.id,
-          evidentiraoBy: currentVozac.id,
-          pokupljenAt: V3BelgradeTime.nowIsoUtc(),
-          dodaoBy: widget.entry?.createdBy,
-          azuriraoBy: widget.entry?.updatedBy,
-          grad: widget.entry?.grad,
-          vreme: widget.entry?.polazakAt,
-        );
+      final operativnaId = widget.entry?.id;
+      // Brza putanja: fn_v3_pokupi radi pokupljenje + finansijsku evidenciju
+      // u 1 pozivu (ranije 2-5 sekvencijalnih REST poziva). Legacy putanja
+      // ispod ostaje kao fallback.
+      var rpcDone = false;
+      if (operativnaId != null && operativnaId.isNotEmpty) {
+        try {
+          final data = await supabase.rpc('fn_v3_pokupi', params: {
+            'p_operativna_id': operativnaId,
+            'p_actor': V3UuidUtils.normalizeUuid(currentVozac.id),
+          });
+          if (data is Map && data['ok'] == true) {
+            final op = data['operativna'];
+            if (op is Map) {
+              V3MasterRealtimeManager.instance.v3UpsertToCache(
+                'v3_operativna_nedelja',
+                Map<String, dynamic>.from(op),
+              );
+            }
+            final fin = data['finansije'];
+            if (fin is Map) {
+              V3MasterRealtimeManager.instance.v3UpsertToCache(
+                'v3_finansije',
+                Map<String, dynamic>.from(fin),
+              );
+            }
+            rpcDone = true;
+          }
+        } catch (e) {
+          debugPrint('[V3PutnikCard] pokupi RPC fallback: $e');
+        }
+      }
+      if (!rpcDone) {
+        await V3ZahtevService.oznaciPokupljen(pokupljenBy: currentVozac.id, operativnaId: operativnaId);
+        final tipPutnika = widget.putnik.tipPutnika.trim().toLowerCase();
+        if (tipPutnika != 'vozac') {
+          await V3FinansijeService.evidentirajRealizacijuPriPokupljanju(
+            putnikId: widget.putnik.id,
+            tipPutnika: widget.putnik.tipPutnika,
+            datum: widget.entry?.datum ?? widget.zahtev?.datum ?? V3BelgradeTime.now(),
+            operativnaId: operativnaId,
+            evidentiraoBy: currentVozac.id,
+            pokupljenAt: V3BelgradeTime.nowIsoUtc(),
+            dodaoBy: widget.entry?.createdBy,
+            azuriraoBy: widget.entry?.updatedBy,
+            grad: widget.entry?.grad,
+            vreme: widget.entry?.polazakAt,
+          );
+        }
       }
       await V3HapticService.putnikPokupljen();
       if (mounted) {
