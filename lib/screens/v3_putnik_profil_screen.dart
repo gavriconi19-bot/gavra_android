@@ -514,6 +514,16 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
 
   Future<void> _showTimePicker(BuildContext ctx, String dan, String grad, _ZahtevInfo? info) async {
     final currentPutnikId = _currentPutnikId() ?? '';
+    // v3_finansije je sekundarna tabela — na cold start bez disk keša stigne
+    // posle kritične faze. Sačekaj je nakratko da debt-gate ne bi propuštio
+    // putnika sa dugom u prozoru dok podaci još nisu stigli.
+    final rm = V3MasterRealtimeManager.instance;
+    if (rm.finansijeCache.isEmpty) {
+      final inFlight = rm.secondaryInFlight;
+      if (inFlight != null) {
+        await inFlight.timeout(const Duration(seconds: 3), onTimeout: () {});
+      }
+    }
     final previousMonthDebt = _historicalDebtAmountUntilPreviousMonth(currentPutnikId);
     if (previousMonthDebt > 0.009) {
       if (mounted) {

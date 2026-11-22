@@ -259,6 +259,13 @@ class V3MasterRealtimeManager {
   Future<void>? _initInFlight;
   bool _isInitialized = false;
 
+  /// Non-null dok pozadinski load sekundarnih (teških) tabela traje.
+  /// Kod koji mora da zna da li su sekundarne stigle (npr. debt-gate na
+  /// putnik profilu — finansije stižu posle kritične faze) ga await-uje
+  /// sa kratkim timeout-om.
+  Future<void>? _secondaryInFlight;
+  Future<void>? get secondaryInFlight => _secondaryInFlight;
+
   void _scheduleEmit({Set<String>? tables, bool immediate = false}) {
     _markPersistDirty();
     _eventBus.scheduleEmit(
@@ -470,10 +477,12 @@ class V3MasterRealtimeManager {
       // 3) Teške sekundarne tabele u pozadini — ekrani su već renderovani.
       //    Na delta putanju delta već pokriva sve tabele pa ovo nije potrebno.
       if (needSecondary) {
-        unawaited(
-          _loadSecondaryCaches().catchError((Object e) => debugPrint(
-              '[V3MasterRealtimeManager] secondary load error: $e')),
-        );
+        final op = _loadSecondaryCaches().catchError((Object e) => debugPrint(
+            '[V3MasterRealtimeManager] secondary load error: $e'));
+        _secondaryInFlight = op;
+        unawaited(op.whenComplete(() {
+          if (identical(_secondaryInFlight, op)) _secondaryInFlight = null;
+        }));
       }
       unawaited(_persistCachesNow());
       // Pre-geocodiramo koordinate gradova u pozadini — bez blokiranja bootstrapa.
