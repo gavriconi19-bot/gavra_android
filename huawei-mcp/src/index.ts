@@ -8,7 +8,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
-import fetch from "node-fetch";
 import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -48,8 +47,30 @@ const HUAWEI_TXT_PATH =
   findExistingFile(["HUAWEI.txt"], HUAWEI_DIR ? [HUAWEI_DIR] : possibleHuaweiDirs) ||
   findExistingFile(["HUAWEI.txt"], [path.resolve(workspaceRoot, ".."), path.resolve(workspaceRoot, "../..")]);
 
-const HUAWEI_CLIENT_ID = process.env.HUAWEI_CLIENT_ID || process.env.HUAWEI_APP_CLIENT_ID || "";
-const HUAWEI_CLIENT_SECRET = process.env.HUAWEI_CLIENT_SECRET || "";
+function loadApiClientCreds(): { client_id: string; client_secret: string } {
+  const dirs = [...(HUAWEI_DIR ? [HUAWEI_DIR] : []), ...possibleHuaweiDirs];
+  for (const dir of dirs) {
+    try {
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+      for (const fileName of fs.readdirSync(dir)) {
+        if (!fileName.startsWith("agc-apiclient-") || !fileName.endsWith(".json")) continue;
+        try {
+          const parsed = JSON.parse(fs.readFileSync(path.join(dir, fileName), "utf8"));
+          if (parsed?.client_id && parsed?.client_secret) return parsed;
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return { client_id: "", client_secret: "" };
+}
+
+const apiClientCreds = loadApiClientCreds();
+const HUAWEI_CLIENT_ID = process.env.HUAWEI_CLIENT_ID || process.env.HUAWEI_APP_CLIENT_ID || apiClientCreds.client_id;
+const HUAWEI_CLIENT_SECRET = process.env.HUAWEI_CLIENT_SECRET || apiClientCreds.client_secret;
 const HUAWEI_APP_ID = process.env.HUAWEI_APP_ID || "";
 const HUAWEI_PACKAGE_NAME = process.env.HUAWEI_PACKAGE_NAME || "";
 const HUAWEI_PROJECT_ID = process.env.HUAWEI_PROJECT_ID || "";
@@ -126,19 +147,18 @@ async function testHuaweiOAuth(): Promise<Record<string, any>> {
     };
   }
 
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: HUAWEI_CLIENT_ID,
-    client_secret: HUAWEI_CLIENT_SECRET,
-  });
-
   try {
     const response = await fetch("https://connect-api.cloud.huawei.com/api/oauth2/v1/token", {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
+        "User-Agent": "curl/8.0",
       },
-      body: body.toString(),
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        client_id: HUAWEI_CLIENT_ID,
+        client_secret: HUAWEI_CLIENT_SECRET,
+      }),
     });
 
     const text = await response.text();
@@ -172,6 +192,84 @@ async function testHuaweiOAuth(): Promise<Record<string, any>> {
       error: error?.message || "Unexpected error while calling Huawei OAuth endpoint.",
     };
   }
+}
+
+// --- Connect API helpers ---------------------------------------------------
+
+const AGC_API_BASE = "https://connect-api.cloud.huawei.com/api";
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+const RELEASE_STATE_LABELS: Record<number, string> = {
+  0: "released",
+  1: "release rejected",
+  2: "removed (incl. forcible)",
+  3: "releasing",
+  4: "reviewing",
+  5: "pending update review",
+  6: "removal requested",
+  7: "draft",
+  8: "update rejected",
+  9: "removal rejected",
+  10: "removed by developer",
+  11: "release canceled",
+  12: "under pre-review",
+  13: "pre-review failed",
+};
+
+function resolveAppId(args: Record<string, any> | undefined): string {
+  const argId = args?.appId;
+  if (argId) return String(argId);
+  if (HUAWEI_APP_ID) return HUAWEI_APP_ID;
+  const txtId = parseHuaweiTxt()["App ID"];
+  if (txtId) return txtId;
+  return "";
+}
+
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) {
+    return cachedToken.token;
+  }
+  const result = await testHuaweiOAuth();
+  if (!result.ok || !result.response?.access_token) {
+    throw new Error(`Huawei OAuth failed: ${JSON.stringify(result)}`);
+  }
+  const expiresIn = Number(result.response.expires_in || 28800);
+  cachedToken = {
+    token: result.response.access_token,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+  return cachedToken.token;
+}
+
+async function agcRequest(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  apiPath: string,
+  body?: unknown,
+): Promise<any> {
+  const token = await getAccessToken();
+  const url = apiPath.startsWith("http")
+    ? apiPath
+    : `${AGC_API_BASE}/${apiPath.replace(/^\/+/, "").replace(/^api\//, "")}`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      client_id: HUAWEI_CLIENT_ID,
+      "User-Agent": "curl/8.0",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { httpStatus: response.status, raw: text };
+  }
+}
+
+function toolJson(data: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
 const server = new Server(
@@ -222,6 +320,66 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: "object",
         properties: {},
         required: [],
+      },
+    },
+    {
+      name: "huawei_get_app_info",
+      description: "Query AppGallery Connect app info (Publishing API app-info): release state, on-shelf version, pending version, audit opinion, release country/phasing.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          appId: { type: "string", description: "AppGallery app ID. Defaults to HUAWEI_APP_ID env / HUAWEI.txt." },
+          lang: { type: "string", description: "Language code to filter app info (e.g. 'sr')." },
+          releaseType: { type: "number", description: "1 = full release (default), 3 = phased release." },
+        },
+        required: [],
+      },
+    },
+    {
+      name: "huawei_get_release_status",
+      description: "Decoded release summary: on-shelf vs pending version, releaseState label, release phase, country, audit opinion.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          appId: { type: "string", description: "AppGallery app ID. Defaults to HUAWEI_APP_ID env / HUAWEI.txt." },
+        },
+        required: [],
+      },
+    },
+    {
+      name: "huawei_get_app_id",
+      description: "Resolve AppGallery app ID from a package name via the appid-list API.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          packageName: { type: "string", description: "Android package name, e.g. com.gavra013.gavra_android" },
+        },
+        required: ["packageName"],
+      },
+    },
+    {
+      name: "huawei_get_compile_status",
+      description: "Query AAB package compile/parsing status on AppGallery for a given pkgVersion (returned by app-file-info update).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          appId: { type: "string", description: "AppGallery app ID. Defaults to HUAWEI_APP_ID env / HUAWEI.txt." },
+          pkgVersion: { type: "string", description: "Package version string returned by the upload/app-file-info call." },
+        },
+        required: ["pkgVersion"],
+      },
+    },
+    {
+      name: "huawei_api_request",
+      description: "Call any AppGallery Connect API endpoint (OAuth handled). Use for APIs without a dedicated tool, e.g. 'publish/v2/app-submit?appid=...'.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          method: { type: "string", enum: ["GET", "POST", "PUT", "DELETE"], description: "HTTP method." },
+          path: { type: "string", description: "Path under https://connect-api.cloud.huawei.com/api/, e.g. 'publish/v2/app-info?appId=123'. Full URLs also accepted." },
+          body: { type: "object", description: "Optional JSON body for POST/PUT." },
+        },
+        required: ["method", "path"],
       },
     },
   ],
@@ -323,14 +481,81 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case "huawei_test_oauth": {
       const result = await testHuaweiOAuth();
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+      return toolJson(result);
+    }
+
+    case "huawei_get_app_info": {
+      const appId = resolveAppId(args);
+      if (!appId) {
+        return toolJson({ error: "No appId. Pass appId or set HUAWEI_APP_ID / HUAWEI.txt App ID." });
+      }
+      const params = new URLSearchParams({ appId });
+      if (args?.lang) params.set("lang", String(args.lang));
+      if (args?.releaseType !== undefined) params.set("releaseType", String(args.releaseType));
+      return toolJson(await agcRequest("GET", `publish/v2/app-info?${params}`));
+    }
+
+    case "huawei_get_release_status": {
+      const appId = resolveAppId(args);
+      if (!appId) {
+        return toolJson({ error: "No appId. Pass appId or set HUAWEI_APP_ID / HUAWEI.txt App ID." });
+      }
+      const data = await agcRequest("GET", `publish/v2/app-info?appId=${appId}`);
+      const info = data?.appInfo || {};
+      const state = info.releaseState;
+      return toolJson({
+        ret: data?.ret,
+        appId,
+        releaseState: state,
+        releaseStateLabel: state !== undefined ? RELEASE_STATE_LABELS[state] ?? `unknown(${state})` : null,
+        onShelf: {
+          versionNumber: info.onShelfVersionNumber ?? null,
+          versionCode: info.onShelfVersionCode ?? null,
+          versionId: info.onShelfVersionId ?? null,
+        },
+        pending: {
+          versionNumber: info.versionNumber ?? null,
+          versionCode: info.versionCode ?? null,
+          versionId: info.versionId ?? null,
+        },
+        releasePhase: info.releasePhase ?? null,
+        publishCountry: info.publishCountry ?? null,
+        releaseTime: info.releaseTime ?? null,
+        updateTime: info.updateTime ?? null,
+        auditOpinion: data?.auditInfo?.auditOpinion ?? null,
+      });
+    }
+
+    case "huawei_get_app_id": {
+      return toolJson(
+        await agcRequest(
+          "GET",
+          `publish/v2/appid-list?packageName=${encodeURIComponent(String(args?.packageName || ""))}`,
+        ),
+      );
+    }
+
+    case "huawei_get_compile_status": {
+      const appId = resolveAppId(args);
+      const pkgVersion = args?.pkgVersion;
+      if (!appId || !pkgVersion) {
+        return toolJson({ error: "appId and pkgVersion are required." });
+      }
+      return toolJson(
+        await agcRequest(
+          "GET",
+          `publish/v2/aab/complile/status?appId=${appId}&pkgVersion=${encodeURIComponent(String(pkgVersion))}`,
+        ),
+      );
+    }
+
+    case "huawei_api_request": {
+      const method = String(args?.method || "GET").toUpperCase() as "GET" | "POST" | "PUT" | "DELETE";
+      const apiPath = String(args?.path || "");
+      if (!apiPath) {
+        return toolJson({ error: "path is required." });
+      }
+      return toolJson(await agcRequest(method, apiPath, args?.body));
     }
 
     default:

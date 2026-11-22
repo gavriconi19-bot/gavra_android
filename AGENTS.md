@@ -193,3 +193,35 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
 - Sledeci korak kad stragglera nema (proveriti `v3_auth.app_version`/
   `last_seen_at` na cloud-u): finalni merge, pa `pause_project`
   (MCP) ili maintenance_mode kill-switch.
+
+## Huawei AppGallery (status 2026-11-22)
+
+- `huawei-mcp/` — lokalni MCP server sa Connect API tool-ovima
+  (release status, app-info, compile status, generic `huawei_api_request`).
+  Registrovan u `~/.codeium/windsurf/mcp_config.json`. Kredencijali se
+  citaju iz `Desktop/production final/huawei/agc-apiclient-*.json` +
+  `HUAWEI.txt` (client_id `1850740994484473152`, app `116046535`,
+  package `com.gavra013.gavra_android`). Napomena: Huawei WAF daje 502
+  na node-fetch — koristi se native fetch + JSON body (kao
+  `scripts/huawei_publish.sh`).
+- AppGallery kanal je do 11-2026 bio mrtav: 0 HMS korisnika u bazi
+  (`push_token_hms`/`provider='hms'` nigde), ~13 instalacija u 18 meseci,
+  0 store impresija — objavljena je samo za RS (`publishCountry: "RS"`),
+  web store je ne indeksira, vidljiva je samo kroz direktni link
+  `appgallery.huawei.com/app/C116046535` na uređaju sa region=RS.
+- Verzija 6.0.632 (on-shelf 19.11) bundle-uje STARI cloud `.env` —
+  Huawei review uređaj je pisao u cloud bazu. Kanal trazi "zive" verzije
+  tek od build-ova posle azuriranja `APP_ENV_BASE64` secreta (19.11).
+- 6.0.637 submit-ovana preko CI 21.11 ali je release poništen 22.11
+  (~00:07, releaseState=11 "release canceled").
+- 6.0.640 submit-ovana 22.11 ~14:18 (releaseState=5 "pending update
+  review") — prvi AppGallery build sa lokalnim `.env`. CI:
+  `gh workflow run production-release.yml -f target=huawei` (bump-uje
+  pubspec za sve; `both`/`android`/`ios` targeti SKIP-uju huawei job).
+- Reports API: `GET connect-api.cloud.huawei.com/api/report/
+  distribution-operation-quality/v1/appDownloadExport/{appId}
+  ?language=en-US&startTime=YYYYMMDD&endTime=YYYYMMDD` → fileURL CSV
+  (limit 360 dana po pozivu). app-info radi samo na glavnom (CN) domenu
+  — DRE/DRA endpointi vracaju prazno.
+- releaseState decode: 0 released, 3 releasing, 4 reviewing, 5 pending
+  update review, 7 draft, 8 update rejected, 11 release canceled.
