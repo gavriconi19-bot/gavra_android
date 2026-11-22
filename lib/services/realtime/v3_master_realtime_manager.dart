@@ -16,6 +16,7 @@ import '../v3/v3_operativna_nedelja_service.dart';
 import '../v3/v3_uplata_pazara_service.dart';
 import '../v3/v3_vozac_service.dart';
 import 'engine/v3_bootstrap_loader.dart';
+import 'engine/v3_cache_persistence.dart';
 import 'engine/v3_cache_store.dart';
 import 'engine/v3_event_bus.dart';
 import 'engine/v3_table_registry.dart';
@@ -91,6 +92,10 @@ class V3MasterRealtimeManager {
   static const Duration _periodicFullResyncInterval = Duration(minutes: 30);
   // Posle dužeg disconnecta preskačemo delta i idemo direktno na full resync.
   static const Duration _fullResyncStaleThreshold = Duration(minutes: 15);
+  // Perzistirani keš stariji od ovoga se smatra zastarelim → cold start ide
+  // na full bootstrap umesto delta. 12h pokriva tipično "app ubijena
+  // preko noci" — delta i dalje vazi za kratke kill/restart cikluse.
+  static const Duration _persistedCacheStaleThreshold = Duration(hours: 12);
 
   final StreamController<V3PazarPromptEvent> _pazarPromptController =
       StreamController<V3PazarPromptEvent>.broadcast();
@@ -254,12 +259,57 @@ class V3MasterRealtimeManager {
   Future<void>? _initInFlight;
   bool _isInitialized = false;
 
-  void _scheduleEmit({Set<String>? tables, bool immediate = false}) =>
-      _eventBus.scheduleEmit(
-        tables: tables,
-        immediate: immediate,
-        revisions: _cacheStore.revisionsSnapshot(),
-      );
+  void _scheduleEmit({Set<String>? tables, bool immediate = false}) {
+    _markPersistDirty();
+    _eventBus.scheduleEmit(
+      tables: tables,
+      immediate: immediate,
+      revisions: _cacheStore.revisionsSnapshot(),
+    );
+  }
+
+  // --- PERSISTED CACHE ---
+  // Keš se snima debounce-ovano tokom rada (da cold start ima svežu tačku
+  // za delta sync) i odmah na app pause. Ako app bude ubijen pre snimanja,
+  // sledeći cold start prosto povuče malo veći delta — ispravnost ne pati.
+  Timer? _persistDebounceTimer;
+  bool _persistInFlight = false;
+  bool _persistPending = false;
+  static const Duration _persistDebounce = Duration(seconds: 30);
+
+  void _markPersistDirty() {
+    if (_persistDebounceTimer?.isActive ?? false) return;
+    _persistDebounceTimer = Timer(_persistDebounce, () {
+      unawaited(_persistCachesNow());
+    });
+  }
+
+  Future<void> _persistCachesNow() async {
+    if (_persistInFlight) {
+      _persistPending = true;
+      return;
+    }
+    _persistInFlight = true;
+    try {
+      final snapshot = <String, Map<String, Map<String, dynamic>>>{};
+      for (final config in V3RealtimeTableRegistry.defaults) {
+        final table = _cacheStore.table(config.name);
+        if (table.isNotEmpty) {
+          snapshot[config.name] =
+              Map<String, Map<String, dynamic>>.from(table);
+        }
+      }
+      if (snapshot.isNotEmpty) {
+        await V3CachePersistence.instance.save(snapshot);
+      }
+    } finally {
+      _persistInFlight = false;
+      if (_persistPending) {
+        _persistPending = false;
+        _markPersistDirty();
+      }
+    }
+  }
 
   void _registerCacheStoreIfNeeded() {
     if (_cacheStoreRegistered) return;
@@ -378,10 +428,35 @@ class V3MasterRealtimeManager {
         onResume: () {
           unawaited(_handleAppResume());
         },
+        onPause: () {
+          unawaited(_persistCachesNow());
+        },
       );
 
       _registerCacheStoreIfNeeded();
-      await _loadInitialCachesWithRetry();
+
+      // 1) Perzistirani keš sa diska → UI renderuje odmah, pre mreže.
+      var restoredFresh = false;
+      final persisted = await V3CachePersistence.instance.load();
+      if (persisted != null && persisted.tables.isNotEmpty) {
+        _applyPersistedCaches(persisted.tables);
+        final savedAt = persisted.savedAt;
+        restoredFresh = savedAt != null &&
+            V3BelgradeTime.now().difference(savedAt) <
+                _persistedCacheStaleThreshold;
+        _scheduleEmit(tables: {'*'}, immediate: true);
+        debugPrint(
+            '[V3MasterRealtimeManager] disk cache restored (fresh=$restoredFresh)');
+      }
+
+      // 2) Svež keš → delta; prazan/zastareo → kritični full bootstrap.
+      var needSecondary = true;
+      if (restoredFresh) {
+        needSecondary = !(await _applyMissedDelta());
+      }
+      if (needSecondary) {
+        await _loadInitialCachesWithRetry();
+      }
       _lastFullResyncAt = V3BelgradeTime.now();
 
       await _setupRealtime();
@@ -391,6 +466,16 @@ class V3MasterRealtimeManager {
       );
       _isInitialized = true;
       _scheduleEmit(tables: {'*'}, immediate: true);
+
+      // 3) Teške sekundarne tabele u pozadini — ekrani su već renderovani.
+      //    Na delta putanju delta već pokriva sve tabele pa ovo nije potrebno.
+      if (needSecondary) {
+        unawaited(
+          _loadSecondaryCaches().catchError((Object e) => debugPrint(
+              '[V3MasterRealtimeManager] secondary load error: $e')),
+        );
+      }
+      unawaited(_persistCachesNow());
       // Pre-geocodiramo koordinate gradova u pozadini — bez blokiranja bootstrapa.
       // Time se izbjegava Nominatim poziv pri prvom kliku na Start/Mapa.
       unawaited(
@@ -590,7 +675,7 @@ class V3MasterRealtimeManager {
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        final results = await _bootstrapLoader.loadFull();
+        final results = await _bootstrapLoader.loadCritical();
         _applyBootstrapResults(results);
         return;
       } catch (e) {
@@ -603,11 +688,54 @@ class V3MasterRealtimeManager {
         'Bootstrap init failed after $maxAttempts attempts: $lastError');
   }
 
+  /// Sekundarne (teške) tabele — fetchuje ih initV3 u pozadini posle
+  /// kritične faze. Rezultat se emituje kao nova revizija, pa ekrani koji
+  /// slušaju revision stream sami rebuild-uju kad podaci stignu.
+  Future<void> _loadSecondaryCaches({int maxAttempts = 3}) async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final results = await _bootstrapLoader.loadSecondary();
+        _applyBootstrapResults(results);
+        // Dovuci redove koji su se promenili dok je secondary fetch leteo —
+        // realtime eventi upisani u cache između snapshot-a i replaceAll bi
+        // inače bili pregazeni starijim stanjem.
+        await _applyMissedDelta();
+        _scheduleEmit(tables: {'*'}, immediate: true);
+        _markPersistDirty();
+        return;
+      } catch (e) {
+        lastError = e;
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(Duration(milliseconds: 350 * attempt));
+        }
+      }
+    }
+    debugPrint(
+        '[V3MasterRealtimeManager] secondary load failed after $maxAttempts attempts: $lastError');
+  }
+
+  /// Primena parcijalnog bootstrap rezultata — dira SAMO tabele prisutne
+  /// u [results] (ostale keševe ne sme da očisti).
   void _applyBootstrapResults(Map<String, List<dynamic>> results) {
-    for (final table in V3RealtimeTableRegistry.defaults) {
-      final rawRows = results[table.name] ?? const <dynamic>[];
-      final normalizedRows = _normalizeRowsForTable(table.name, rawRows);
-      _cacheStore.replaceAll(table.name, normalizedRows);
+    for (final entry in results.entries) {
+      final normalizedRows = _normalizeRowsForTable(entry.key, entry.value);
+      _cacheStore.replaceAll(entry.key, normalizedRows);
+    }
+
+    _rebuildRoleCachesFromAuth();
+    _rebuildAssignedCacheFromOperativna();
+
+    final globalSettings = appSettingsCache['global'];
+    if (globalSettings != null) _applyAppSettings(globalSettings);
+  }
+
+  void _applyPersistedCaches(
+      Map<String, Map<String, Map<String, dynamic>>> tables) {
+    for (final entry in tables.entries) {
+      final rows = _normalizeRowsForTable(
+          entry.key, entry.value.values.toList(growable: false));
+      _cacheStore.replaceAll(entry.key, rows);
     }
 
     _rebuildRoleCachesFromAuth();

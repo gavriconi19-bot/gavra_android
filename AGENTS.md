@@ -62,6 +62,25 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   `supabase migration up` odbija — u schema_migrations fale lokalni fajlovi
   (arhivirani u baseline); nove migracije primenjivati docker exec psql +
   rucni INSERT u supabase_migrations.schema_migrations.
+- `20261122000000_bootstrap_rpc_and_indexes.sql` = cold-start ubrzanje:
+  `fn_v3_bootstrap(p_phase)` — sve bootstrap tabele kao jedan JSONB u 1
+  round-trip-u ('critical'/'secondary'/'all'; faze odgovaraju
+  V3RealtimeTableRegistry split-u). RPC zaobilazi PostgREST max_rows=1000
+  (v3_finansije se vec blizi limitu). `fn_v3_bootstrap_delta(p_watermarks)`
+  — delta po updated_at watermark-ima u 1 pozivu (eta_results po
+  computed_at). Slim projekcije: finansije bez
+  broj_voznji/ime/naplatio_ime/poslednja_dopuna (app ih ne cita), zahtevi sa
+  mesto_ponuda*/alternativa_offered_at/updated_by (bili izostavljeni).
+  GRANT EXECUTE anon+authenticated (app zove RPC direktno). updated_at
+  indexi na vozila/krediti/racuni/trenutna_dodela(_slot)/uplata_pazara.
+  Posle primene: NOTIFY pgrst 'reload schema' (u migraciji).
+- App-side (isti commit): V3CachePersistence snima keš u
+  Documents/v3_realtime_cache.json (debounce 30s + onPause) → cold start
+  renderuje sa diska pa delta (<12h) ili full bootstrap (>12h). Sekundarne
+  tabele (finansije/gorivo/krediti/uplata_pazara/eta/vozac_location) stizu
+  u pozadini posle kritične faze — v3_vozac_screen se otključava na
+  kritičnim. v3_racuni izbacen iz realtime registry (nista ne cita keš).
+  Expando memoizacija parse-a finansije *_json kolona.
 
 ## Release (GitHub Actions)
 

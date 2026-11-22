@@ -74,6 +74,20 @@ class V3FinansijeService {
   static const String _realizovaneVoznjeKey = 'realizovane_voznje_json';
   static const String _otkazaneVoznjeKey = 'otkazane_voznje_json';
   static const String _uplateKey = 'uplate_json';
+
+  // Parse memoizacija: iste *_json liste (identitet objekta) se parsiraju
+  // po jednom — bez ovoga svaki putnik card/servis ponovo mapira cele nizove
+  // pri svakom build-u (~2.4MB ugnježdenog JSON-a po ekranu). Expando drži
+  // slab referencu — kad red dobije novi JSON objekat (cache replace),
+  // stari zapis sam odlazi u GC.
+  static final Expando<List<Map<String, dynamic>>> _nenaplaceneParseCache =
+      Expando('v3_fin_nenaplacene');
+  static final Expando<List<Map<String, dynamic>>> _realizovaneParseCache =
+      Expando('v3_fin_realizovane');
+  static final Expando<List<Map<String, dynamic>>> _otkazaneParseCache =
+      Expando('v3_fin_otkazane');
+  static final Expando<List<Map<String, dynamic>>> _uplateParseCache =
+      Expando('v3_fin_uplate');
   static final V3FinansijeRepository _repo = V3FinansijeRepository();
   static final Set<String> _mesecnaNaplataLocks = <String>{};
 
@@ -319,6 +333,10 @@ class V3FinansijeService {
 
   static List<Map<String, dynamic>> _readNenaplaceneVoznje(Map<String, dynamic> row) {
     final raw = row[_nenaplaceneVoznjeKey];
+    if (raw is List) {
+      final cached = _nenaplaceneParseCache[raw];
+      if (cached != null) return cached;
+    }
     final result = <Map<String, dynamic>>[];
 
     try {
@@ -350,6 +368,7 @@ class V3FinansijeService {
     }
 
     result.sort((a, b) => _parseNenaplacenaDatumOrEpoch(a).compareTo(_parseNenaplacenaDatumOrEpoch(b)));
+    if (raw is List) _nenaplaceneParseCache[raw] = result;
     return result;
   }
 
@@ -2078,6 +2097,10 @@ class V3FinansijeService {
 
   static List<Map<String, dynamic>> _readRealizovaneVoznje(Map<String, dynamic> row) {
     final raw = row[_realizovaneVoznjeKey];
+    if (raw is List) {
+      final cached = _realizovaneParseCache[raw];
+      if (cached != null) return cached;
+    }
     final result = <Map<String, dynamic>>[];
 
     try {
@@ -2119,6 +2142,7 @@ class V3FinansijeService {
     }
 
     result.sort((a, b) => _parseNenaplacenaDatumOrEpoch(a).compareTo(_parseNenaplacenaDatumOrEpoch(b)));
+    if (raw is List) _realizovaneParseCache[raw] = result;
     return result;
   }
 
@@ -2129,6 +2153,10 @@ class V3FinansijeService {
 
   static List<Map<String, dynamic>> _readOtkazaneVoznje(Map<String, dynamic> row) {
     final raw = row[_otkazaneVoznjeKey];
+    if (raw is List) {
+      final cached = _otkazaneParseCache[raw];
+      if (cached != null) return cached;
+    }
     final result = <Map<String, dynamic>>[];
 
     try {
@@ -2163,11 +2191,16 @@ class V3FinansijeService {
     }
 
     result.sort((a, b) => _parseNenaplacenaDatumOrEpoch(a).compareTo(_parseNenaplacenaDatumOrEpoch(b)));
+    if (raw is List) _otkazaneParseCache[raw] = result;
     return result;
   }
 
   static List<Map<String, dynamic>> _readUplate(Map<String, dynamic> row) {
     final raw = row[_uplateKey];
+    if (raw is List) {
+      final cached = _uplateParseCache[raw];
+      if (cached != null) return cached;
+    }
     final result = <Map<String, dynamic>>[];
 
     try {
@@ -2201,6 +2234,7 @@ class V3FinansijeService {
     }
 
     result.sort((a, b) => _parseNenaplacenaDatumOrEpoch(a).compareTo(_parseNenaplacenaDatumOrEpoch(b)));
+    if (raw is List) _uplateParseCache[raw] = result;
     return result;
   }
 

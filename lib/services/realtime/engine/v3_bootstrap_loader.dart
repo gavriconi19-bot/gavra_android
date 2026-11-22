@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../globals.dart';
@@ -14,27 +15,16 @@ class V3BootstrapLoader {
   final V3RealtimeBootstrapRepository _repository;
   final SupabaseClient _client;
 
-  Future<Map<String, List<dynamic>>> loadFull() async {
-    final results = await _repository.fetchInitialData();
-    return <String, List<dynamic>>{
-      'v3_adrese': (results[0] as List).cast<dynamic>(),
-      'v3_auth': (results[1] as List).cast<dynamic>(),
-      'v3_vozila': (results[2] as List).cast<dynamic>(),
-      'v3_zahtevi': (results[3] as List).cast<dynamic>(),
-      'v3_gorivo': (results[4] as List).cast<dynamic>(),
-      'v3_finansije': (results[5] as List).cast<dynamic>(),
-      'v3_krediti': (results[6] as List).cast<dynamic>(),
-      'v3_racuni': (results[7] as List).cast<dynamic>(),
-      'v3_trenutna_dodela': (results[8] as List).cast<dynamic>(),
-      'v3_trenutna_dodela_slot': (results[9] as List).cast<dynamic>(),
-      'v3_operativna_nedelja': (results[10] as List).cast<dynamic>(),
-      'v3_kapacitet_slots': (results[11] as List).cast<dynamic>(),
-      'v3_app_settings': (results[12] as List).cast<dynamic>(),
-      'v3_eta_results': (results[13] as List).cast<dynamic>(),
-      'v3_vozac_location': (results[14] as List).cast<dynamic>(),
-      'v3_uplata_pazara': (results[15] as List).cast<dynamic>(),
-    };
-  }
+  /// Vraca {table_name: rows} samo za tabele prisutne u odgovoru
+  /// (parcijalni rezultat NE sme da brise kesove ostalih tabela).
+  Future<Map<String, List<dynamic>>> loadCritical() =>
+      _repository.fetchPhase('critical');
+
+  Future<Map<String, List<dynamic>>> loadSecondary() =>
+      _repository.fetchPhase('secondary');
+
+  Future<Map<String, List<dynamic>>> loadFull() =>
+      _repository.fetchPhase('all');
 
   Future<List<Map<String, dynamic>>> loadDelta({
     required String table,
@@ -51,7 +41,10 @@ class V3BootstrapLoader {
         response = await _client.from(table).select().gte('updated_at', iso);
         break;
       case 'v3_finansije':
-        response = await _client.from(table).select().gte('updated_at', iso);
+        response = await _client
+            .from(table)
+            .select(V3RealtimeBootstrapRepository.finansijeSelectColumns)
+            .gte('updated_at', iso);
         break;
       case 'v3_krediti':
         response = await _client.from(table).select().gte('updated_at', iso);
@@ -70,8 +63,7 @@ class V3BootstrapLoader {
       case 'v3_zahtevi':
         response = await _client
             .from('v3_zahtevi')
-            .select(
-                'id, datum, grad, trazeni_polazak_at, status, polazak_at, koristi_sekundarnu, adresa_override_id, alternativa_pre_at, alternativa_posle_at, created_at, updated_at, created_by, scheduled_at')
+            .select(V3RealtimeBootstrapRepository.zahteviSelectColumns)
             .gte('updated_at', iso);
         break;
       case 'v3_operativna_nedelja':
@@ -90,6 +82,15 @@ class V3BootstrapLoader {
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> loadDeltaAll(Map<String, DateTime?> watermarks) async {
+    // Jedan RPC za sve tabele — preko Funnel-a je per-request latencija
+    // ~150-700ms, pa je ovo najjeftinija delta putanja.
+    try {
+      final viaRpc = await _repository.fetchDelta(watermarks);
+      return viaRpc;
+    } catch (e) {
+      debugPrint('[bootstrap] fn_v3_bootstrap_delta failed, REST fallback: $e');
+    }
+
     final tables = V3RealtimeTableRegistry.defaults.toList(growable: false);
 
     if (tables.isEmpty) return {};

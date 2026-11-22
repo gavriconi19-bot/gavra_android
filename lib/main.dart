@@ -474,20 +474,8 @@ void main() async {
 
 /// Pokretanje servisa u pozadini kako UI ne bi čekao i pravio deadlock
 Future<void> _postRunAppInitialization() async {
-  // 1. Kritični app servisi (settings + update gate) pre ostalih background taskova
-  try {
-    debugPrint('🚀 [main] 6. _initAppServices start (critical)');
-    await _initAppServices().timeout(const Duration(seconds: 20));
-    debugPrint('🚀 [main] 6. _initAppServices completed');
-    if (startupPhaseNotifier.value != V3StartupPhase.realtimeReady) {
-      startupPhaseNotifier.value = V3StartupPhase.dbReady;
-    }
-  } catch (e) {
-    debugPrint('⚠️ [main] _initAppServices timeout/greška: $e');
-    startupPhaseNotifier.value = V3StartupPhase.degraded;
-  }
-
-  // 2. Pokreni V3 Realtime Manager (background)
+  // 1. Realtime bootstrap i settings/update gate idu PARALELNO — ranije je
+  //    settings fetch (~300-500ms kroz Funnel) serijski blokirao initV3.
   if (!isSupabaseReady) {
     try {
       await _ensureSupabaseInitialized().timeout(const Duration(seconds: 4));
@@ -515,6 +503,19 @@ Future<void> _postRunAppInitialization() async {
     );
   } else {
     debugPrint('⚠️ [main] Preskačem initV3: Supabase nije inicijalizovan.');
+    startupPhaseNotifier.value = V3StartupPhase.degraded;
+  }
+
+  // 2. Kritični app servisi (settings + update gate) — paralelno sa initV3.
+  try {
+    debugPrint('🚀 [main] 6. _initAppServices start (critical)');
+    await _initAppServices().timeout(const Duration(seconds: 20));
+    debugPrint('🚀 [main] 6. _initAppServices completed');
+    if (startupPhaseNotifier.value != V3StartupPhase.realtimeReady) {
+      startupPhaseNotifier.value = V3StartupPhase.dbReady;
+    }
+  } catch (e) {
+    debugPrint('⚠️ [main] _initAppServices timeout/greška: $e');
     startupPhaseNotifier.value = V3StartupPhase.degraded;
   }
 
