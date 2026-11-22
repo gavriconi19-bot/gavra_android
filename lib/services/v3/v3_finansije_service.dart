@@ -828,13 +828,20 @@ class V3FinansijeService {
       return true;
     });
 
-    var ukupanIznos = 0.0;
-
     // Tip mora biti pouzdan: radnik/učenik se naplaćuju PO DANU (jedna
     // naplativa jedinica po kalendarskom danu), ne po svakom pokupljanju.
     // Bez ispravnog tipa, 2 vožnje istog dana (BC+VS) bi se brojale kao 2.
     final resolved = _resolveTipIModel(putnik, tipOverride: tipPutnika);
-    final isPoDanu = resolved.isPoDanu;
+    return _naplataSummaryIzRedova(naplataRows, isPoDanu: resolved.isPoDanu);
+  }
+
+  /// Zbirka naplate nad već filtriranim redovima meseca — koriste i
+  /// [getNaplataSummaryForPutnik] i [getDugovi] (indeksirana varijanta).
+  static ({int brojVoznji, double ukupanIznos}) _naplataSummaryIzRedova(
+    Iterable<Map<String, dynamic>> naplataRows, {
+    required bool isPoDanu,
+  }) {
+    var ukupanIznos = 0.0;
 
     // Brojanje preko SVIH redova meseca (ne po redu pa zbir): race trigger/app
     // često pravi 2 reda.
@@ -1124,12 +1131,23 @@ class V3FinansijeService {
     required int godina,
     required int mesec,
   }) {
-    final target = godina * 12 + mesec;
+    final lower = putnikId.trim().toLowerCase();
+    final rows = _naplataRows().where(
+      (row) => (row['putnik_v3_auth_id']?.toString() ?? '').trim().toLowerCase() == lower,
+    );
+    return _prethodniRedSaVisakomIzRedova(rows, godina * 12 + mesec);
+  }
+
+  /// Isti kriterijum izbora kao [_findPrethodniRedSaVisakom], ali nad već
+  /// filtriranim redovima jednog putnika (indeksirana varijanta za getDugovi).
+  /// [target] je monthKey oblika `godina * 12 + mesec`.
+  static Map<String, dynamic>? _prethodniRedSaVisakomIzRedova(
+    Iterable<Map<String, dynamic>> rows,
+    int target,
+  ) {
     Map<String, dynamic>? best;
     var bestKey = -1;
-    for (final row in _naplataRows()) {
-      final rPutnikId = (row['putnik_v3_auth_id']?.toString() ?? '').trim().toLowerCase();
-      if (rPutnikId != putnikId.trim().toLowerCase()) continue;
+    for (final row in rows) {
       final rG = _parseInternalInt(row['godina']);
       final rM = _parseInternalInt(row['mesec']);
       if (rG == null || rM == null) continue;
@@ -1720,172 +1738,233 @@ class V3FinansijeService {
     return meseci;
   }
 
+  /// Indeks "ko je pokupio putnika" po mesecu — lazy, samo ako neki period nema
+  /// pokupljen_by u realizovanim vožnjama. lowerPid -> monthKey -> (vozacId, ime).
+  /// Prvi red u iteraciji keša pobeđuje (isto kao raniji linearni scan po periodu).
+  static Map<String, Map<int, (String, String)>> _buildPokupioIndex(
+    V3MasterRealtimeManager rm,
+  ) {
+    final index = <String, Map<int, (String, String)>>{};
+    for (final operRow in rm.operativnaNedeljaCache.values) {
+      final pid = V3PutnikIdResolver.fromRow(operRow).trim().toLowerCase();
+      if (pid.isEmpty) continue;
+      final pokupljenBy = operRow['pokupljen_by']?.toString().trim();
+      if (pokupljenBy == null || pokupljenBy.isEmpty) continue;
+      final datum = V3BelgradeTime.parseDatum(operRow['datum']);
+      if (datum == null) continue;
+      final monthKey = datum.year * 12 + datum.month;
+      final perPutnik = index.putIfAbsent(pid, () => <int, (String, String)>{});
+      if (perPutnik.containsKey(monthKey)) continue;
+      final vozacData = rm.vozaciCache[pokupljenBy];
+      perPutnik[monthKey] = (pokupljenBy, vozacData?['ime_prezime']?.toString() ?? '');
+    }
+    return index;
+  }
+
   static List<V3Dug> getDugovi() {
     final rm = V3MasterRealtimeManager.instance;
     final dugovi = <V3Dug>[];
-    final now = V3BelgradeTime.now();
 
-    // Ključ: putnikId(lower) + godina + mesec → kanonski putnikId iz keša/reda.
-    // Izvor 1: svi meseci sa mesečnom evidencijom (da ne propadnu stari dugovi).
-    // Izvor 2: svi putnici za tekući mesec (Beograd).
-    final periodKeys = <String, String>{}; // "lowerId:g:m" -> putnikId
-
-    void addPeriod(String putnikId, int godina, int mesec) {
-      final safeId = putnikId.trim();
-      if (safeId.isEmpty) return;
-      if (mesec < 1 || mesec > 12) return;
-      final key = '${safeId.toLowerCase()}:$godina:$mesec';
-      periodKeys.putIfAbsent(key, () => safeId);
-    }
+    // Jedan prolaz: grupiši mesečne evidencije po (putnik, mesec). Ranija
+    // varijanta je za SVAKI period ~10x skenirala celu v3_finansije keš
+    // (nenaplacene/summary/preneti/obaveza) plus operativnu nedelju po periodu —
+    // O(periodi x redovi) po rebuild-u, a rebuild se okida na svaki realtime
+    // dogadjaj na v3_finansije/v3_auth. Ovde je O(redovi + periodi).
+    final rowsByPutnik = <String, List<Map<String, dynamic>>>{}; // lowerPid -> svi redovi
+    final rowsByPeriod = <String, Map<int, List<Map<String, dynamic>>>>{}; // lowerPid -> monthKey -> redovi
+    final canonicalId = <String, String>{}; // lowerPid -> putnikId iz reda
 
     for (final row in _naplataRows()) {
       final pid = row['putnik_v3_auth_id']?.toString().trim() ?? '';
       final godina = _parseInternalInt(row['godina']);
       final mesec = _parseInternalInt(row['mesec']);
-      if (pid.isEmpty || godina == null || mesec == null) continue;
-      addPeriod(pid, godina, mesec);
+      if (pid.isEmpty || godina == null || mesec == null || mesec < 1 || mesec > 12) continue;
+      final lower = pid.toLowerCase();
+      final monthKey = godina * 12 + mesec;
+      canonicalId.putIfAbsent(lower, () => pid);
+      rowsByPutnik.putIfAbsent(lower, () => <Map<String, dynamic>>[]).add(row);
+      rowsByPeriod
+          .putIfAbsent(lower, () => <int, List<Map<String, dynamic>>>{})
+          .putIfAbsent(monthKey, () => <Map<String, dynamic>>[])
+          .add(row);
     }
 
-    for (final putnikData in rm.putniciCache.values) {
-      final putnikId = putnikData['id']?.toString().trim() ?? '';
-      if (putnikId.isEmpty) continue;
-      addPeriod(putnikId, now.year, now.month);
-      for (final (godina, mesec) in getNaplataMeseciForPutnik(putnikId)) {
-        addPeriod(putnikId, godina, mesec);
-      }
+    // Periode ne treba dodavati za putnike bez evidencije: bez ijednog reda u
+    // mesecu dug je uvek 0 (rawDug=0, pending prenos zahteva postojeci red).
+
+    // Indeks keševa po lower-id — _lookupPutnikData u linearnom fallback-u bi
+    // skenirao ceo keš po periodu (obrisani putnici sa starim dugovima).
+    final putniciByLower = <String, Map<String, dynamic>>{};
+    for (final e in rm.putniciCache.entries) {
+      putniciByLower.putIfAbsent(e.key.toLowerCase(), () => e.value);
+    }
+    final authByLower = <String, Map<String, dynamic>>{};
+    for (final e in rm.authCache.entries) {
+      authByLower.putIfAbsent(e.key.toLowerCase(), () => e.value);
     }
 
-    for (final entry in periodKeys.entries) {
-      final parts = entry.key.split(':');
-      if (parts.length != 3) continue;
-      final putnikLower = parts[0];
-      final godina = int.tryParse(parts[1]);
-      final mesec = int.tryParse(parts[2]);
-      if (godina == null || mesec == null) continue;
+    Map<String, dynamic> lookupPutnik(String putnikId) {
+      final p = putnikId.trim();
+      if (p.isEmpty) return const <String, dynamic>{};
+      final lower = p.toLowerCase();
+      final fromPutnici = rm.putniciCache[p] ?? rm.putniciCache[lower] ?? putniciByLower[lower];
+      if (fromPutnici != null && fromPutnici.isNotEmpty) return fromPutnici;
+      final fromAuth = rm.authCache[p] ?? rm.authCache[lower] ?? authByLower[lower];
+      if (fromAuth == null || fromAuth.isEmpty) return const <String, dynamic>{};
+      return <String, dynamic>{
+        'id': fromAuth['id'],
+        'ime_prezime': fromAuth['ime'],
+        'tip_putnika': fromAuth['tip'],
+        'tip': fromAuth['tip'],
+        'cena_po_danu': fromAuth['cena_po_danu'],
+        'cena_po_pokupljenju': fromAuth['cena_po_pokupljenju'],
+      };
+    }
 
-      var putnikId = entry.value;
-      final putnikData = _lookupPutnikData(putnikId);
-      if (putnikData.isNotEmpty) {
-        final cachedId = putnikData['id']?.toString().trim();
-        if (cachedId != null && cachedId.isNotEmpty) putnikId = cachedId;
-      }
+    Map<String, Map<int, (String, String)>>? pokupioIndex;
 
-      final resolved = _resolveTipIModel(putnikId);
-      final tip = resolved.tip.isNotEmpty ? resolved.tip : 'dnevni';
-      final cenaPoDanu = (putnikData['cena_po_danu'] as num?)?.toDouble() ?? 0.0;
-      final cenaPoPokupljenju = (putnikData['cena_po_pokupljenju'] as num?)?.toDouble() ?? 0.0;
-      final cena = _cenaZaTip(
-        tip: tip,
-        cenaPoDanu: cenaPoDanu,
-        cenaPoPokupljenju: cenaPoPokupljenju,
-      );
+    for (final putnikEntry in rowsByPeriod.entries) {
+      final putnikLower = putnikEntry.key;
+      final putnikRows = rowsByPutnik[putnikLower] ?? const <Map<String, dynamic>>[];
 
-      // Dug se računa isključivo iz nenaplacene_voznje_json (istorijske cene).
-      final dugIznos = getNenaplacenIznosForPutnik(
-        putnikId: putnikId,
-        godina: godina,
-        mesec: mesec,
-      );
-      if (dugIznos <= 0) continue;
+      for (final periodEntry in putnikEntry.value.entries) {
+        final monthKey = periodEntry.key;
+        final godina = (monthKey - 1) ~/ 12;
+        final mesec = monthKey - godina * 12;
+        final monthRows = periodEntry.value;
 
-      final summary = getNaplataSummaryForPutnik(
-        putnikId: putnikId,
-        godina: godina,
-        mesec: mesec,
-        tipPutnika: tip,
-      );
-      // Ne filtriramo po brojVoznji iz realizovanih — dug može postojati i kada
-      // je arhiva realizovanih prazna/nepotpuna; tada koristimo broj nenaplaćenih.
-      final brojVoznji = summary.brojVoznji > 0
-          ? summary.brojVoznji
-          : getNenaplacenBrojVoznjiForPutnik(
-              putnikId: putnikId,
-              godina: godina,
-              mesec: mesec,
-            );
+        var putnikId = canonicalId[putnikLower] ?? putnikLower;
+        final putnikData = lookupPutnik(putnikId);
+        if (putnikData.isNotEmpty) {
+          final cachedId = putnikData['id']?.toString().trim();
+          if (cachedId != null && cachedId.isNotEmpty) putnikId = cachedId;
+        }
 
-      final naplateRows = _naplataRowsForPutnikMesec(
-        putnikId: putnikId,
-        godina: godina,
-        mesec: mesec,
-      ).toList()
-        ..sort((a, b) => _createdAtOrEpoch(b).compareTo(_createdAtOrEpoch(a)));
-      final latestNaplata = naplateRows.isNotEmpty ? naplateRows.first : null;
-      final naplatioById = _getNaplatioBy(latestNaplata ?? <String, dynamic>{});
-      final updatedById = latestNaplata?['updated_by']?.toString().trim();
-
-      final vozacData = naplatioById != null ? rm.vozaciCache[naplatioById] : null;
-      final vozacIme = vozacData?['ime_prezime']?.toString() ?? '';
-
-      String pokupioVozacId = '';
-      String pokupioVozacIme = '';
-      if (latestNaplata != null) {
-        final realizovane = _readRealizovaneVoznje(latestNaplata);
-        for (final voznja in realizovane.reversed) {
-          final pokupljenBy = voznja['pokupljen_by']?.toString().trim();
-          if (pokupljenBy != null && pokupljenBy.isNotEmpty) {
-            pokupioVozacId = pokupljenBy;
-            final pokupioVozacData = rm.vozaciCache[pokupioVozacId];
-            pokupioVozacIme = pokupioVozacData?['ime_prezime']?.toString() ?? '';
-            break;
+        // Tip/model — isto kao _resolveTipIModel nad istim podacima.
+        var tip = (putnikData['tip_putnika']?.toString() ?? putnikData['tip']?.toString() ?? '')
+            .trim()
+            .toLowerCase();
+        var isPoDanu = _isPoDanuTip(tip);
+        final cenaPoDanu = (putnikData['cena_po_danu'] as num?)?.toDouble() ?? 0.0;
+        final cenaPoPokupljenju = (putnikData['cena_po_pokupljenju'] as num?)?.toDouble() ?? 0.0;
+        if (tip.isEmpty) {
+          if (cenaPoDanu > 0.009 && cenaPoPokupljenju <= 0.009) {
+            tip = 'radnik';
+            isPoDanu = true;
           }
         }
-      }
-      if (pokupioVozacId.isEmpty) {
-        for (final operRow in rm.operativnaNedeljaCache.values) {
-          final rPutnikId = V3PutnikIdResolver.fromRow(operRow).trim().toLowerCase();
-          if (rPutnikId != putnikId.toLowerCase()) continue;
-          final pokupljenBy = operRow['pokupljen_by']?.toString().trim();
-          if (pokupljenBy == null || pokupljenBy.isEmpty) continue;
-          final datum = V3BelgradeTime.parseDatum(operRow['datum']);
-          if (datum == null) continue;
-          if (datum.year == godina && datum.month == mesec) {
-            pokupioVozacId = pokupljenBy;
-            final pokupioVozacData = rm.vozaciCache[pokupioVozacId];
-            pokupioVozacIme = pokupioVozacData?['ime_prezime']?.toString() ?? '';
-            break;
+        if (tip.isEmpty) tip = 'dnevni';
+        final cena = _cenaZaTip(
+          tip: tip,
+          cenaPoDanu: cenaPoDanu,
+          cenaPoPokupljenju: cenaPoPokupljenju,
+        );
+
+        // Dug/visak/prenos — ekvivalent _resolveDugIVIsakSaPrenosom +
+        // getPrenetiVisakUlaz/Izlaz, ali nad grupisanim redovima (bez rescan-a).
+        var rawDug = 0.0;
+        var rawVisak = 0.0;
+        var ulaz = 0.0;
+        var izlaz = 0.0;
+        for (final row in monthRows) {
+          for (final stavka in _readNenaplaceneVoznje(row)) {
+            rawDug += (stavka['cena'] as num?)?.toDouble() ?? 0.0;
+          }
+          rawVisak += _readVisak(row);
+          ulaz += _readPrenetiUlaz(row);
+          izlaz += _readPrenetiIzlaz(row);
+        }
+
+        var pendingPrenos = 0.0;
+        final prethodniRed = _prethodniRedSaVisakomIzRedova(putnikRows, monthKey);
+        if (prethodniRed != null) {
+          final prenetiVisak = _readVisak(prethodniRed);
+          if (prenetiVisak > 0.009) pendingPrenos = prenetiVisak;
+        }
+
+        final pokriceDuga = pendingPrenos >= rawDug ? rawDug : pendingPrenos;
+        final dugIznos = rawDug - pokriceDuga;
+        if (dugIznos <= 0) continue;
+        final visak = rawVisak + (pendingPrenos - pokriceDuga);
+
+        final summary = _naplataSummaryIzRedova(monthRows, isPoDanu: isPoDanu);
+        // Ne filtriramo po brojVoznji iz realizovanih — dug može postojati i kada
+        // je arhiva realizovanih prazna/nepotpuna; tada koristimo broj nenaplaćenih.
+        var brojVoznji = summary.brojVoznji;
+        if (brojVoznji <= 0) {
+          for (final row in monthRows) {
+            brojVoznji += _readNenaplaceneVoznje(row).length;
           }
         }
+
+        final naplateRows = List<Map<String, dynamic>>.from(monthRows)
+          ..sort((a, b) => _createdAtOrEpoch(b).compareTo(_createdAtOrEpoch(a)));
+        final latestNaplata = naplateRows.isNotEmpty ? naplateRows.first : null;
+        final naplatioById = _getNaplatioBy(latestNaplata ?? <String, dynamic>{});
+        final updatedById = latestNaplata?['updated_by']?.toString().trim();
+
+        final vozacData = naplatioById != null ? rm.vozaciCache[naplatioById] : null;
+        final vozacIme = vozacData?['ime_prezime']?.toString() ?? '';
+
+        String pokupioVozacId = '';
+        String pokupioVozacIme = '';
+        if (latestNaplata != null) {
+          final realizovane = _readRealizovaneVoznje(latestNaplata);
+          for (final voznja in realizovane.reversed) {
+            final pokupljenBy = voznja['pokupljen_by']?.toString().trim();
+            if (pokupljenBy != null && pokupljenBy.isNotEmpty) {
+              pokupioVozacId = pokupljenBy;
+              final pokupioVozacData = rm.vozaciCache[pokupioVozacId];
+              pokupioVozacIme = pokupioVozacData?['ime_prezime']?.toString() ?? '';
+              break;
+            }
+          }
+        }
+        if (pokupioVozacId.isEmpty) {
+          pokupioIndex ??= _buildPokupioIndex(rm);
+          final hit = pokupioIndex[putnikLower]?[monthKey];
+          if (hit != null) {
+            pokupioVozacId = hit.$1;
+            pokupioVozacIme = hit.$2;
+          }
+        }
+
+        final uplaceno = summary.ukupanIznos;
+        // Ista formula kao getMesecnaObaveza:
+        // obaveza = uplaceno - visak + dug + prenetiUlaz - prenetiIzlaz.
+        final ukupnaObaveza =
+            (uplaceno - visak + dugIznos + (ulaz + pendingPrenos) - izlaz).clamp(0.0, double.infinity).toDouble();
+
+        dugovi.add(
+          V3Dug(
+            id: '$putnikId:$godina:$mesec',
+            putnikId: putnikId,
+            imePrezime: putnikData['ime_prezime'] as String? ?? putnikData['ime'] as String? ?? 'Nepoznato',
+            tipPutnika: tip,
+            godina: godina,
+            mesec: mesec,
+            brojVoznji: brojVoznji,
+            cena: cena,
+            ukupnaObaveza: ukupnaObaveza,
+            uplaceno: uplaceno,
+            vozacId: naplatioById ?? '',
+            vozacIme: vozacIme,
+            pokupioVozacId: pokupioVozacId,
+            pokupioVozacIme: pokupioVozacIme,
+            datum: DateTime(godina, mesec, 1),
+            pokupljenAt: null,
+            iznos: dugIznos,
+            placeno: dugIznos <= 0,
+            createdAt: V3BelgradeTime.parseTs(latestNaplata?['created_at']?.toString()),
+            naplacenoAt: _naplacenoAt(latestNaplata ?? <String, dynamic>{}),
+            naplacenoBy: (naplatioById != null && naplatioById.isNotEmpty) ? naplatioById : null,
+            updatedAt: V3BelgradeTime.parseTs(latestNaplata?['updated_at']?.toString()),
+            updatedBy: (updatedById != null && updatedById.isNotEmpty) ? updatedById : null,
+            finansijeNaziv: latestNaplata?['naziv']?.toString(),
+            finansijeKategorija: latestNaplata?['kategorija']?.toString(),
+          ),
+        );
       }
-
-      final uplaceno = summary.ukupanIznos;
-      // Ista formula kao getMesecniObracun.
-      final ukupnaObaveza = getMesecnaObaveza(
-        putnikId: putnikId,
-        godina: godina,
-        mesec: mesec,
-        uplaceno: uplaceno,
-      );
-
-      dugovi.add(
-        V3Dug(
-          id: '$putnikId:$godina:$mesec',
-          putnikId: putnikId,
-          imePrezime: putnikData['ime_prezime'] as String? ?? putnikData['ime'] as String? ?? 'Nepoznato',
-          tipPutnika: tip,
-          godina: godina,
-          mesec: mesec,
-          brojVoznji: brojVoznji,
-          cena: cena,
-          ukupnaObaveza: ukupnaObaveza,
-          uplaceno: uplaceno,
-          vozacId: naplatioById ?? '',
-          vozacIme: vozacIme,
-          pokupioVozacId: pokupioVozacId,
-          pokupioVozacIme: pokupioVozacIme,
-          datum: DateTime(godina, mesec, 1),
-          pokupljenAt: null,
-          iznos: dugIznos,
-          placeno: dugIznos <= 0,
-          createdAt: V3BelgradeTime.parseTs(latestNaplata?['created_at']?.toString()),
-          naplacenoAt: _naplacenoAt(latestNaplata ?? <String, dynamic>{}),
-          naplacenoBy: (naplatioById != null && naplatioById.isNotEmpty) ? naplatioById : null,
-          updatedAt: V3BelgradeTime.parseTs(latestNaplata?['updated_at']?.toString()),
-          updatedBy: (updatedById != null && updatedById.isNotEmpty) ? updatedById : null,
-          finansijeNaziv: latestNaplata?['naziv']?.toString(),
-          finansijeKategorija: latestNaplata?['kategorija']?.toString(),
-        ),
-      );
     }
 
     dugovi.sort((a, b) {

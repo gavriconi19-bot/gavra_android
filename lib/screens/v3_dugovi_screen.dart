@@ -33,6 +33,7 @@ class _V3DugoviScreenState extends State<V3DugoviScreen> {
   String _filter = '';
   final Set<String> _processingDugIds = <String>{};
   final _searchCtrl = TextEditingController();
+  late final Stream<List<V3Dug>> _dugoviStream = V3FinansijeService.streamDugovi();
 
   @override
   void dispose() {
@@ -43,7 +44,7 @@ class _V3DugoviScreenState extends State<V3DugoviScreen> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<V3Dug>>(
-      stream: V3FinansijeService.streamDugovi(),
+      stream: _dugoviStream,
       builder: (context, snapshot) {
         final isLoading = !snapshot.hasData && snapshot.connectionState == ConnectionState.waiting;
         final allDugovi = snapshot.data ?? [];
