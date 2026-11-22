@@ -231,7 +231,7 @@ class _PolazakRow extends StatelessWidget {
     if (currentThemeId == 'passionate_rose') return const Color(0xFFDC143C).withOpacity(0.22);
     if (currentThemeId == 'dark_pink') return const Color(0xFFE91E8C).withOpacity(0.22);
     if (currentThemeId == 'cave_glow') return const Color(0xFF2FACF3).withOpacity(0.22);
-    if (currentThemeId == 'gunmetal_gold') return const Color(0xFFC9A227).withOpacity(0.22);
+    if (currentThemeId == 'gunmetal_gold') return const Color(0xFFD9B94C).withOpacity(0.22);
     return Colors.blueAccent.withOpacity(0.22);
   }
 
@@ -240,7 +240,7 @@ class _PolazakRow extends StatelessWidget {
     if (currentThemeId == 'passionate_rose') return const Color(0xFFDC143C);
     if (currentThemeId == 'dark_pink') return const Color(0xFFE91E8C);
     if (currentThemeId == 'cave_glow') return const Color(0xFF2FACF3);
-    if (currentThemeId == 'gunmetal_gold') return const Color(0xFFC9A227);
+    if (currentThemeId == 'gunmetal_gold') return const Color(0xFFD9B94C);
     return Colors.blue;
   }
 

@@ -922,9 +922,9 @@ const ColorScheme gunmetalGoldColorScheme = ColorScheme(
   brightness: Brightness.dark,
 
   // Priguseno zlato kao glavni akcenat
-  primary: Color(0xFFC9A227), // Muted gold
+  primary: Color(0xFFD9B94C), // Muted gold
   onPrimary: Color(0xFF121417),
-  primaryContainer: Color(0xFF8C7326), // Deep gold
+  primaryContainer: Color(0xFFB19130), // Deep gold
   onPrimaryContainer: Colors.white,
 
   // Svetla metalik siva (belo zlato) kao secondary
@@ -962,8 +962,8 @@ const LinearGradient gunmetalGoldGradient = LinearGradient(
     Color(0xFFEDEFF2), // Platina sjaj - pocetak svetla (belo zlato)
     Color(0xFF0D0F12), // Skoro crna - DUBOK SKOK
     Color(0xFF3B4148), // Gunmetal - sredina
-    Color(0xFFD4AF37), // Metalik zlato - svetlija
-    Color(0xFF8C7326), // Duboko zlato - TAMNIJI NEON
+    Color(0xFFDFC367), // Metalik zlato - svetlija
+    Color(0xFFB19130), // Duboko zlato - TAMNIJI NEON
   ],
   stops: [0.0, 0.25, 0.5, 0.75, 1.0],
 );
@@ -1003,11 +1003,11 @@ class GunmetalGoldStyles {
     borderRadius: V3StyleHelper.radius20,
     border: Border.all(
       width: 2,
-      color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni border
+      color: const Color(0xFFD9B94C).withOpacity(0.4), // Zlatni border
     ),
     boxShadow: [
       BoxShadow(
-        color: const Color(0xFFC9A227).withOpacity(0.25), // Zlatni glow
+        color: const Color(0xFFD9B94C).withOpacity(0.25), // Zlatni glow
         blurRadius: 24,
         offset: const Offset(0, 8),
         spreadRadius: 2,
@@ -1024,11 +1024,11 @@ class GunmetalGoldStyles {
     borderRadius: V3StyleHelper.radius16,
     border: Border.all(
       width: 1.5,
-      color: const Color(0xFFD4AF37).withOpacity(0.6), // Zlatni border
+      color: const Color(0xFFDFC367).withOpacity(0.6), // Zlatni border
     ),
     boxShadow: [
       BoxShadow(
-        color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni glow
+        color: const Color(0xFFD9B94C).withOpacity(0.4), // Zlatni glow
         blurRadius: 20,
         offset: const Offset(0, 8),
         spreadRadius: 2,
@@ -1040,12 +1040,12 @@ class GunmetalGoldStyles {
     color: const Color(0xFF191D22), // Tamna siva pozadina
     borderRadius: V3StyleHelper.radius16,
     border: Border.all(
-      color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni border
+      color: const Color(0xFFD9B94C).withOpacity(0.4), // Zlatni border
       width: 1.5,
     ),
     boxShadow: [
       BoxShadow(
-        color: const Color(0xFFC9A227).withOpacity(0.2), // Zlatni glow
+        color: const Color(0xFFD9B94C).withOpacity(0.2), // Zlatni glow
         blurRadius: 12,
         offset: const Offset(0, 4),
       ),
@@ -1056,12 +1056,12 @@ class GunmetalGoldStyles {
     color: const Color(0xFF111417), // Skoro crna pozadina
     borderRadius: V3StyleHelper.radius24,
     border: Border.all(
-      color: const Color(0xFFC9A227).withOpacity(0.5), // Zlatni border
+      color: const Color(0xFFD9B94C).withOpacity(0.5), // Zlatni border
       width: 2,
     ),
     boxShadow: [
       BoxShadow(
-        color: const Color(0xFFC9A227).withOpacity(0.3), // Zlatni glow
+        color: const Color(0xFFD9B94C).withOpacity(0.3), // Zlatni glow
         blurRadius: 32,
         offset: const Offset(0, 12),
         spreadRadius: 4,

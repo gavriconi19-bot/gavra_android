@@ -85,7 +85,7 @@ class V3StyleHelper {
       case 'cave_glow':
         return const Color(0xFF2FACF3);
       case 'gunmetal_gold':
-        return const Color(0xFFC9A227);
+        return const Color(0xFFD9B94C);
       default:
         return Colors.blue;
     }
