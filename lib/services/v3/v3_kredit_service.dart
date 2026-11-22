@@ -13,10 +13,18 @@ class V3KreditService {
   static final V3KreditRepository _repo = V3KreditRepository();
   static const Uuid _uuid = Uuid();
 
+  // Parse memoizacija po identitetu reda — red se pri update-u menja
+  // celom mapom, pa stari zapis sam odlazi u GC (isti Expando pattern
+  // kao u V3FinansijeService).
+  static final Expando<V3Kredit> _kreditParseCache = Expando('v3_kredit_parse');
+
   /// Vraca sve kredite iz cache-a, sortirane po nazivu.
   static List<V3Kredit> getKrediti() {
     final cache = V3MasterRealtimeManager.instance.getCache('v3_krediti').values;
-    final result = cache.map((row) => V3Kredit.fromJson(row)).toList();
+    final result = <V3Kredit>[];
+    for (final row in cache) {
+      result.add(_kreditParseCache[row] ??= V3Kredit.fromJson(row));
+    }
     result.sort((a, b) => a.naziv.toLowerCase().compareTo(b.naziv.toLowerCase()));
     return result;
   }

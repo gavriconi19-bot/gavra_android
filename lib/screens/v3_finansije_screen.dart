@@ -175,17 +175,25 @@ _V3IzvestajData _buildIzvestaj() {
     }
   }
 
-  // Troškovi iz cache
+  // Troškovi iz cache — mesečna grupa (mesec/godina kolone, isto kao
+  // getTroskoviMesec) i periodni bucket-i (created_at) u jednom prolazu.
   double trosakDan = 0, trosakNed = 0, trosakMes = 0, trosakGod = 0;
-  final troskoviMes = V3FinansijeService.getTroskoviMesec(mesec: now.month, godina: now.year);
+  final Map<String, double> poKat = {};
 
   for (final row in finansijeCache) {
     if (row['tip'] != 'rashod') continue;
+    final iznos = (row['iznos'] as num?)?.toDouble() ?? 0.0;
+
+    if (row['mesec'] == now.month && row['godina'] == now.year) {
+      trosakMes += iznos;
+      final kat = _katLabel(row['kategorija']?.toString());
+      poKat[kat] = (poKat[kat] ?? 0) + iznos;
+    }
+
     final createdStr = row['created_at'] as String?;
     if (createdStr == null) continue;
     final dt = V3BelgradeTime.parseTs(createdStr);
     if (dt == null) continue;
-    final iznos = (row['iznos'] as num?)?.toDouble() ?? 0.0;
 
     if (!dt.isBefore(danas) && dt.isBefore(sutra)) {
       trosakDan += iznos;
@@ -196,13 +204,6 @@ _V3IzvestajData _buildIzvestaj() {
     if (!dt.isBefore(godStart) && dt.isBefore(godEnd)) {
       trosakGod += iznos;
     }
-  }
-
-  final Map<String, double> poKat = {};
-  for (final t in troskoviMes) {
-    trosakMes += t.iznos;
-    final kat = _katLabel(t.kategorija);
-    poKat[kat] = (poKat[kat] ?? 0) + t.iznos;
   }
   // Potraživanja
   final dugovi = V3FinansijeService.getDugovi();

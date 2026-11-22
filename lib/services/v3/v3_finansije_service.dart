@@ -90,6 +90,19 @@ class V3FinansijeService {
       Expando('v3_fin_otkazane');
   static final Expando<List<Map<String, dynamic>>> _uplateParseCache =
       Expando('v3_fin_uplate');
+
+  // Isti princip, nivo iznad: izvedene vrednosti se vezuju za identitet
+  // mapa/listi iz keša — parse datumskih stringova i gradnja model-lista
+  // se ne ponavljaju pri svakom rebuild-u ekrana.
+  static final Expando<DateTime> _uplataVremeCache =
+      Expando('v3_fin_uplata_vreme');
+  static final Expando<DateTime> _createdAtParseCache =
+      Expando('v3_fin_created_at');
+  static final Expando<List<V3Uplata>> _uplateModelCache =
+      Expando('v3_fin_uplate_model');
+  static final Expando<
+          List<({DateTime datum, String? pokupljenBy, String? grad, String? vreme})>>
+      _realizovaneModelCache = Expando('v3_fin_realizovane_model');
   static final V3FinansijeRepository _repo = V3FinansijeRepository();
   static final Set<String> _mesecnaNaplataLocks = <String>{};
 
@@ -188,15 +201,23 @@ class V3FinansijeService {
   }
 
   static DateTime _createdAtOrEpoch(Map<String, dynamic> row) {
-    return V3BelgradeTime.parseTs(row['created_at']?.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final cached = _createdAtParseCache[row];
+    if (cached != null) return cached;
+    final dt = V3BelgradeTime.parseTs(row['created_at']?.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    _createdAtParseCache[row] = dt;
+    return dt;
   }
 
   /// Stvarno vreme naplate iz uplate_json stavke.
   /// `datum` je kalendarski dan (često date-only → 00:00), `naplatio_at` je timestamptz.
   static DateTime? _uplataVreme(Map<String, dynamic> uplata) {
-    return V3BelgradeTime.parseTs(uplata['naplatio_at']?.toString()) ??
+    final cached = _uplataVremeCache[uplata];
+    if (cached != null) return cached;
+    final dt = V3BelgradeTime.parseTs(uplata['naplatio_at']?.toString()) ??
         V3BelgradeTime.parseTs(uplata['datum']?.toString()) ??
         V3BelgradeTime.parseDatum(uplata['datum']);
+    if (dt != null) _uplataVremeCache[uplata] = dt;
+    return dt;
   }
 
   static DateTime? _naplacenoAt(Map<String, dynamic> row) {
@@ -2510,6 +2531,11 @@ class V3FinansijeService {
 
   /// Vraća све појединачне уплате из једног финансијског реда као V3Uplata објекте.
   static List<V3Uplata> getUplateFromRow(Map<String, dynamic> row) {
+    final raw = row[_uplateKey];
+    if (raw is List) {
+      final cached = _uplateModelCache[raw];
+      if (cached != null) return cached;
+    }
     final uplate = _readUplate(row);
     final result = <V3Uplata>[];
     for (final uplataMap in uplate) {
@@ -2523,12 +2549,18 @@ class V3FinansijeService {
         naplatioAt: V3BelgradeTime.parseTs(uplataMap['naplatio_at']?.toString()),
       ));
     }
+    if (raw is List) _uplateModelCache[raw] = result;
     return result;
   }
 
   /// Vraća све реализоване воžње из једног финансијског реда са парсираним датумом.
   static List<({DateTime datum, String? pokupljenBy, String? grad, String? vreme})> getRealizovaneVoznjeFromRow(
       Map<String, dynamic> row) {
+    final raw = row[_realizovaneVoznjeKey];
+    if (raw is List) {
+      final cached = _realizovaneModelCache[raw];
+      if (cached != null) return cached;
+    }
     final voznje = _readRealizovaneVoznje(row);
     final result = <({DateTime datum, String? pokupljenBy, String? grad, String? vreme})>[];
     for (final v in voznje) {
@@ -2541,6 +2573,7 @@ class V3FinansijeService {
         vreme: v['vreme']?.toString(),
       ));
     }
+    if (raw is List) _realizovaneModelCache[raw] = result;
     return result;
   }
 
