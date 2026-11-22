@@ -77,6 +77,8 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   List<Map<String, dynamic>> _aktivneAlternative = [];
   final Set<String> _pendingPonudaZahtevi = {};
   Timer? _ponudaRefreshTimer;
+  Timer? _refreshDebounceTimer;
+  bool _timePickerOpen = false;
   Map<String, V3WeatherSnapshot> _weatherByGrad = const {};
   Timer? _weatherTimer;
   Timer? _weatherRetryTimer;
@@ -260,7 +262,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         'v3_app_settings',
       ]),
       onData: (_) {
-        if (mounted) _refresh();
+        if (mounted) _scheduleRefresh();
       },
     );
     // v3_finansije ne ulazi u _refresh (raspored ne zavisi od nje) — samo
@@ -285,6 +287,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     _weatherTimer?.cancel();
     _weatherRetryTimer?.cancel();
     _ponudaRefreshTimer?.cancel();
+    _refreshDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -292,6 +295,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshWeather();
+      _refresh();
     }
   }
 
@@ -314,6 +318,16 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     } else {
       _weatherRetryCount = 0;
     }
+  }
+
+  /// Trailing debounce za realtime revision event-e — u smeni jedan
+  /// operativna/zahtevi burst može ispaliti desetine event-a u sekundi,
+  /// a svaki _refresh skenira ceo zahtevi + operativna keš ~10×.
+  void _scheduleRefresh() {
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) _refresh();
+    });
   }
 
   void _refresh() {
@@ -549,6 +563,28 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         if (mounted) V3AppSnackBar.info(context, V3PutnikProfilMessages.requestPendingDispatcher);
         return;
       }
+
+      // Re-check 15-min zaključavanja U TRENUTKU slanja — picker proverava
+      // samo pri otvaranju dijaloga. Ako dijalog ostane otvoren preko
+      // granice, klik bi napravio 'obrada' zahtev za termin koji server
+      // više ne obrađuje (zabrana prošlih termina) → putnik zaglavi
+      // 'u obradi' i pending-guard mu blokira dalje izmene konteksta.
+      final parts = validNovoVreme.split(':');
+      final polazak = V3BelgradeTime.dateTime(
+        datumPolaska.year,
+        datumPolaska.month,
+        datumPolaska.day,
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+      );
+      final sendNow = V3BelgradeTime.now();
+      if (sendNow.isAfter(polazak.subtract(const Duration(minutes: 15)))) {
+        final unlockAt = V3DanHelper.nextSchedulingUnlock(now: sendNow);
+        final unlockStr =
+            '${unlockAt.day}.${unlockAt.month}.${unlockAt.year}. ${unlockAt.hour.toString().padLeft(2, '0')}:${unlockAt.minute.toString().padLeft(2, '0')}';
+        if (mounted) V3AppSnackBar.info(context, V3PutnikProfilMessages.schedulingLocked(validNovoVreme, unlockStr));
+        return;
+      }
     }
 
     _pendingActionContexts.add(contextKey);
@@ -585,6 +621,19 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   }
 
   Future<void> _showTimePicker(BuildContext ctx, String dan, String grad, _ZahtevInfo? info) async {
+    // Guard protiv duplih dijaloga — ćelija je GestureDetector bez
+    // debounce-a, a metod ima async gap-ove pre showDialogBuilder pa bi
+    // brzi dupli tap naslagao dva identična pickera.
+    if (_timePickerOpen) return;
+    _timePickerOpen = true;
+    try {
+      await _showTimePickerInner(ctx, dan, grad, info);
+    } finally {
+      _timePickerOpen = false;
+    }
+  }
+
+  Future<void> _showTimePickerInner(BuildContext ctx, String dan, String grad, _ZahtevInfo? info) async {
     final currentPutnikId = _currentPutnikId() ?? '';
     // v3_finansije je sekundarna tabela — na cold start bez disk keša stigne
     // posle kritične faze. Sačekaj je nakratko da debt-gate ne bi propuštio
@@ -2535,6 +2584,13 @@ class _EditProfilDialogState extends State<_EditProfilDialog> {
       V3AppSnackBar.error(context, _trProfileDialog('telefonNijeIspravan'));
       return;
     }
+    // Bar jedan telefon mora ostati — telefon je login identitet
+    // (v3_auth_find_id_by_phone), brisanje oba = self-lockout bez
+    // mogućnosti ponovne prijave.
+    if (tel1Raw.isEmpty && tel2Raw.isEmpty) {
+      V3AppSnackBar.error(context, _trProfileDialog('barJedanTelefon'));
+      return;
+    }
     final tel1Val = V3PhoneUtils.normalizeOrNull(tel1Raw);
     final tel2Val = V3PhoneUtils.normalizeOrNull(tel2Raw);
     if (_adresaBc1 == null || _adresaVs1 == null) {
@@ -2558,6 +2614,28 @@ class _EditProfilDialogState extends State<_EditProfilDialog> {
         putnik,
         updatedBy: putnik.id,
       ).timeout(const Duration(seconds: 20));
+
+      // Telefon je login identitet — auto-login restore traži auth id po
+      // sačuvanom broju u SecureStorage. Ako se broj promenio a sesija ne,
+      // sledeći cold start tiho baca putnika na welcome ekran.
+      final authId = widget.putnikData['id']?.toString().trim() ?? '';
+      final stariTel1 =
+          V3PhoneUtils.normalizeOrNull(widget.putnikData['telefon_1']?.toString());
+      final stariTel2 =
+          V3PhoneUtils.normalizeOrNull(widget.putnikData['telefon_2']?.toString());
+      if (authId.isNotEmpty && (tel1Val != stariTel1 || tel2Val != stariTel2)) {
+        unawaited(() async {
+          final sessionPhone = tel1Val ?? tel2Val;
+          if (sessionPhone != null) {
+            await V3ClosedAuthService.saveManualSmsPutnikSession(
+              normalizedPhone: sessionPhone,
+              authId: authId,
+            );
+          } else {
+            await V3ClosedAuthService.clearManualSmsPutnikPhone();
+          }
+        }());
+      }
 
       if (!mounted) return;
       V3AppSnackBar.success(context, _trProfileDialog('profilSacuvan'));

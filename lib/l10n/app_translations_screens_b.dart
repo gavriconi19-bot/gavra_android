@@ -582,6 +582,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': '⚠️ Ungültige Telefonnummer (serbische Nummer erwartet, z. B. 06x…)',
       'zh': '⚠️ 电话号码无效（应为塞尔维亚号码，如06x…）',
     },
+    'barJedanTelefon': {
+      'sr': '⚠️ Bar jedan broj telefona je obavezan — služi za prijavu',
+      'en': '⚠️ At least one phone number is required — it is used for sign-in',
+      'ru': '⚠️ Нужен хотя бы один номер телефона — он используется для входа',
+      'de': '⚠️ Mindestens eine Telefonnummer ist erforderlich — sie dient der Anmeldung',
+      'zh': '⚠️ 至少需要一个电话号码——用于登录',
+    },
   },
   'putnikProfilScreen': {
     'tema': {
