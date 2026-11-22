@@ -78,24 +78,18 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
     return hour * 60 + minute;
   }
 
-  Future<void> _reloadTrenutnaDodelaMap() async {
-    try {
-      final byTerminId = await V3TrenutnaDodelaService.loadActiveVozacByTerminId();
-      final bySlotKey = await V3TrenutnaDodelaSlotService.loadAllVozacBySlotKey(
-        datumIso: _selectedDatumIso,
-      );
-      final voziloBySlotKey = await V3TrenutnaDodelaSlotService.loadAllVoziloBySlotKey(
-        datumIso: _selectedDatumIso,
-      );
-      _activeVozacByTerminId = byTerminId;
-      _activeVozacBySlotKey = bySlotKey;
-      _activeVoziloBySlotKey = voziloBySlotKey;
-    } catch (e) {
-      debugPrint('[V3AdminRasporedScreen] _reloadTrenutnaDodelaMap error: $e');
-      _activeVozacByTerminId = const {};
-      _activeVozacBySlotKey = const {};
-      _activeVoziloBySlotKey = const {};
-    }
+  void _reloadTrenutnaDodelaMap() {
+    final rm = V3MasterRealtimeManager.instance;
+    _activeVozacByTerminId =
+        V3TrenutnaDodelaService.vozacByTerminIdFromCache(rm.trenutnaDodelaCache);
+    _activeVozacBySlotKey = V3TrenutnaDodelaSlotService.vozacBySlotKeyFromCache(
+      rm.trenutnaDodelaSlotCache,
+      datumIso: _selectedDatumIso,
+    );
+    _activeVoziloBySlotKey = V3TrenutnaDodelaSlotService.voziloBySlotKeyFromCache(
+      rm.trenutnaDodelaSlotCache,
+      datumIso: _selectedDatumIso,
+    );
   }
 
   String _vozacIdForOperativnaRow(Map<String, dynamic> row) {
@@ -120,14 +114,13 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
       'v3_operativna_nedelja',
       'v3_auth',
     ]).listen((_) {
-      unawaited(_refreshDodelaFromRealtime());
+      _refreshDodelaFromRealtime();
     });
   }
 
-  Future<void> _refreshDodelaFromRealtime() async {
+  void _refreshDodelaFromRealtime() {
     if (!mounted) return;
-    await _reloadTrenutnaDodelaMap();
-    if (!mounted) return;
+    _reloadTrenutnaDodelaMap();
     setState(() {
       _syncSelectedSlotForDay();
     });
@@ -141,9 +134,8 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
     _initData();
   }
 
-  Future<void> _initData() async {
-    await _reloadTrenutnaDodelaMap();
-    if (!mounted) return;
+  void _initData() {
+    _reloadTrenutnaDodelaMap();
     setState(() {
       _syncSelectedSlotForDay();
     });
@@ -374,7 +366,7 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
         },
       );
 
-      await _reloadTrenutnaDodelaMap();
+      _reloadTrenutnaDodelaMap();
       if (mounted) setState(() {});
 
       if (mounted) {
@@ -409,7 +401,7 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
         },
       );
 
-      await _reloadTrenutnaDodelaMap();
+      _reloadTrenutnaDodelaMap();
       if (mounted) setState(() {});
 
       if (mounted) V3AppSnackBar.success(context, '${_RasTr.tr('dodelaUklonjena')}: $grad $vreme ($_selectedDatumIso)');
@@ -445,7 +437,7 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
         return;
       }
 
-      await _reloadTrenutnaDodelaMap();
+      _reloadTrenutnaDodelaMap();
       if (mounted) setState(() {});
 
       if (mounted) V3AppSnackBar.success(context, '✅ ${vozac.imePrezime} → ${_RasTr.tr('putnik')} ($datum)');
@@ -469,7 +461,7 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
         ),
       );
 
-      await _reloadTrenutnaDodelaMap();
+      _reloadTrenutnaDodelaMap();
       if (mounted) setState(() {});
 
       if (mounted) V3AppSnackBar.success(context, _RasTr.tr('individualnaDodelaUklonjena'));
@@ -773,13 +765,10 @@ class _V3AdminRasporedScreenState extends State<V3AdminRasporedScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: InkWell(
-                            onTap: () async {
+                            onTap: () {
                               setState(() {
                                 _selectedDay = V3DanHelper.normalizeToWorkdayFull(day);
-                              });
-                              await _reloadTrenutnaDodelaMap();
-                              if (!mounted) return;
-                              setState(() {
+                                _reloadTrenutnaDodelaMap();
                                 _syncSelectedSlotForDay();
                               });
                             },

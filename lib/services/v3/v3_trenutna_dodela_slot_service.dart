@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../../globals.dart';
 import '../../utils/v3_belgrade_time.dart';
 
@@ -34,38 +32,72 @@ class V3TrenutnaDodelaSlotService {
     return '$datum|$gradNorm|$vremeNorm';
   }
 
-  static Future<Map<String, String>> loadActiveVozacBySlotKey({
-    String? vozacId,
+  /// 'datum|GRAD|HH:mm' -> vrednost [valueColumn] iz realtime keša (bez
+  /// mrežnog poziva). Keš je isti izvor koji realtime drži svežim — ekrani
+  /// ga čitaju na svaki render/revision tick, pa REST read nije potreban.
+  /// Kod duplih slot ključeva pobeđuje red sa najnovijim updated_at
+  /// (bivši REST read je order-ovao desc pa uzimao prvi pogodak).
+  static Map<String, String> _assignmentBySlotKeyFromCache(
+    Map<String, Map<String, dynamic>> cache, {
+    required String valueColumn,
     String? datumIso,
-  }) async {
-    dynamic query = supabase.from(tableName).select('$colDatum, $colGrad, $colVreme, $colVozacId');
-
-    final trimmedVozacId = (vozacId ?? '').trim();
-    if (trimmedVozacId.isNotEmpty) {
-      query = query.eq(colVozacId, trimmedVozacId);
-    }
-
+    String? vozacId,
+  }) {
     final trimmedDatum = _normalizeDatumIso(datumIso);
-    if (trimmedDatum.isNotEmpty) {
-      query = query.eq(colDatum, trimmedDatum);
-    }
-
-    final rows = await query;
+    final trimmedVozacId = (vozacId ?? '').trim();
 
     final result = <String, String>{};
-    for (final row in (rows as List<dynamic>)) {
-      final mapped = row as Map<String, dynamic>;
+    final bestUpdatedAt = <String, DateTime>{};
+    final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+    for (final mapped in cache.values) {
       final datum = _normalizeDatumIso(mapped[colDatum]?.toString());
       final grad = _normalizeGrad(mapped[colGrad]?.toString());
       final vreme = _normalizeVreme(mapped[colVreme]?.toString());
-      final assignedVozacId = mapped[colVozacId]?.toString().trim() ?? '';
-      if (datum.isEmpty || grad.isEmpty || vreme.isEmpty || assignedVozacId.isEmpty) continue;
+      final value = (mapped[valueColumn]?.toString() ?? '').trim();
+      if (datum.isEmpty || grad.isEmpty || vreme.isEmpty || value.isEmpty) {
+        continue;
+      }
+      if (trimmedDatum.isNotEmpty && datum != trimmedDatum) continue;
+      if (trimmedVozacId.isNotEmpty &&
+          (mapped[colVozacId]?.toString().trim() ?? '') != trimmedVozacId) {
+        continue;
+      }
 
-      result['$datum|$grad|$vreme'] = assignedVozacId;
+      final key = '$datum|$grad|$vreme';
+      final updatedAt = DateTime.tryParse(
+              mapped['updated_at']?.toString() ?? '') ??
+          epoch;
+      final best = bestUpdatedAt[key];
+      if (best != null && !updatedAt.isAfter(best)) continue;
+      bestUpdatedAt[key] = updatedAt;
+      result[key] = value;
     }
 
     return result;
   }
+
+  static Map<String, String> vozacBySlotKeyFromCache(
+    Map<String, Map<String, dynamic>> cache, {
+    String? datumIso,
+    String? vozacId,
+  }) =>
+      _assignmentBySlotKeyFromCache(
+        cache,
+        valueColumn: colVozacId,
+        datumIso: datumIso,
+        vozacId: vozacId,
+      );
+
+  static Map<String, String> voziloBySlotKeyFromCache(
+    Map<String, Map<String, dynamic>> cache, {
+    String? datumIso,
+  }) =>
+      _assignmentBySlotKeyFromCache(
+        cache,
+        valueColumn: colVoziloId,
+        datumIso: datumIso,
+      );
 
   static Future<String?> upsertActiveSlotDodela({
     required String datumIso,
@@ -233,18 +265,18 @@ class V3TrenutnaDodelaSlotService {
     await supabase.from(tableName).delete().eq(colVozacId, vozac);
   }
 
-  static Future<List<Map<String, String>>> loadAllSlotsForVozac({
+  /// Slot redovi dodeljeni vozaču iz realtime keša — isti shape kao bivši
+  /// REST read ({datum, grad, vreme, vozilo_id?}).
+  static List<Map<String, String>> slotRowsForVozacFromCache(
+    Map<String, Map<String, dynamic>> cache, {
     required String vozacId,
-  }) async {
+  }) {
     final vozac = vozacId.trim();
     if (vozac.isEmpty) return <Map<String, String>>[];
 
-    final rows =
-        await supabase.from(tableName).select('$colDatum, $colGrad, $colVreme, $colVoziloId').eq(colVozacId, vozac);
-
     final result = <Map<String, String>>[];
-    for (final row in (rows as List<dynamic>)) {
-      final mapped = row as Map<String, dynamic>;
+    for (final mapped in cache.values) {
+      if ((mapped[colVozacId]?.toString() ?? '').trim() != vozac) continue;
       final datum = _normalizeDatumIso(mapped[colDatum]?.toString());
       final grad = _normalizeGrad(mapped[colGrad]?.toString());
       final vreme = _normalizeVreme(mapped[colVreme]?.toString());
@@ -259,72 +291,6 @@ class V3TrenutnaDodelaSlotService {
       });
     }
 
-    return result;
-  }
-
-  /// Kombi trenutno dodeljen svakom slotu (isklju\u010divo eksplicitna dodela po
-  /// slotu). Nema fallback-a na trajnu dodelu voza\u010du \u2014 kombi je nezavisan
-  /// izbor po slotu, isto kao dodela putnika.
-  static Future<Map<String, String>> loadAllVoziloBySlotKey({
-    String? datumIso,
-  }) async {
-    dynamic query = supabase.from(tableName).select('$colDatum, $colGrad, $colVreme, $colVoziloId, updated_at');
-
-    final trimmedDatum = _normalizeDatumIso(datumIso);
-    if (trimmedDatum.isNotEmpty) {
-      query = query.eq(colDatum, trimmedDatum);
-    }
-
-    query = query.order('updated_at', ascending: false);
-
-    final rows = await query;
-
-    final result = <String, String>{};
-    for (final row in (rows as List<dynamic>)) {
-      final mapped = row as Map<String, dynamic>;
-      final datum = _normalizeDatumIso(mapped[colDatum]?.toString());
-      final grad = _normalizeGrad(mapped[colGrad]?.toString());
-      final vreme = _normalizeVreme(mapped[colVreme]?.toString());
-      final voziloId = (mapped[colVoziloId]?.toString() ?? '').trim();
-      if (datum.isNotEmpty && grad.isNotEmpty && vreme.isNotEmpty && voziloId.isNotEmpty) {
-        final key = '$datum|$grad|$vreme';
-        result.putIfAbsent(key, () => voziloId);
-      }
-    }
-    return result;
-  }
-
-  static Future<Map<String, String>> loadAllVozacBySlotKey({
-    String? datumIso,
-  }) async {
-    dynamic query = supabase.from(tableName).select('$colDatum, $colGrad, $colVreme, $colVozacId, updated_at');
-
-    final trimmedDatum = _normalizeDatumIso(datumIso);
-    if (trimmedDatum.isNotEmpty) {
-      query = query.eq(colDatum, trimmedDatum);
-    }
-
-    query = query.order('updated_at', ascending: false);
-
-    final rows = await query;
-
-    final result = <String, String>{};
-    for (final row in (rows as List<dynamic>)) {
-      final mapped = row as Map<String, dynamic>;
-      final datum = _normalizeDatumIso(mapped[colDatum]?.toString());
-      final grad = _normalizeGrad(mapped[colGrad]?.toString());
-      final vreme = _normalizeVreme(mapped[colVreme]?.toString());
-      final vozacId = (mapped[colVozacId]?.toString() ?? '').trim();
-      if (datum.isNotEmpty && grad.isNotEmpty && vreme.isNotEmpty && vozacId.isNotEmpty) {
-        final key = '$datum|$grad|$vreme';
-        if (result.containsKey(key)) {
-          debugPrint(
-              '[V3TrenutnaDodelaSlotService] Duplicate slotKey detected while loading: $key (keeping latest updated_at row)');
-          continue;
-        }
-        result[key] = vozacId;
-      }
-    }
     return result;
   }
 }

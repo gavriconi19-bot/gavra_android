@@ -170,19 +170,14 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
     );
   }
 
-  Future<void> _reloadTrenutnaDodelaMap() async {
-    try {
-      final byTerminId = await V3TrenutnaDodelaService.loadActiveVozacByTerminId();
-      final bySlotKey = await V3TrenutnaDodelaSlotService.loadAllVozacBySlotKey(
-        datumIso: _selectedDatumIso,
-      );
-      _activeVozacByTerminId = byTerminId;
-      _activeVozacBySlotKey = bySlotKey;
-    } catch (e) {
-      debugPrint('[V3HomeScreen] _reloadTrenutnaDodelaMap error: $e');
-      _activeVozacByTerminId = const {};
-      _activeVozacBySlotKey = const {};
-    }
+  void _reloadTrenutnaDodelaMap() {
+    final rm = V3MasterRealtimeManager.instance;
+    _activeVozacByTerminId =
+        V3TrenutnaDodelaService.vozacByTerminIdFromCache(rm.trenutnaDodelaCache);
+    _activeVozacBySlotKey = V3TrenutnaDodelaSlotService.vozacBySlotKeyFromCache(
+      rm.trenutnaDodelaSlotCache,
+      datumIso: _selectedDatumIso,
+    );
   }
 
   String _vozacIdForOperativnaRow(Map<String, dynamic> row) {
@@ -200,14 +195,13 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
       V3TrenutnaDodelaService.tableName,
       V3TrenutnaDodelaSlotService.tableName,
     ]).listen((_) {
-      unawaited(_refreshDodelaFromRealtime());
+      _refreshDodelaFromRealtime();
     });
   }
 
-  Future<void> _refreshDodelaFromRealtime() async {
+  void _refreshDodelaFromRealtime() {
     if (!mounted) return;
-    await _reloadTrenutnaDodelaMap();
-    if (!mounted) return;
+    _reloadTrenutnaDodelaMap();
     setState(() {});
   }
 
@@ -272,21 +266,17 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
     super.dispose();
   }
 
-  Future<void> _initData() async {
+  void _initData() {
     if (V3VozacService.currentVozac == null) {
-      if (mounted) {
-        V3NavigationUtils.pushAndRemoveUntil<void>(
-          context,
-          const V3WelcomeScreen(),
-        );
-      }
+      V3NavigationUtils.pushAndRemoveUntil<void>(
+        context,
+        const V3WelcomeScreen(),
+      );
       return;
     }
-    if (mounted) {
-      await _reloadTrenutnaDodelaMap();
-      _syncSelectedSlotForDatum(_selectedDatumIso);
-      setState(() => _isLoading = false);
-    }
+    _reloadTrenutnaDodelaMap();
+    _syncSelectedSlotForDatum(_selectedDatumIso);
+    setState(() => _isLoading = false);
   }
 
   bool get _isAdmin => V3AdminService.isCurrentUserAdmin;
@@ -1342,13 +1332,9 @@ class _V3HomeScreenState extends State<V3HomeScreen> with TickerProviderStateMix
                                               setState(() {
                                                 _selectedDay = V3DanHelper.normalizeToWorkdayFull(val!);
                                                 _operativnaStream = _buildOperativnaStream(_selectedDatumIso);
+                                                _reloadTrenutnaDodelaMap();
+                                                _syncSelectedSlotForDatum(_selectedDatumIso);
                                               });
-                                              unawaited(_reloadTrenutnaDodelaMap().then((_) {
-                                                if (!mounted) return;
-                                                setState(() {
-                                                  _syncSelectedSlotForDatum(_selectedDatumIso);
-                                                });
-                                              }));
                                             },
                                           ),
                                         ),

@@ -10,30 +10,29 @@ class V3TrenutnaDodelaService {
   static const String _colUpdatedBy = 'updated_by';
   static const String colSlotId = 'slot_id';
 
-  static Future<Map<String, String>> loadActiveVozacByTerminId({
+  /// termin_id -> vozac_v3_auth_id iz realtime keša (bez mrežnog poziva).
+  /// Keš je isti izvor koji realtime drži svežim — ekrani ga čitaju na
+  /// svaki render/revision tick, pa REST read ovde nije potreban.
+  static Map<String, String> vozacByTerminIdFromCache(
+    Map<String, Map<String, dynamic>> cache, {
     String? putnikId,
     String? vozacId,
-  }) async {
-    dynamic query = supabase.from(tableName).select('$_colTerminId, $colVozacId');
-
+  }) {
     final trimmedPutnikId = (putnikId ?? '').trim();
-    if (trimmedPutnikId.isNotEmpty) {
-      query = query.eq(_colPutnikId, trimmedPutnikId);
-    }
-
     final trimmedVozacId = (vozacId ?? '').trim();
-    if (trimmedVozacId.isNotEmpty) {
-      query = query.eq(colVozacId, trimmedVozacId);
-    }
-
-    final rows = await query;
 
     final result = <String, String>{};
-    for (final row in (rows as List<dynamic>)) {
-      final mapped = row as Map<String, dynamic>;
+    for (final mapped in cache.values) {
       final terminId = mapped[_colTerminId]?.toString().trim() ?? '';
       final assignedVozacId = mapped[colVozacId]?.toString().trim() ?? '';
       if (terminId.isEmpty || assignedVozacId.isEmpty) continue;
+      if (trimmedPutnikId.isNotEmpty &&
+          (mapped[_colPutnikId]?.toString().trim() ?? '') != trimmedPutnikId) {
+        continue;
+      }
+      if (trimmedVozacId.isNotEmpty && assignedVozacId != trimmedVozacId) {
+        continue;
+      }
 
       result[terminId] = assignedVozacId;
     }
@@ -41,15 +40,16 @@ class V3TrenutnaDodelaService {
     return result;
   }
 
-  static Future<Set<String>> loadActiveTerminIds({
+  static Set<String> activeTerminIdsFromCache(
+    Map<String, Map<String, dynamic>> cache, {
     String? putnikId,
     String? vozacId,
-  }) async {
-    final activeVozacByTerminId = await loadActiveVozacByTerminId(
+  }) {
+    return vozacByTerminIdFromCache(
+      cache,
       putnikId: putnikId,
       vozacId: vozacId,
-    );
-    return activeVozacByTerminId.keys.toSet();
+    ).keys.toSet();
   }
 
   static Future<void> upsertActiveTerminDodela({

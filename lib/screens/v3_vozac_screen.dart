@@ -151,7 +151,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     );
   }
 
-  Future<void> _reloadTrenutnaDodelaForVozac() async {
+  void _reloadTrenutnaDodelaForVozac() {
     final vozac = _efektivniVozac;
     if (vozac == null) {
       _assignedOperativnaIds = <String>{};
@@ -170,9 +170,17 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
 
     _loadingDodela = true;
     try {
-      _assignedOperativnaIds = await V3TrenutnaDodelaService.loadActiveTerminIds(vozacId: vozacAuthId);
-      _assignedSlotRows = await V3TrenutnaDodelaSlotService.loadAllSlotsForVozac(vozacId: vozacAuthId);
-      _allTerminToVozac = await V3TrenutnaDodelaService.loadActiveVozacByTerminId();
+      final rm = V3MasterRealtimeManager.instance;
+      _assignedOperativnaIds = V3TrenutnaDodelaService.activeTerminIdsFromCache(
+        rm.trenutnaDodelaCache,
+        vozacId: vozacAuthId,
+      );
+      _assignedSlotRows = V3TrenutnaDodelaSlotService.slotRowsForVozacFromCache(
+        rm.trenutnaDodelaSlotCache,
+        vozacId: vozacAuthId,
+      );
+      _allTerminToVozac =
+          V3TrenutnaDodelaService.vozacByTerminIdFromCache(rm.trenutnaDodelaCache);
     } catch (e) {
       debugPrint('[V3VozacScreen] _reloadTrenutnaDodelaForVozac error: $e');
       // Ne briši prethodnu dodelu — prazan spisak bi ugasio tracking (AKTIVNO→ČEKAM).
@@ -191,7 +199,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       V3TrenutnaDodelaService.tableName,
       V3TrenutnaDodelaSlotService.tableName,
     ]).listen((_) {
-      unawaited(_refreshDodelaFromRealtime());
+      _refreshDodelaFromRealtime();
     });
   }
 
@@ -211,10 +219,9 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     });
   }
 
-  Future<void> _refreshDodelaFromRealtime() async {
+  void _refreshDodelaFromRealtime() {
     if (!mounted) return;
-    await _reloadTrenutnaDodelaForVozac();
-    if (!mounted) return;
+    _reloadTrenutnaDodelaForVozac();
     _rebuild();
   }
 
@@ -666,7 +673,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     }
 
     if (!mounted) return;
-    await _reloadTrenutnaDodelaForVozac();
+    _reloadTrenutnaDodelaForVozac();
     _rebuild();
     V3StateUtils.safeSetState(this, () => _isLoading = false);
 
