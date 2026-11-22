@@ -917,36 +917,36 @@ class CaveGlowStyles {
   );
 }
 
-// EMERALD GOLD - Elegantna tema: smaragd + zlato!
+// GUNMETAL GOLD - Elegantna tema: belo zlato (sjajna siva) + zlato!
 const ColorScheme gunmetalGoldColorScheme = ColorScheme(
   brightness: Brightness.dark,
 
   // Priguseno zlato kao glavni akcenat
   primary: Color(0xFFC9A227), // Muted gold
-  onPrimary: Color(0xFF0F1713),
+  onPrimary: Color(0xFF121417),
   primaryContainer: Color(0xFF8C7326), // Deep gold
   onPrimaryContainer: Colors.white,
 
-  // Smaragd kao secondary
-  secondary: Color(0xFF1F4D3A), // Emerald
-  onSecondary: Colors.white,
-  secondaryContainer: Color(0xFF2E6B4F), // Svetliji smaragd
+  // Svetla metalik siva (belo zlato) kao secondary
+  secondary: Color(0xFFD0D5DB), // Bright silver / white gold
+  onSecondary: Color(0xFF121417),
+  secondaryContainer: Color(0xFF454C54), // Gunmetal
   onSecondaryContainer: Colors.white,
 
-  // Sage kao tertiary
-  tertiary: Color(0xFF9DBBA8), // Sage
-  onTertiary: Color(0xFF0F1713),
-  tertiaryContainer: Color(0xFFD3E4DA), // Light sage
-  onTertiaryContainer: Color(0xFF0F1713),
+  // Platina kao tertiary
+  tertiary: Color(0xFFE3E6EA), // Platinum shine
+  onTertiary: Color(0xFF121417),
+  tertiaryContainer: Color(0xFFF2F4F6), // Near-white silver
+  onTertiaryContainer: Color(0xFF121417),
 
-  // Tamne povrsine - skoro crna sa smaragdnim tonom
-  surface: Color(0xFF0F1713),
+  // Tamne povrsine - skoro crna sa sivim tonom
+  surface: Color(0xFF111417),
   onSurface: Colors.white,
-  surfaceContainerHighest: Color(0xFF1B2921), // Tamni smaragd
-  onSurfaceVariant: Color(0xFFAFC4B8),
+  surfaceContainerHighest: Color(0xFF22262C), // Tamna siva
+  onSurfaceVariant: Color(0xFFC9CED4),
 
-  outline: Color(0xFF3E5C4C), // Smaragdni okvir
-  outlineVariant: Color(0xFF1F4D3A),
+  outline: Color(0xFF6A7280), // Sivi okvir
+  outlineVariant: Color(0xFF383F47),
 
   error: Color(0xFFFF4444),
   onError: Colors.white,
@@ -954,21 +954,21 @@ const ColorScheme gunmetalGoldColorScheme = ColorScheme(
   onErrorContainer: Color(0xFFFF8888),
 );
 
-// Emerald Gold Gradient - sage -> crna -> smaragd -> zlato -> duboko zlato
+// Gunmetal Gold Gradient - platina -> crna -> gunmetal -> zlato -> duboko zlato
 const LinearGradient gunmetalGoldGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
   colors: [
-    Color(0xFFB2CDBE), // Sage - pocetak svetla
-    Color(0xFF0C1310), // Skoro crna - DUBOK SKOK
-    Color(0xFF1E4A38), // Smaragd - sredina
+    Color(0xFFEDEFF2), // Platina sjaj - pocetak svetla (belo zlato)
+    Color(0xFF0D0F12), // Skoro crna - DUBOK SKOK
+    Color(0xFF3B4148), // Gunmetal - sredina
     Color(0xFFD4AF37), // Metalik zlato - svetlija
     Color(0xFF8C7326), // Duboko zlato - TAMNIJI NEON
   ],
   stops: [0.0, 0.25, 0.5, 0.75, 1.0],
 );
 
-// Emerald Gold Theme
+// Gunmetal Gold Theme
 final ThemeData gunmetalGoldTheme = ThemeData(
   colorScheme: gunmetalGoldColorScheme,
   useMaterial3: true,
@@ -978,10 +978,10 @@ final ThemeData gunmetalGoldTheme = ThemeData(
     bodyColor: gunmetalGoldColorScheme.onSurface,
     displayColor: gunmetalGoldColorScheme.onSurface,
   ),
-  scaffoldBackgroundColor: const Color(0xFF0F1713),
+  scaffoldBackgroundColor: const Color(0xFF111417),
   appBarTheme: AppBarTheme(
     elevation: 0,
-    backgroundColor: const Color(0xFF1B2921), // Tamni smaragd
+    backgroundColor: const Color(0xFF20252B), // Tamna siva
     foregroundColor: Colors.white,
     systemOverlayStyle: const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -996,10 +996,10 @@ final ThemeData gunmetalGoldTheme = ThemeData(
   ),
 );
 
-// Emerald Gold Styles - Tamna sa zlatnim glow akcentima!
+// Gunmetal Gold Styles - Tamna sa zlatnim glow akcentima!
 class GunmetalGoldStyles {
   static BoxDecoration cardDecoration = BoxDecoration(
-    color: const Color(0xFF1B2921), // Smaragd pozadina
+    color: const Color(0xFF20252B), // Gunmetal pozadina
     borderRadius: V3StyleHelper.radius20,
     border: Border.all(
       width: 2,
@@ -1037,7 +1037,7 @@ class GunmetalGoldStyles {
   );
 
   static BoxDecoration dropdownDecoration = BoxDecoration(
-    color: const Color(0xFF16211B), // Tamni smaragd pozadina
+    color: const Color(0xFF191D22), // Tamna siva pozadina
     borderRadius: V3StyleHelper.radius16,
     border: Border.all(
       color: const Color(0xFFC9A227).withOpacity(0.4), // Zlatni border
@@ -1053,7 +1053,7 @@ class GunmetalGoldStyles {
   );
 
   static BoxDecoration popupDecoration = BoxDecoration(
-    color: const Color(0xFF0F1713), // Skoro crna pozadina
+    color: const Color(0xFF111417), // Skoro crna pozadina
     borderRadius: V3StyleHelper.radius24,
     border: Border.all(
       color: const Color(0xFFC9A227).withOpacity(0.5), // Zlatni border
