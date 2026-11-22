@@ -54,6 +54,8 @@ class _V3WelcomeScreenState extends State<V3WelcomeScreen> with TickerProviderSt
   bool _isDisposing = false;
 
   String _appVersion = '';
+  bool _autoLoginInProgress = false;
+  bool _autoLoginRetryScheduled = false;
 
   // Prevodi za welcome ekran (SR/EN/RU/DE) — jednostavna mapa dok se ne uvede puni l10n sistem.
   static final Map<String, Map<String, String>> _t = AppTranslations.ns('welcomeScreen');
@@ -118,16 +120,45 @@ class _V3WelcomeScreenState extends State<V3WelcomeScreen> with TickerProviderSt
   }
 
   Future<void> _init() async {
-    final vozacRestored = await _runStartupStep<bool>(
-          label: 'auto-login vozac',
-          action: _tryAutoLoginVozac,
-        ) ??
-        false;
-    if (vozacRestored) return;
+    V3StateUtils.safeSetState(this, () => _autoLoginInProgress = true);
+    try {
+      final vozacRestored = await _runStartupStep<bool>(
+            label: 'auto-login vozac',
+            action: _tryAutoLoginVozac,
+          ) ??
+          false;
+      if (vozacRestored || !mounted) return;
 
-    await _runStartupStep<bool>(
-      label: 'auto-login putnik',
-      action: _tryAutoLoginPutnik,
+      await _runStartupStep<bool>(
+        label: 'auto-login putnik',
+        action: _tryAutoLoginPutnik,
+      );
+    } finally {
+      V3StateUtils.safeSetState(this, () => _autoLoginInProgress = false);
+    }
+
+    _scheduleAutoLoginRetryIfNeeded();
+  }
+
+  /// Jedan retry auto-logina ~2.5s nakon neuspeha — pokriva transient
+  /// Funnel/edge-runtime cold-start otkaz bez da korisnik mora rucno da
+  /// klikne "Prijavi se". Ne radi se ako je restore uspeo ali je ulaz
+  /// blokiran (npr. vozac odbio Always lokaciju) niti ako je korisnik
+  /// vec otvorio login ekran.
+  void _scheduleAutoLoginRetryIfNeeded() {
+    if (!mounted || _isDisposing || _autoLoginRetryScheduled) return;
+    _autoLoginRetryScheduled = true;
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 2500)).then((_) async {
+        if (!mounted || _isDisposing) return;
+        if (ModalRoute.of(context)?.isCurrent != true) return;
+        if (V3VozacService.currentVozac != null || V3PutnikService.currentPutnik != null) return;
+
+        final hasSession = (await V3ClosedAuthService.getStoredManualSmsAuthIds()).isNotEmpty;
+        if (hasSession && mounted && !_isDisposing) {
+          await _init();
+        }
+      }),
     );
   }
 
@@ -691,10 +722,14 @@ class _V3WelcomeScreenState extends State<V3WelcomeScreen> with TickerProviderSt
                           SizedBox(height: screenHeight * 0.06),
 
                           // JEDNO dugme za sve — shimmer pulsing
+                          // Dok auto-login trci prikazuje "Prijavljujem…"
+                          // stanje da ekran ne deluje mrtvo / da ne deluje
+                          // kao da dugme mora rucno da se klikne.
                           FadeTransition(
                             opacity: _fadeAnimation,
                             child: GestureDetector(
                               onTap: () async {
+                                if (_autoLoginInProgress) return;
                                 await _stopAudio();
                                 if (!mounted) return;
                                 _safePushScreen(
@@ -746,19 +781,40 @@ class _V3WelcomeScreenState extends State<V3WelcomeScreen> with TickerProviderSt
                                 },
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.phone_android_rounded, color: Colors.black87, size: 26),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      _tr('login'),
-                                      style: const TextStyle(
-                                        color: Colors.black87,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 1.5,
-                                      ),
-                                    ),
-                                  ],
+                                  children: _autoLoginInProgress
+                                      ? [
+                                          const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            _tr('loggingIn'),
+                                            style: const TextStyle(
+                                              color: Colors.black87,
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 1.5,
+                                            ),
+                                          ),
+                                        ]
+                                      : [
+                                          const Icon(Icons.phone_android_rounded, color: Colors.black87, size: 26),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            _tr('login'),
+                                            style: const TextStyle(
+                                              color: Colors.black87,
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 1.5,
+                                            ),
+                                          ),
+                                        ],
                                 ),
                               ),
                             ),

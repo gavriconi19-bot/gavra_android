@@ -2323,6 +2323,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Anmelden',
       'zh': '登录'
     },
+    'loggingIn': {
+      'sr': 'Prijavljujem…',
+      'en': 'Signing in…',
+      'ru': 'Вход…',
+      'de': 'Anmelden…',
+      'zh': '登录中…'
+    },
     'about': {
       'sr': 'O nama',
       'en': 'About us',

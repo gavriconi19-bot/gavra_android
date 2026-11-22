@@ -65,24 +65,51 @@ class V3ClosedAuthService {
       return const V3LoginVerification(ok: false, reason: 'missing_v3_auth_id');
     }
 
+    final incomingInstallationId = (installationId ?? '').trim();
+    final incomingHardwareId = (hardwareId ?? '').trim();
+
+    // Brza putanja: fn_v3_verify_login RPC vraca isti verdict kao edge
+    // funkcija (~0.1-0.5s kroz Funnel naspram ~1-4s edge-runtime poziva —
+    // edge cold start je znao da pojede ceo startup tajmaut na welcome
+    // ekranu pa se auto-login tiho gubio). Na gresku/timeout pada nazad
+    // na edge funkciju ispod (backwards kompatibilnost).
+    try {
+      final data = await _client
+          .rpc(
+            'fn_v3_verify_login',
+            params: {
+              'p_telefon': phone,
+              'p_v3_auth_id': expectedId,
+              'p_installation_id': incomingInstallationId,
+              'p_hardware_id': incomingHardwareId,
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+      if (data is Map) {
+        return _parseVerification(data, expectedId);
+      }
+    } catch (e) {
+      debugPrint('[V3ClosedAuthService] verifyLogin RPC fallback: $e');
+    }
+
     try {
       final body = <String, dynamic>{
         'telefon': phone,
         'v3_auth_id': expectedId,
       };
-      final incomingInstallationId = (installationId ?? '').trim();
       if (incomingInstallationId.isNotEmpty) {
         body['installation_id'] = incomingInstallationId;
       }
-      final incomingHardwareId = (hardwareId ?? '').trim();
       if (incomingHardwareId.isNotEmpty) {
         body['hardware_id'] = incomingHardwareId;
       }
 
-      final response = await _client.functions.invoke(
-        'verify-login',
-        body: body,
-      );
+      final response = await _client.functions
+          .invoke(
+            'verify-login',
+            body: body,
+          )
+          .timeout(const Duration(seconds: 15));
 
       final status = response.status;
       final data = response.data;
@@ -90,22 +117,25 @@ class V3ClosedAuthService {
         return const V3LoginVerification(ok: false, reason: 'edge_error');
       }
 
-      final ok = data['ok'] == true;
-      final verifiedId = data['v3_auth_id']?.toString().trim() ?? '';
-      final reason = data['reason']?.toString();
-
-      return V3LoginVerification(
-        ok: ok,
-        authId: verifiedId.isNotEmpty ? verifiedId : expectedId,
-        deviceRecognized: data['device_recognized'] == true,
-        deviceAllowed: ok,
-        deviceSlotsFull: data['device_slots_full'] == true,
-        pinRequired: data['pin_required'] == true,
-        reason: reason,
-      );
+      return _parseVerification(data, expectedId);
     } catch (_) {
       return const V3LoginVerification(ok: false, reason: 'unexpected_error');
     }
+  }
+
+  static V3LoginVerification _parseVerification(Map<dynamic, dynamic> data, String expectedId) {
+    final ok = data['ok'] == true;
+    final verifiedId = data['v3_auth_id']?.toString().trim() ?? '';
+
+    return V3LoginVerification(
+      ok: ok,
+      authId: verifiedId.isNotEmpty ? verifiedId : expectedId,
+      deviceRecognized: data['device_recognized'] == true,
+      deviceAllowed: ok,
+      deviceSlotsFull: data['device_slots_full'] == true,
+      pinRequired: data['pin_required'] == true,
+      reason: data['reason']?.toString(),
+    );
   }
 
   static Future<String?> findAuthIdByPhone(String rawPhone) async {

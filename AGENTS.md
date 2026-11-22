@@ -81,6 +81,15 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   u pozadini posle kritične faze — v3_vozac_screen se otključava na
   kritičnim. v3_racuni izbacen iz realtime registry (nista ne cita keš).
   Expando memoizacija parse-a finansije *_json kolona.
+- `20261122000001_verify_login_rpc.sql` = `fn_v3_verify_login` RPC —
+  replicira 1:1 verdict edge funkcije verify-login (0X phone canonical +
+  device-slot/PIN logika; interni helper fn_v3_phone_canonical_local,
+  EXECUTE samo service_role). Razlog: edge-runtime poziv kroz Funnel kosta
+  ~1-4s (cold start i vise) i znao je da pojede ceo 15s startup timeout na
+  welcome ekranu pa se auto-login tiho gubio; RPC je ~0.1-0.5s. App
+  (verifyLogin u v3_closed_auth_service) zove RPC-first, edge invoke je
+  fallback (15s timeout). Ako se device-slot/PIN pravila menjaju — menjati
+  NA OBA mesta (RPC + edge index.ts).
 
 ## Release (GitHub Actions)
 
