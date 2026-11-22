@@ -71,6 +71,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   // — prikazuju se kao banner sa Prihvati/Ne dugmadima, da putnik vidi ponudu
   // i kad push notifikacija ne stigne ili tapne telo notifikacije.
   List<Map<String, dynamic>> _aktivnePonude = [];
+  // Zahtevi u statusu 'alternativa' — dispečer je ponudio 1-2 zamenska
+  // termina (alternativa_pre_at/posle_at). Prikazuju se kao banner sa
+  // izborom termina da putnik može da odgovori i kad push ne stigne.
+  List<Map<String, dynamic>> _aktivneAlternative = [];
   final Set<String> _pendingPonudaZahtevi = {};
   Timer? _ponudaRefreshTimer;
   Map<String, V3WeatherSnapshot> _weatherByGrad = const {};
@@ -241,9 +245,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     _weatherTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       if (mounted) _refreshWeather();
     });
-    // Periodično osveži prikaz preostalog vremena aktivnih ponuda mesta.
+    // Periodično osveži prikaz preostalog vremena aktivnih ponuda
+    // (mesto + alternativa) — countdown i lokalni expiry bez realtime-a.
     _ponudaRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && _aktivnePonude.isNotEmpty) _refresh();
+      if (mounted && (_aktivnePonude.isNotEmpty || _aktivneAlternative.isNotEmpty)) _refresh();
     });
     // Pratimo promjene cache-a
     V3StreamUtils.subscribe<int>(
@@ -337,6 +342,18 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         .map((z) => Map<String, dynamic>.from(z))
         .toList()
       ..sort((a, b) => (a['mesto_ponuda_at']?.toString() ?? '').compareTo(b['mesto_ponuda_at']?.toString() ?? ''));
+    // Aktivne alternativa ponude (status='alternativa' + pre/posle termini) —
+    // isti 10-min expiry kao server (alternativa_offered_at, fallback
+    // updated_at). Bez ovoga putnik može da odgovori jedino kroz push.
+    final alternative = rm.zahteviCache.values
+        .where((z) =>
+            (z['created_by']?.toString() ?? '') == putnikId &&
+            V3StatusPolicy.isOfferLike(z['status']?.toString()) &&
+            _alternativaJosTraje(z))
+        .map((z) => Map<String, dynamic>.from(z))
+        .toList()
+      ..sort((a, b) => (a['alternativa_offered_at']?.toString() ?? a['updated_at']?.toString() ?? '')
+          .compareTo(b['alternativa_offered_at']?.toString() ?? b['updated_at']?.toString() ?? ''));
     final newMap = <String, List<_ZahtevInfo>>{};
     for (final dan in dani) {
       final datumIso = V3DanHelper.datumIsoZaDanAbbrUTekucojSedmici(dan, anchor: anchor);
@@ -477,6 +494,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
           ..clear()
           ..addAll(newMap);
         _aktivnePonude = ponude;
+        _aktivneAlternative = alternative;
       });
     }
   }
@@ -601,8 +619,19 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       if (mounted) V3AppSnackBar.info(ctx, V3PutnikProfilMessages.alreadyPickedUp);
       return;
     }
+    // Aktivna alternativa ponuda — odgovor ide kroz banner iznad rasporeda,
+    // ne kroz picker (svi termini bi ionako bili blokirani offer-guardom).
+    if (V3StatusPolicy.isOfferLike(info?.status)) {
+      if (mounted) V3AppSnackBar.info(ctx, _tr('alternativaAktivnaInfo'));
+      return;
+    }
     // Scenario 5: zaključavanje 15 min pre polaska
     final datumIso = V3DanHelper.toIsoDate(datumPolaska);
+    // Prošli dan — svi termini bi bili zaključani, dijalog nema svrhe.
+    if (datumIso.compareTo(V3BelgradeTime.todayIso()) < 0) {
+      if (mounted) V3AppSnackBar.info(ctx, _tr('terminiProsli'));
+      return;
+    }
     final neradanRazlog = getNeradanDanRazlog(datumIso: datumIso, grad: grad.toLowerCase());
     if (neradanRazlog != null) {
       if (mounted) {
@@ -756,13 +785,23 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Otkaži dugme
+                            // Otkaži dugme — sa potvrdom: jedan slučajni tap
+                            // je ranije odmah slao RPC otkazivanja.
                             if (hasActive)
                               SizedBox(
                                 width: double.infinity,
                                 child: V3ButtonUtils.outlinedButton(
                                   onPressed: () async {
-                                    Navigator.of(dialogCtx).pop();
+                                    final ok = await V3DialogHelper.showConfirmDialog(
+                                      dialogCtx,
+                                      title: _tr('otkaziTermin'),
+                                      message: _tr('otkaziTerminPotvrda'),
+                                      confirmText: _tr('otkaziTermin'),
+                                      cancelText: _tr('otkaziBtn'),
+                                      isDangerous: true,
+                                    );
+                                    if (ok != true) return;
+                                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
                                     await _updatePolazak(dan, grad, null, trenutniInfo: info);
                                   },
                                   text: _tr('otkaziTermin'),
@@ -789,7 +828,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                                     currentVreme != null && V3BelgradeTime.normalizeToHHmm(currentVreme) == vreme;
                                 // Scenario 5: zaključaj dugme 15 min pre polaska
                                 final parts = vreme.split(':');
-                                final polazak = DateTime(
+                                final polazak = V3BelgradeTime.dateTime(
                                   datumPolaska.year,
                                   datumPolaska.month,
                                   datumPolaska.day,
@@ -1033,7 +1072,9 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     final offeredAt = V3BelgradeTime.parseTs(mestoPonudaAt);
     if (offeredAt == null) return null;
     final elapsed = DateTime.now().difference(offeredAt);
-    final remaining = 10 - (elapsed.inSeconds / 60).ceil();
+    // inMinutes (floor), ne ceil — ceil je sklanjao ponudu do minut pre
+    // isteka, iako je server prihvata punih 10 minuta.
+    final remaining = 10 - elapsed.inMinutes;
     return remaining.clamp(0, 10);
   }
 
@@ -1046,13 +1087,24 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     return preostalo == null || preostalo > 0;
   }
 
+  /// Alternativa ponuda važi 10 min od alternativa_offered_at (fallback
+  /// updated_at — isti coalesce kao fn_v3_alternativa_action na serveru).
+  bool _alternativaJosTraje(Map<String, dynamic> zahtev) {
+    final ts = zahtev['alternativa_offered_at']?.toString() ?? zahtev['updated_at']?.toString();
+    final preostalo = _preostaloMinutaZaPonudu(ts);
+    return preostalo == null || preostalo > 0;
+  }
+
   String _formatDatumKratko(String? datumIso) {
     final datum = V3BelgradeTime.parseDatum(datumIso);
     if (datum == null) return '';
     return '${datum.day.toString().padLeft(2, '0')}.${datum.month.toString().padLeft(2, '0')}.';
   }
 
-  Future<void> _odgovoriNaPonudu(Map<String, dynamic> zahtev, {required bool prihvati}) async {
+  /// Odgovor na ponudu mesta ili alternativu kroz fn_v3_alternativa_action.
+  /// [action]: 'accept_pre' | 'accept_posle' | 'reject' (za mesto ponudu
+  /// bilo koji accept_* radi — server uzima trazeni_polazak_at).
+  Future<void> _odgovoriNaPonudu(Map<String, dynamic> zahtev, {required String action}) async {
     final zahtevId = zahtev['id']?.toString() ?? '';
     if (zahtevId.isEmpty || _pendingPonudaZahtevi.contains(zahtevId)) return;
     _pendingPonudaZahtevi.add(zahtevId);
@@ -1062,7 +1114,6 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       final tokenResult = await V3PushTokenProvider.getBestToken();
       final hardwareId = await V3DeviceIdentityService.getHardwareId();
       final installationId = await V3PushTokenProvider.getInstallationId();
-      final action = prihvati ? 'accept_pre' : 'reject';
       final deviceToken = tokenResult?.token.trim() ?? '';
       final hwId = hardwareId ?? '';
       final instId = installationId?.trim() ?? '';
@@ -1098,7 +1149,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       final reason = data is Map ? (data['reason'] ?? '').toString() : '';
       if (!mounted) return;
       if (ok) {
-        if (prihvati) {
+        if (action != 'reject') {
           V3AppSnackBar.success(context, V3PutnikProfilMessages.seatAccepted);
         } else {
           V3AppSnackBar.info(context, V3PutnikProfilMessages.seatOfferDeclined);
@@ -1182,7 +1233,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
               children: [
                 Expanded(
                   child: V3ButtonUtils.outlinedButton(
-                    onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, prihvati: true),
+                    onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: 'accept_pre'),
                     text: _tr('mestoPrihvati'),
                     icon: Icons.check_circle_outline,
                     borderColor: Colors.greenAccent,
@@ -1194,7 +1245,123 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                 const SizedBox(width: 8),
                 Expanded(
                   child: V3ButtonUtils.outlinedButton(
-                    onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, prihvati: false),
+                    onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: 'reject'),
+                    text: _tr('mestoOdbij'),
+                    icon: Icons.cancel_outlined,
+                    borderColor: Colors.redAccent,
+                    foregroundColor: Colors.redAccent,
+                    fontSize: 13,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── ALTERNATIVA (in-app ponuda zamenskog termina) ───────────────
+  Widget _buildAlternativaCard() {
+    return V3ContainerUtils.styledContainer(
+      padding: const EdgeInsets.all(14),
+      backgroundColor: Colors.deepOrange.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.deepOrangeAccent.withValues(alpha: 0.6), width: 1.2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.swap_calls, color: Colors.deepOrangeAccent, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _tr('alternativaNaslov'),
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          ..._aktivneAlternative.map(_buildAlternativaRow),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlternativaRow(Map<String, dynamic> zahtev) {
+    final zahtevId = zahtev['id']?.toString() ?? '';
+    final grad = (zahtev['grad']?.toString() ?? '').toUpperCase();
+    final gradLabel = grad == 'VS' ? _tr('vrsac') : _tr('belaCrkva');
+    final trazeno = _normalizeValidTime(zahtev['trazeni_polazak_at']?.toString());
+    final vremePre = _normalizeValidTime(zahtev['alternativa_pre_at']?.toString());
+    final vremePosle = _normalizeValidTime(zahtev['alternativa_posle_at']?.toString());
+    final datum = _formatDatumKratko(zahtev['datum']?.toString());
+    final ts = zahtev['alternativa_offered_at']?.toString() ?? zahtev['updated_at']?.toString();
+    final preostalo = _preostaloMinutaZaPonudu(ts);
+    final busy = _pendingPonudaZahtevi.contains(zahtevId);
+    final opis = [
+      if (datum.isNotEmpty) datum,
+      gradLabel,
+      if (trazeno != null) '${_tr('trazeno')}: $trazeno',
+    ].join(' • ');
+
+    final opcije = <({String vreme, String action})>[
+      if (vremePre != null) (vreme: vremePre, action: 'accept_pre'),
+      if (vremePosle != null) (vreme: vremePosle, action: 'accept_posle'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: V3ContainerUtils.styledContainer(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        backgroundColor: Colors.black.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              opis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            if (preostalo != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _tr('mestoPonudaIstice').replaceAll('%s', '$preostalo'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: V3StyleHelper.whiteAlpha65, fontSize: 11),
+              ),
+            ],
+            const SizedBox(height: 4),
+            Text(
+              _tr('alternativaIzaberi'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: V3StyleHelper.whiteAlpha65, fontSize: 11),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (var i = 0; i < opcije.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: V3ButtonUtils.outlinedButton(
+                      onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: opcije[i].action),
+                      text: opcije[i].vreme,
+                      icon: Icons.check_circle_outline,
+                      borderColor: Colors.greenAccent,
+                      foregroundColor: Colors.greenAccent,
+                      fontSize: 13,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ],
+                if (opcije.isNotEmpty) const SizedBox(width: 8),
+                Expanded(
+                  child: V3ButtonUtils.outlinedButton(
+                    onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: 'reject'),
                     text: _tr('mestoOdbij'),
                     icon: Icons.cancel_outlined,
                     borderColor: Colors.redAccent,
@@ -1301,6 +1468,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                                 const SizedBox(height: 10),
                                 _buildMestoPonudaCard(),
                               ],
+                              if (_aktivneAlternative.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                _buildAlternativaCard(),
+                              ],
                               const SizedBox(height: 16),
                               _buildStatistikaCard(
                                 tip: tip,
@@ -1332,6 +1503,23 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                       if (hasPreviousMonthDebtLock)
                         Positioned.fill(
                           child: _buildPreviousMonthDebtLockOverlay(previousMonthDebt),
+                        ),
+                      // Logout mora ostati dostupan i pod debt lock-om — inače
+                      // putnik ne može da se odjavi (npr. drugi nalog na istom
+                      // telefonu) dok ne plati dug.
+                      if (hasPreviousMonthDebtLock)
+                        Positioned(
+                          top: 8,
+                          right: 16,
+                          child: Material(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              icon: const Icon(Icons.logout, color: Colors.redAccent),
+                              tooltip: _tr('odjava'),
+                              onPressed: _logout,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -1437,7 +1625,6 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     String? adresaBcNaziv2,
     String? adresaVsNaziv2,
   }) {
-    final avatarColors = _avatarColors(tip);
     final tipLabel = _tipLabel(tip);
     return V3ContainerUtils.styledContainer(
       padding: const EdgeInsets.all(20),
@@ -1509,7 +1696,21 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
+          // Tip putnika (radnik/učenik/dnevni/pošiljka) — korisna info,
+          // labela je ranije računata ali nigde prikazana.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: V3StyleHelper.whiteAlpha05,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Text(
+              tipLabel,
+              style: TextStyle(color: V3StyleHelper.whiteAlpha75, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
           if (telefon.isNotEmpty || telefon2.isNotEmpty) ...[
             const SizedBox(height: 10),
             Row(
@@ -1519,7 +1720,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    [if (telefon.isNotEmpty) telefon, if (telefon2.isNotEmpty) telefon2].join('  •  '),
+                    [
+                      if (telefon.isNotEmpty) _formatPhoneDisplay(telefon),
+                      if (telefon2.isNotEmpty) _formatPhoneDisplay(telefon2),
+                    ].join('  •  '),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: V3StyleHelper.whiteAlpha9,
@@ -1742,19 +1946,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
               ],
             ),
           ],
-          if (stats.otkazano > 0) ...[
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(_tr('otkazano'), style: TextStyle(color: V3StyleHelper.whiteAlpha75, fontSize: 13)),
-                Text(
-                  '${stats.otkazano}',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ],
+          // 'Otkazano' se ne ponavlja u listi — KPI tile gore prikazuje istu vrednost.
         ],
       ),
     );
@@ -1937,6 +2129,13 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
             final infos = _rasporedMap[dan] ?? [];
             final bcInfo = infos.where((i) => i.grad == 'BC').firstOrNull;
             final vsInfo = infos.where((i) => i.grad == 'VS').firstOrNull;
+            // Prošli dan u tekućoj sedmici — svi termini su zaključani, pa se
+            // "➕ dodaj" ne nudi (ćelija je samo informativna).
+            final datumIso = V3DanHelper.datumIsoZaDanAbbrUTekucojSedmici(
+              dan,
+              anchor: V3DanHelper.schedulingWeekAnchor(),
+            );
+            final isPast = datumIso.isNotEmpty && datumIso.compareTo(V3BelgradeTime.todayIso()) < 0;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
               child: Row(
@@ -1945,13 +2144,14 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                     width: 96,
                     child: Text(
                       _getDanLabel(dan),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      style: TextStyle(color: isPast ? V3StyleHelper.whiteAlpha45 : Colors.white, fontSize: 13),
                     ),
                   ),
                   Expanded(
                     child: Center(
                       child: _ZahtevCell(
                         info: bcInfo,
+                        disabled: isPast,
                         onTap: () => _showTimePicker(context, dan, 'BC', bcInfo),
                       ),
                     ),
@@ -1960,6 +2160,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                     child: Center(
                       child: _ZahtevCell(
                         info: vsInfo,
+                        disabled: isPast,
                         onTap: () => _showTimePicker(context, dan, 'VS', vsInfo),
                       ),
                     ),
@@ -1976,17 +2177,22 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   // ─────────────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────────────
-  List<Color> _avatarColors(String tip) {
-    switch (tip.toLowerCase()) {
-      case 'ucenik':
-        return [Colors.blue.shade400, Colors.indigo.shade600];
-      case 'posiljka':
-        return [Colors.purple.shade400, Colors.deepPurple.shade600];
-      case 'dnevni':
-        return [Colors.green.shade400, Colors.teal.shade600];
-      default:
-        return [Colors.orange.shade400, Colors.deepOrange.shade600];
+  /// '+381641234567' → '+381 64 123 45 67' (grupe po 2-3 cifre, čitljivije).
+  String _formatPhoneDisplay(String phone) {
+    final n = V3PhoneUtils.normalize(phone);
+    if (!n.startsWith('+381') || n.length < 9) return n.isEmpty ? phone : n;
+    final rest = n.substring(4); // cifre posle +381
+    final parts = <String>[];
+    var i = 0;
+    // Prva grupa 2 cifre (mreža), ostalo po 3.
+    final firstLen = rest.length <= 8 ? 2 : 3;
+    parts.add(rest.substring(0, firstLen));
+    i = firstLen;
+    while (i < rest.length) {
+      parts.add(rest.substring(i, i + 3 > rest.length ? rest.length : i + 3));
+      i += 3;
     }
+    return '+381 ${parts.join(' ')}';
   }
 
   String _tipLabel(String tip) {
@@ -2092,10 +2298,25 @@ class _WeatherMiniCell extends StatelessWidget {
 class _ZahtevCell extends StatelessWidget {
   final _ZahtevInfo? info;
   final VoidCallback? onTap;
-  const _ZahtevCell({this.info, this.onTap});
+  final bool disabled;
+  const _ZahtevCell({this.info, this.onTap, this.disabled = false});
   @override
   Widget build(BuildContext context) {
     if (info == null) {
+      if (disabled) {
+        // Prošli dan bez termina — samo crtica, bez "dodaj" poziva na akciju.
+        return V3ContainerUtils.styledContainer(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          backgroundColor: V3StyleHelper.whiteAlpha05,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+          child: Text(
+            '—',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: V3StyleHelper.whiteAlpha45, fontSize: 12),
+          ),
+        );
+      }
       return GestureDetector(
         onTap: onTap,
         child: V3ContainerUtils.styledContainer(
@@ -2296,13 +2517,26 @@ class _EditProfilDialogState extends State<_EditProfilDialog> {
 
   Future<void> _sacuvaj() async {
     final imeVal = _ime.text.trim();
-    final tel1Val = V3PhoneUtils.normalizeOrNull(_tel1.text);
-    final tel2Val = V3PhoneUtils.normalizeOrNull(_tel2.text);
+    final tel1Raw = _tel1.text.trim();
+    final tel2Raw = _tel2.text.trim();
 
     if (imeVal.isEmpty) {
       V3AppSnackBar.error(context, _trProfileDialog('imeNeSmeBitiPrazno'));
       return;
     }
+    // Validacija PRE normalizacije — normalizeOrNull bez provere je nevalidan
+    // unos ('abc' → '', '123' → '123') tiho upisivao u bazu i time pokvario/
+    // obrisao broj preko koga se putnik identifikuje pri loginu.
+    if (tel1Raw.isNotEmpty && !V3PhoneUtils.isValid(tel1Raw)) {
+      V3AppSnackBar.error(context, _trProfileDialog('telefonNijeIspravan'));
+      return;
+    }
+    if (tel2Raw.isNotEmpty && !V3PhoneUtils.isValid(tel2Raw)) {
+      V3AppSnackBar.error(context, _trProfileDialog('telefonNijeIspravan'));
+      return;
+    }
+    final tel1Val = V3PhoneUtils.normalizeOrNull(tel1Raw);
+    final tel2Val = V3PhoneUtils.normalizeOrNull(tel2Raw);
     if (_adresaBc1 == null || _adresaVs1 == null) {
       V3AppSnackBar.error(context, _trProfileDialog('obavezneAdrese'));
       return;
@@ -2653,7 +2887,8 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
     }
 
     V3AppSnackBar.success(context, _trProfileDialog('pinPromenjen'));
-    Navigator.of(context, rootNavigator: true).pop();
+    // Samo jedan pop — ranija dva su zatvarala i edit-profil dijalog ispod,
+    // čime su se nesačuvane izmene (ime/telefon/adrese) tiho gubile.
     Navigator.of(context, rootNavigator: true).pop();
   }
 
@@ -2714,6 +2949,11 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
                         icon: Icons.lock_outline,
                         keyboardType: TextInputType.number,
                         obscureText: true,
+                        showPaste: false,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       V3InputUtils.textField(
@@ -2722,6 +2962,11 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
                         icon: Icons.lock_open_outlined,
                         keyboardType: TextInputType.number,
                         obscureText: true,
+                        showPaste: false,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       V3InputUtils.textField(
@@ -2730,6 +2975,11 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
                         icon: Icons.lock_open_outlined,
                         keyboardType: TextInputType.number,
                         obscureText: true,
+                        showPaste: false,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
                       ),
                       if (_error != null) ...[
                         const SizedBox(height: 12),

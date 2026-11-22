@@ -147,7 +147,11 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
 
       final departure = _parseDepartureDateTime(row);
       if (departure == null) continue;
-      // Nema vremenskog hard-stopa: putnik je već filtriran gore (nije pokupljen/otkazan).
+      // Prošli polazak van tracking prozora (T-15..T+3h) nije "sledeća
+      // vožnja" — vozač ga nije označio pokupljenim pa bi widget pokazivao
+      // zastareli termin do kraja nedelje.
+      if (departure.isBefore(now) && !_isInEtaTrackingWindow(departure, now)) continue;
+      // Unutar prozora: putnik je već filtriran gore (nije pokupljen/otkazan).
       String? vozacId;
 
       final terminId = row['id']?.toString();
