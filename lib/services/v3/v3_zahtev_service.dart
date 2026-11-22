@@ -23,15 +23,23 @@ class V3ZahtevService {
   static final V3ZahtevDomainService _domain = V3ZahtevDomainService(_repository);
   static final Map<String, Future<void>> _cancelQueueByKey = {};
 
+  /// Mrežni timeout za RPC/REST pozive u mutacijama — bez njega half-open
+  /// TCP (mrtav Funnel/server) drži UI akciju i kontekst zaključanim beskonačno.
+  static const Duration _netTimeout = Duration(seconds: 15);
+
   static Future<T> _runInCancellationQueue<T>(String key, Future<T> Function() action) async {
     final previous = _cancelQueueByKey[key];
     final future = Future<T>.sync(() async {
       if (previous != null) {
         try {
-          await previous;
+          // Timeout: ako prethodna akcija visi na mreži, red ne sme da
+          // blokira sve naredne otkaze za isti kontekst zauvek.
+          await previous.timeout(const Duration(seconds: 30));
         } catch (_) {}
       }
-      return action();
+      // Cap za celu akciju (RPC + do 2-3 REST poziva po 15s) — bez ovoga
+      // zaglavljena akcija ostaje u _cancelQueueByKey kao 'previous' zauvek.
+      return action().timeout(const Duration(seconds: 60));
     });
 
     final queuedFuture = future.then((_) {}, onError: (_) {});
@@ -164,7 +172,7 @@ class V3ZahtevService {
         'p_vreme': novoVreme,
         'p_koristi_sekundarnu': koristiSekundarnu,
         'p_actor': actorUuid,
-      });
+      }).timeout(_netTimeout);
       if (data is Map && data['ok'] == true) {
         final zahtev = data['zahtev'];
         if (zahtev is Map) {
@@ -188,14 +196,14 @@ class V3ZahtevService {
       if (rowKey.isNotEmpty) {
         final status = row['status']?.toString();
         if (V3StatusPolicy.isOfferLike(status)) {
-          await updateStatus(rowKey, 'obrada', updatedBy: updatedBy);
+          await updateStatus(rowKey, 'obrada', updatedBy: updatedBy).timeout(_netTimeout);
         }
         await updateTrazeniPolazakAt(
           rowKey,
           novoVreme,
           koristiSekundarnu: koristiSekundarnu,
           updatedBy: updatedBy,
-        );
+        ).timeout(_netTimeout);
         return;
       }
     }
@@ -209,7 +217,7 @@ class V3ZahtevService {
       status: 'obrada',
       koristiSekundarnu: koristiSekundarnu,
     );
-    await createZahtev(zahtev, createdBy: updatedBy);
+    await createZahtev(zahtev, createdBy: updatedBy).timeout(_netTimeout);
   }
 
   static Future<void> otkaziPolazakPutnikaPoKontekstu({
@@ -234,7 +242,7 @@ class V3ZahtevService {
           'p_datum': datumIso,
           'p_grad': targetGrad,
           'p_actor': updBy,
-        });
+        }).timeout(_netTimeout);
         if (data is Map && data['ok'] == true) {
           final zahtev = data['zahtev'];
           if (zahtev is Map) {
@@ -267,7 +275,7 @@ class V3ZahtevService {
               'status': 'otkazano',
               if (updBy != null) 'updated_by': updBy,
             },
-          );
+          ).timeout(_netTimeout);
           if (updated != null) {
             V3MasterRealtimeManager.instance.v3UpsertToCache('v3_zahtevi', updated);
           }
@@ -286,7 +294,7 @@ class V3ZahtevService {
           'otkazano_at': V3BelgradeTime.nowIsoUtc(),
           if (updBy != null) 'updated_by': updBy,
         },
-      );
+      ).timeout(_netTimeout);
 
       for (final row in updatedOperativni) {
         if (row is Map<String, dynamic>) {
@@ -350,7 +358,8 @@ class V3ZahtevService {
               .eq('id', operativnaId)
               .isFilter('otkazano_at', null)
               .select()
-              .maybeSingle();
+              .maybeSingle()
+              .timeout(_netTimeout);
           if (row == null) {
             debugPrint('[V3ZahtevService] Preskačem otkazivanje — operativnaId=$operativnaId je već otkazana ili ne postoji.');
             return;
@@ -375,7 +384,8 @@ class V3ZahtevService {
               .eq('id', safeZahtevId)
               .neq('status', 'otkazano')
               .select()
-              .maybeSingle();
+              .maybeSingle()
+              .timeout(_netTimeout);
           if (row == null) {
             debugPrint('[V3ZahtevService] Preskačem otkazivanje — zahtev id=$safeZahtevId je već otkazan ili ne postoji.');
             return;

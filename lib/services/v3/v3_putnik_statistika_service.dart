@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import '../../utils/v3_belgrade_time.dart';
 import '../realtime/v3_master_realtime_manager.dart';
 import 'v3_finansije_service.dart';
@@ -496,41 +494,14 @@ class V3PutnikStatistikaService {
     final safePutnikId = putnikId.trim();
     if (safePutnikId.isEmpty) return 0;
 
-    final cache = V3MasterRealtimeManager.instance.getCache('v3_finansije').values;
-    var count = 0;
-
-    for (final row in cache) {
-      final rPutnikId = (row['putnik_v3_auth_id']?.toString() ?? '').trim().toLowerCase();
-      if (rPutnikId != safePutnikId.toLowerCase()) continue;
-      final rG = (row['godina'] as num?)?.toInt();
-      final rM = (row['mesec'] as num?)?.toInt();
-      if (rG != godina || rM != mesec) continue;
-
-      final raw = row['otkazane_voznje_json'];
-      Iterable<dynamic> src;
-      if (raw is List) {
-        src = raw;
-      } else if (raw is String) {
-        final decoded = jsonDecode(raw);
-        if (decoded is! List) continue;
-        src = decoded;
-      } else {
-        continue;
-      }
-
-      for (final item in src) {
-        if (item is! Map) continue;
-        final datumStr = item['datum']?.toString();
-        if (datumStr == null || datumStr.isEmpty) continue;
-        final datum = V3BelgradeTime.parseDatum(datumStr);
-        if (datum == null) continue;
-        if (datum.year == godina && datum.month == mesec) {
-          count++;
-        }
-      }
-    }
-
-    return count;
+    // Isti izvor kao getDnevneStavkeZaMesec — koristi Expando-memoizovan
+    // parse otkazane_voznje_json (server uvek upisuje operativna_id, pa je
+    // filtriranje ekvivalentno ranijem direktnom jsonDecode brojanju).
+    return V3FinansijeService.getOtkazaneVoznjeZaMesec(
+      putnikId: safePutnikId,
+      godina: godina,
+      mesec: mesec,
+    ).length;
   }
 
   static List<V3PutnikMesecnaStatistika> getZaGodinu(

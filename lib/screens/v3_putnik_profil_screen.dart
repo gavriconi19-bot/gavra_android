@@ -135,6 +135,44 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     return '$od - $doDatuma';
   }
 
+  // Memoizacija finansijskog obračuna — getUkupanDug*/getTekuciMesec rade
+  // ~10 punih skenova finansije keša po mesecu istorije. Bez memoizacije se
+  // to računalo na SVAKI build (a rebuild ide na svaki realtime revision
+  // event — u smeni to znači stotine hiljada row-poseta po sekundi).
+  String? _statsKey;
+  V3PutnikMesecnaStatistika? _statsTekuci;
+  double _statsUkupanDug = 0;
+  double _statsUkupanVisak = 0;
+  double _statsPrevMonthDebt = 0;
+
+  ({V3PutnikMesecnaStatistika tekuci, double ukupanDug, double ukupanVisak, double prevMonthDebt}) _profilStats(
+      String? putnikId) {
+    final rm = V3MasterRealtimeManager.instance;
+    final now = V3BelgradeTime.now();
+    // Ključ: putnik + revision-i tabela od kojih obračun zavisi + mesec
+    // (da ekran ostavljen otvoren preko prelaska meseca ne pokazuje staro).
+    final key = '${putnikId ?? ''}|fin:${rm.tableRevision('v3_finansije')}'
+        '|auth:${rm.tableRevision('v3_auth')}|${now.year}-${now.month}';
+    if (key != _statsKey || _statsTekuci == null) {
+      final id = putnikId ?? '';
+      _statsKey = key;
+      _statsTekuci = V3PutnikStatistikaService.getTekuciMesec(id);
+      _statsUkupanDug = V3PutnikStatistikaService.getUkupanDugZaSveMesece(id);
+      _statsUkupanVisak = V3PutnikStatistikaService.getUkupanViskDoMeseca(
+        putnikId: id,
+        godina: now.year,
+        mesec: now.month,
+      );
+      _statsPrevMonthDebt = _historicalDebtAmountUntilPreviousMonth(id);
+    }
+    return (
+      tekuci: _statsTekuci!,
+      ukupanDug: _statsUkupanDug,
+      ukupanVisak: _statsUkupanVisak,
+      prevMonthDebt: _statsPrevMonthDebt,
+    );
+  }
+
   double _historicalDebtAmountUntilPreviousMonth(String putnikId) {
     final normalizedId = putnikId.trim();
     if (normalizedId.isEmpty) return 0;
@@ -220,12 +258,24 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         if (mounted) _refresh();
       },
     );
+    // v3_finansije ne ulazi u _refresh (raspored ne zavisi od nje) — samo
+    // setState da bi se memoizovani obračun reinvaldirao po revision-u.
+    V3StreamUtils.subscribe<int>(
+      key: 'putnik_profil_fin',
+      stream: V3MasterRealtimeManager.instance.tablesRevisionStream(const [
+        'v3_finansije',
+      ]),
+      onData: (_) {
+        if (mounted) setState(() {});
+      },
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     V3StreamUtils.cancelSubscription('putnik_profil_cache');
+    V3StreamUtils.cancelSubscription('putnik_profil_fin');
     V3StreamUtils.cancelTimer(_actionDebounceKey);
     _weatherTimer?.cancel();
     _weatherRetryTimer?.cancel();
@@ -263,7 +313,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
 
   void _refresh() {
     final putnikId = _currentPutnikId();
-    if (putnikId == null) return;
+    if (putnikId == null) {
+      debugPrint('[V3PutnikProfilScreen] _refresh: putnikId nije resolovan — raspored ostaje prazan');
+      return;
+    }
     // Osvježi putnik iz cache-a
     final cached = V3MasterRealtimeManager.instance.putniciCache[putnikId];
     if (cached != null) _putnikData = Map<String, dynamic>.from(cached);
@@ -279,7 +332,8 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
             (z['created_by']?.toString() ?? '') == putnikId &&
             (V3StatusPolicy.isRejected(z['status']?.toString()) ||
                 V3StatusPolicy.normalizeStatus(z['status']?.toString()) == 'odobreno') &&
-            z['mesto_ponuda'] == true)
+            z['mesto_ponuda'] == true &&
+            _ponudaJosTraje(z))
         .map((z) => Map<String, dynamic>.from(z))
         .toList()
       ..sort((a, b) => (a['mesto_ponuda_at']?.toString() ?? '').compareTo(b['mesto_ponuda_at']?.toString() ?? ''));
@@ -524,7 +578,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         await inFlight.timeout(const Duration(seconds: 3), onTimeout: () {});
       }
     }
-    final previousMonthDebt = _historicalDebtAmountUntilPreviousMonth(currentPutnikId);
+    final previousMonthDebt = _profilStats(currentPutnikId).prevMonthDebt;
     if (previousMonthDebt > 0.009) {
       if (mounted) {
         await _showPreviousMonthDebtDialog(ctx, dugIznos: previousMonthDebt);
@@ -931,17 +985,22 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     if (ok != true || !mounted) return;
     // Otkaži stream subscription pre brisanja sesije
     V3StreamUtils.cancelSubscription('putnik_profil_cache');
+    V3StreamUtils.cancelSubscription('putnik_profil_fin');
     // Obrisi sesiju i kredencijale
     V3PutnikService.currentPutnik = null;
 
-    // Oslobodi uređaj slot u bazi pre brisanja lokalne sesije
+    // Oslobodi uređaj slot u bazi — best-effort, NE sme da blokira odjavu.
+    // Fire-and-forget: edge invoke bez timeout-a bi na mrtvoj vezi ostavio
+    // korisnika na mrtvom ekranu (ništa se ne dešava posle confirm-a).
     final putnikId = (_currentPutnikId() ?? '').trim();
     if (putnikId.isNotEmpty) {
-      final deviceId = await V3DeviceIdentityService.getStableDeviceId();
-      await V3PushTokenEdgeService.releaseDeviceSlot(
-        v3AuthId: putnikId,
-        installationId: deviceId,
-      );
+      unawaited(() async {
+        final deviceId = await V3DeviceIdentityService.getStableDeviceId();
+        await V3PushTokenEdgeService.releaseDeviceSlot(
+          v3AuthId: putnikId,
+          installationId: deviceId,
+        );
+      }());
     }
 
     await V3ClosedAuthService.clearManualSmsPutnikPhone();
@@ -978,6 +1037,15 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     return remaining.clamp(0, 10);
   }
 
+  /// Ponuda se sklanja sa ekrana i kad istekne lokalno (10 min od
+  /// mesto_ponuda_at) — bez čekanja na serverovo mesto_ponuda=false koje
+  /// stiže realtime-om. Ako realtime pauzira, putnik ne bi video zastarelu
+  /// ponudu "ističe za 0 min" koju server već ne prihvata.
+  bool _ponudaJosTraje(Map<String, dynamic> zahtev) {
+    final preostalo = _preostaloMinutaZaPonudu(zahtev['mesto_ponuda_at']?.toString());
+    return preostalo == null || preostalo > 0;
+  }
+
   String _formatDatumKratko(String? datumIso) {
     final datum = V3BelgradeTime.parseDatum(datumIso);
     if (datum == null) return '';
@@ -1011,7 +1079,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
           'p_device_token': deviceToken,
           'p_hardware_id': hwId,
           'p_installation_id': instId,
-        });
+        }).timeout(const Duration(seconds: 15));
       } catch (e) {
         debugPrint('[Alternativa] RPC fallback na edge: $e');
         final response = await supabase.functions.invoke(
@@ -1023,7 +1091,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
             'hardware_id': hwId,
             'installation_id': instId,
           },
-        );
+        ).timeout(const Duration(seconds: 20));
         data = response.data;
       }
       final ok = data is Map && data['ok'] == true;
@@ -1150,7 +1218,8 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   @override
   Widget build(BuildContext context) {
     final putnikId = _currentPutnikId();
-    final previousMonthDebt = _historicalDebtAmountUntilPreviousMonth(putnikId ?? '');
+    final profilStats = _profilStats(putnikId);
+    final previousMonthDebt = profilStats.prevMonthDebt;
     final hasPreviousMonthDebtLock = previousMonthDebt > 0.009;
     final tip = _putnikData['tip_putnika'] as String? ?? 'radnik';
     final cenaPoDanu = (_putnikData['cena_po_danu'] as num?)?.toDouble() ?? 0.0;
@@ -1177,20 +1246,12 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       valueListenable: V3LocaleManager().localeNotifier,
       builder: (context, __, ___) => ValueListenableBuilder<ThemeData>(
         valueListenable: V3ThemeManager().themeNotifier,
-        builder: (context, _, __) => StreamBuilder<int>(
-          stream: V3MasterRealtimeManager.instance
-              .tablesRevisionStream(const ['v3_finansije', 'v3_operativna_nedelja', 'v3_auth']),
-          builder: (context, ___) {
-            final stats = V3PutnikStatistikaService.getTekuciMesec(putnikId ?? '');
-            final ukupanDug = V3PutnikStatistikaService.getUkupanDugZaSveMesece(putnikId ?? '');
-            final now = V3BelgradeTime.now();
-            final ukupanVisak = V3PutnikStatistikaService.getUkupanViskDoMeseca(
-              putnikId: putnikId ?? '',
-              godina: now.year,
-              mesec: now.month,
-            );
+        builder: (context, _, __) {
+          final stats = profilStats.tekuci;
+          final ukupanDug = profilStats.ukupanDug;
+          final ukupanVisak = profilStats.ukupanVisak;
 
-            return V3ContainerUtils.backgroundContainer(
+          return V3ContainerUtils.backgroundContainer(
               gradient: V3ThemeManager().currentGradient,
               child: Scaffold(
                 backgroundColor: Colors.transparent,
@@ -1277,8 +1338,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                 ),
               ),
             );
-          },
-        ),
+        },
       ),
     );
   }
@@ -2157,7 +2217,10 @@ class _EditProfilDialogState extends State<_EditProfilDialog> {
     for (final a in list) {
       if (a.id == current.id) return a;
     }
-    return current;
+    // Adresa više nije u listi (obrisana/drugi grad) — NE vraćati 'current':
+    // DropdownButtonFormField assert-uje ako value nije među items.
+    // State (_adresaBc1/…) i dalje drži original pa se id čuva pri save-u.
+    return null;
   }
 
   Widget _adresaDropdown({
@@ -2260,7 +2323,7 @@ class _EditProfilDialogState extends State<_EditProfilDialog> {
       await V3PutnikService.addUpdatePutnik(
         putnik,
         updatedBy: putnik.id,
-      );
+      ).timeout(const Duration(seconds: 20));
 
       if (!mounted) return;
       V3AppSnackBar.success(context, _trProfileDialog('profilSacuvan'));
@@ -2569,6 +2632,9 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
       v3AuthId: widget.v3AuthId,
       oldPin: oldPin,
       newPin: newPin,
+    ).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => (ok: false, reason: 'timeout'),
     );
 
     if (!mounted) return;

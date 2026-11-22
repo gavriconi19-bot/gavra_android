@@ -1253,6 +1253,10 @@ class V3MasterRealtimeManager {
     }
   }
 
+  /// Trenutna revision vrednost tabele — sinhroni pristup za memoizaciju
+  /// izvedenih vrednosti (obračuni iz keša) u build() metodama.
+  int tableRevision(String table) => _cacheStore.revision(table.trim());
+
   Map<String, Map<String, dynamic>> getCache(String table) {
     switch (table) {
       case 'v3_adrese':

@@ -28,6 +28,17 @@ class V3VremeDolaskaWidget extends StatefulWidget {
 class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
   Timer? _refreshTimer;
 
+  // Stream drži u polju — StreamBuilder sa stream-om kreiranim inline u
+  // build() se resubskribuje na SVAKI rebuild (svaki revision event +
+  // 60s timer), što je suvišan subscribe/unsubscribe churn.
+  late final Stream<int> _revisionStream = V3MasterRealtimeManager.instance.tablesRevisionStream(const [
+    'v3_eta_results',
+    'v3_auth',
+    'v3_operativna_nedelja',
+    'v3_trenutna_dodela_slot',
+    'v3_trenutna_dodela'
+  ]);
+
   String get putnikId => widget.putnikId;
 
   @override
@@ -295,13 +306,7 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
     return ValueListenableBuilder<Locale>(
       valueListenable: V3LocaleManager().localeNotifier,
       builder: (context, __, ___) => StreamBuilder<int>(
-        stream: V3MasterRealtimeManager.instance.tablesRevisionStream(const [
-          'v3_eta_results',
-          'v3_auth',
-          'v3_operativna_nedelja',
-          'v3_trenutna_dodela_slot',
-          'v3_trenutna_dodela'
-        ]),
+        stream: _revisionStream,
         builder: (context, _) {
           final now = V3BelgradeTime.now();
           final nextRide = _findNextPutnikRide();
