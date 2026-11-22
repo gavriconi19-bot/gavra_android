@@ -128,6 +128,24 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   _syncOperativnaAssignmentsForContext. Keš se puni iz `zahtev`/
   `operativna`/`operativna_sve`/`finansije`/`uplata` kljuceva RPC odgovora
   (osim dodele — nju drzi realtime, kao i do sada).
+- `20261122000003_eta_cleanup_cron.sql` = pg_cron job `cleanup_eta_results`
+  (*/5min): `DELETE v3_eta_results WHERE computed_at < now()-55min` — pre
+  ovoga je retention delete postojao samo unutar v3-compute-eta poziva, pa
+  su zastareli ETA redovi ostajali u tabeli zauvek kad niko ne track-uje
+  (putnik video zamrznutu "za 0 min" ETA). Takodje osvezen zastareli
+  COMMENT na v3_vozac_location (tick je 5s, ne 20s).
+- App-side + edge (isti commit) — tracking/ETA audit fix-ovi:
+  `v3RunTrackingTick` odbija GPS fix stariji od `v3TrackingMaxPositionAge`
+  (30s) — getLastKnownPosition fallback je ranije upisivao staru poziciju
+  kao svez; ETA compute throttle-ovan na `v3EtaComputeInterval` (10s, FG i
+  BG; lokacija se i dalje pise svakih 5s) — prepolovljen edge/OSRM load;
+  standstill kazna putuje u session payload-u (`standstill_seconds`) pa se
+  ne resetuje na FG<->BG handoff; edge: sve eta_results select/delete
+  operacije rade po SVIM duplikat slotovima (`.in(slot_id, matchingSlotIds)`)
+  umesto samo activeSlot.id; resolveDriverLocation anti-spoof — payload
+  koji odstupa >500m od sveze tabelske pozicije gubi prednost; sanity
+  check `vozac_id` mora biti `uloga='vozac'` u v3_auth. Komentar drift:
+  "T+40" -> hard-stop (3h) na svim mestima.
 
 ## Release (GitHub Actions)
 

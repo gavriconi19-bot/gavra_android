@@ -15,6 +15,16 @@ const Duration v3AutoStartLeadTime = Duration(minutes: 15);
 
 const Duration v3TrackingTickInterval = Duration(seconds: 5);
 
+/// `v3-compute-eta` se poziva najviše ovako često — lokacija se i dalje
+/// upisuje svaki tick (5s), ali OSRM/edge trošak se smanjuje. Putnik ionako
+/// odbrojava ETA lokalno između dva računanja.
+const Duration v3EtaComputeInterval = Duration(seconds: 10);
+
+/// Maksimalna starost GPS fix-a koji sme u `v3_vozac_location` i ETA payload.
+/// `getLastKnownPosition` fallback bez ovoga upisuje staru poziciju kao svežu
+/// (updated_at=now) — otrovan admin prikaz i ETA.
+const Duration v3TrackingMaxPositionAge = Duration(seconds: 30);
+
 /// Sigurnosni hard-stop: tracking se gasi ovoliko posle polaska čak i ako
 /// putnici ostanu nefinalizovani (stuck podatak) — inače bi FGS, GPS i
 /// notifikacija radili neograničeno.
@@ -255,11 +265,21 @@ int _standstillSeconds = 0;
 DateTime? _standstillPrevTickAt;
 Position? _standstillPrevPos;
 
+/// Akumulirane sekunde stajanja — čuva se u tracking session payload-u da
+/// FG↔BG handoff ne resetuje kaznu.
+int v3GetStandstillSeconds() => _standstillSeconds;
+
+void v3SetStandstillSeconds(int seconds) {
+  _standstillSeconds = seconds.clamp(0, v3StandstillPenaltyCap.inSeconds);
+  _standstillPrevTickAt = null;
+  _standstillPrevPos = null;
+}
+
 /// Jedan tick: live GPS fix + upsert `v3_vozac_location` + `v3-compute-eta`.
 ///
-/// Uvek se izvršava u celini — nema distance/speed/idle uslova koji bi
-/// preskočili ETA. Trenutna GPS lokacija ide u tabelu i u payload edge funkcije
-/// (payload je preferiran izvor da se izbegne race/clock na updated_at).
+/// Trenutna GPS lokacija ide u tabelu i u payload edge funkcije (payload je
+/// preferiran izvor da se izbegne race/clock na updated_at). `computeEta`
+/// throttle-uje edge/OSRM deo — lokacija se upisuje na svaki tick bez obzira.
 /// Koriste ga i foreground servis i background isolate.
 Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTrackingTick({
   required SupabaseClient client,
@@ -267,6 +287,7 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
   required String grad,
   required String vreme,
   required String datumIso,
+  bool computeEta = true,
   String logTag = '[v3RunTrackingTick]',
 }) async {
   Position position;
@@ -283,6 +304,17 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     if (last == null) rethrow;
     debugPrint('$logTag getCurrentPosition timeout — koristim getLastKnownPosition fallback');
     position = last;
+  }
+
+  // Stari fix (getLastKnownPosition može vratiti poziciju od pre nekoliko
+  // minuta): ne sme ni u tabelu (admin mapa bi je video kao svežu) ni u ETA
+  // payload (edge payload-u veruje bezuslovno). Bolje preskočiti tick nego
+  // računati ETA na lažnoj poziciji.
+  if (DateTime.now().difference(position.timestamp) > v3TrackingMaxPositionAge) {
+    debugPrint(
+      '$logTag pozicija prestara ${DateTime.now().difference(position.timestamp).inSeconds}s — tick preskočen',
+    );
+    return (etaMap: <String, int>{}, order: <String>[], reason: 'stale_position');
   }
 
   // Loš fix van operativnog regiona ne sme ni u tabelu ni u ETA ni u
@@ -333,6 +365,12 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     speedKmh: position.speed >= 0 ? position.speed * 3.6 : null,
     logTag: logTag,
   );
+
+  // ETA throttle: edge invoke ide samo kad pozivalac prosledi computeEta
+  // (servis drži interval). Lokacija je gore već upisana — ovaj tick je gotov.
+  if (!computeEta) {
+    return (etaMap: <String, int>{}, order: <String>[], reason: 'eta_throttled');
+  }
 
   // lat/lng u payload-u: edge preferira ovo nad čitanjem tabele (isti tick).
   final requestBody = <String, dynamic>{

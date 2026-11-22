@@ -6,7 +6,7 @@ import '../../utils/v3_belgrade_time.dart';
 
 /// Aktivacija slota + push putnicima pri stvarnom startu trackinga (main isolate).
 ///
-/// Prozor termina: T-15 .. T+40 (Belgrade). Za taj prozor putnici OVOG vozača
+/// Prozor termina: T-15 .. hard-stop [v3TrackingHardStop]. Za taj prozor putnici OVOG vozača
 /// dobijaju tačno jedan push ("Vozač je krenuo…") — RPC je idempotentan preko
 /// `v3_trenutna_dodela.driver_started_notified_at`.
 ///

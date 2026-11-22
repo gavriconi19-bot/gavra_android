@@ -302,8 +302,9 @@ ValueNotifier<DateTime?> get appSettingsActiveWeekEndNotifier => V3AppSettingsSt
 
 /// Koliko dugo se poslednji ETA red čuva u bazi kada vozač prestane da šalje
 /// tickove (npr. ugasio app). Putnik i dalje vidi poslednju poznatu ETA.
-/// Uskladiti sa tracking prozorom T-15..T+40 (55 min) i
-/// ETA_RETENTION_SECONDS u v3-compute-eta edge funkciji.
+/// Nezavisno od tracking prozora (T-15..hard-stop). Uskladiti sa
+/// ETA_RETENTION_SECONDS u v3-compute-eta edge funkciji i
+/// cleanup_eta_results pg_cron jobom.
 ///
 /// NAPOMENA: putnički UI (V3VremeDolaskaWidget) NE koristi starost computed_at
 /// za sakrivanje ETA — prikazuje poslednju ETA dok traje tracking prozor

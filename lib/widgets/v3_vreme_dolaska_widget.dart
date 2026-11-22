@@ -317,7 +317,7 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
           final nextTerminId = nextRide?.row['id']?.toString();
           final assignedVozacId = nextRide?.vozacId;
 
-          // Jednostavno: ETA red za ovu vožnju + tracking prozor T-15..T+40.
+          // Jednostavno: ETA red za ovu vožnju + tracking prozor T-15..hard-stop.
           // Sakrij samo ako su i dodela i ETA vozač poznati i razlikuju se.
           final row = nextTerminId != null ? _findEtaRow(nextTerminId, putnikId) : null;
           final eta = row != null ? (row[_colEtaSeconds] as num?)?.toInt() : null;

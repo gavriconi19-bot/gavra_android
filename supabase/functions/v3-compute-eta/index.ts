@@ -6,8 +6,10 @@ const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 
 /// Koliko dugo se poslednji ETA red čuva u bazi kada vozač prestane da šalje
 /// tickove (npr. ugasio app). Putnik i dalje vidi poslednju poznatu ETA.
-/// Uskladiti sa tracking prozorom T-15..T+40 (55 min) i
-/// etaRetentionDuration u lib/globals.dart.
+/// Nezavisno od tracking prozora (T-15..T+3h). Brisanje rade i ovaj delete
+/// (pri svakom pozivu) i pg_cron job `cleanup_eta_results` (svakih 5 min) —
+/// cron pokriva slučaj kad više niko ne poziva funkciju.
+/// Uskladiti sa etaRetentionDuration u lib/globals.dart.
 const ETA_RETENTION_SECONDS = (15 + 40) * 60; // 3300
 
 /// Maksimalna starost lokacije vozača u `v3_vozac_location` pre nego što se
@@ -69,6 +71,18 @@ function json(status: number, body: Record<string, unknown>): Response {
 
 function coordStr(lat: number, lng: number): string {
   return `${lng},${lat}`;
+}
+
+/// Haversine razdaljina u metrima — za proveru konzistentnosti lokacije.
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function normalizeTime(value: unknown): string {
@@ -279,10 +293,17 @@ async function fillMissingPassengerGps(
   return result;
 }
 
+/// Koliko se payload lat/lng sme razlikovati od sveže tabelske pozicije pre
+/// nego što se proglasi spoof-om — legitimni klijent u istom tick-u upiše
+/// ISTU poziciju u v3_vozac_location, pa je očekivana razlika ~0m.
+const MAX_PAYLOAD_DIVERGENCE_M = 500;
+
 /// Preferira lat/lng iz tick payload-a (isti request kao GPS fix).
 /// Fallback: v3_vozac_location ako je dovoljno sveža i u regionu.
-/// Oba izvora prolaze `inOperatingRegion` — payload van regiona je loš fix
-/// ili spoof (endpoint nema auth), pa pada na tabelu / odbija se.
+/// Anti-spoof: endpoint nema auth (anon key + custom PIN), pa pored region
+/// box-a payload koji se bitno razlikuje od sveže tabelske pozicije gubi
+/// prednost — drugi uređaj ne zna vozačevu live poziciju, a upis u tabelu
+/// je ionako svežiji signal.
 async function resolveDriverLocation(
   client: ReturnType<typeof createClient>,
   vozacId: string,
@@ -291,10 +312,8 @@ async function resolveDriverLocation(
 ): Promise<{ lat: number; lng: number; source: "payload" | "table" } | null> {
   const pLat = parseCoord(payloadLat);
   const pLng = parseCoord(payloadLng);
-  if (pLat != null && pLng != null && inOperatingRegion(pLat, pLng)) {
-    return { lat: pLat, lng: pLng, source: "payload" };
-  }
-  if (pLat != null && pLng != null) {
+  const payloadOk = pLat != null && pLng != null && inOperatingRegion(pLat, pLng);
+  if (pLat != null && pLng != null && !payloadOk) {
     console.warn(`[v3-compute-eta] payload location out_of_region ${pLat},${pLng}`);
   }
 
@@ -304,27 +323,36 @@ async function resolveDriverLocation(
     .eq("vozac_id", vozacId)
     .maybeSingle();
 
-  if (error || !row) return null;
-
-  const lat = parseCoord(row.lat);
-  const lng = parseCoord(row.lng);
-  if (lat == null || lng == null) return null;
-  if (!inOperatingRegion(lat, lng)) {
-    console.warn(`[v3-compute-eta] table location out_of_region ${lat},${lng}`);
-    return null;
+  let tableLoc: { lat: number; lng: number } | null = null;
+  if (!error && row) {
+    const lat = parseCoord(row.lat);
+    const lng = parseCoord(row.lng);
+    const ts = typeof row.updated_at === "string" ? Date.parse(row.updated_at) : NaN;
+    if (lat != null && lng != null && inOperatingRegion(lat, lng) && Number.isFinite(ts)) {
+      const ageMs = Date.now() - ts;
+      if (ageMs <= DRIVER_LOCATION_MAX_AGE_MS) {
+        tableLoc = { lat, lng };
+      } else {
+        console.warn(`[v3-compute-eta] driver location stale ageMs=${ageMs} max=${DRIVER_LOCATION_MAX_AGE_MS}`);
+      }
+    } else if (lat != null && lng != null && !inOperatingRegion(lat, lng)) {
+      console.warn(`[v3-compute-eta] table location out_of_region ${lat},${lng}`);
+    }
   }
 
-  const tsRaw = row.updated_at;
-  const ts = typeof tsRaw === "string" ? Date.parse(tsRaw) : NaN;
-  if (!Number.isFinite(ts)) return null;
-  if (Date.now() - ts > DRIVER_LOCATION_MAX_AGE_MS) {
-    console.warn(
-      `[v3-compute-eta] driver location stale ageMs=${Date.now() - ts} max=${DRIVER_LOCATION_MAX_AGE_MS}`,
-    );
-    return null;
+  if (payloadOk && tableLoc) {
+    const divergence = haversineMeters(pLat, pLng, tableLoc.lat, tableLoc.lng);
+    if (divergence > MAX_PAYLOAD_DIVERGENCE_M) {
+      console.warn(
+        `[v3-compute-eta] payload diverges from table by ${Math.round(divergence)}m — preferring table`,
+      );
+      return { lat: tableLoc.lat, lng: tableLoc.lng, source: "table" };
+    }
+    return { lat: pLat, lng: pLng, source: "payload" };
   }
-
-  return { lat, lng, source: "table" };
+  if (payloadOk) return { lat: pLat, lng: pLng, source: "payload" };
+  if (tableLoc) return { lat: tableLoc.lat, lng: tableLoc.lng, source: "table" };
+  return null;
 }
 
 /// Fetch sa eksponencijalnim backoff retry-om.
@@ -355,7 +383,7 @@ async function fetchWithRetry(url: string, maxRetries: number = OSRM_MAX_RETRIES
 /// optimized_order za ovog vozača.
 async function buildOsrmFallbackResponse(
   client: ReturnType<typeof createClient>,
-  activeSlotId: string,
+  slotIds: string[],
   vozacId: string,
   reason: string,
   extra: Record<string, unknown> = {},
@@ -363,7 +391,7 @@ async function buildOsrmFallbackResponse(
   const { data: existingEtaRows } = await client
     .from("v3_eta_results")
     .select("termin_id, putnik_id, eta_seconds, optimized_order")
-    .eq("slot_id", activeSlotId)
+    .in("slot_id", slotIds)
     .eq("vozac_id", vozacId);
 
   const etaRows = (existingEtaRows ?? [])
@@ -432,6 +460,17 @@ Deno.serve(async (req) => {
         reason: "invalid_payload",
         detail: "missing grad, vreme or datum_iso",
       });
+    }
+
+    // Sanity: vozac_id mora biti pravi vozač — endpoint nema auth pa bar
+    // odbijamo pozive za nepostojeće/ne-vozač naloge pre skupljeg rada.
+    const { data: vozacRow } = await client
+      .from("v3_auth")
+      .select("id, uloga")
+      .eq("id", vozacId)
+      .maybeSingle();
+    if (!vozacRow || String(vozacRow.uloga ?? "") !== "vozac") {
+      return json(200, { ok: false, reason: "not_a_driver" });
     }
 
     // Standstill kazna: klijent akumulira sekunde stajanja od polaska; ovde se
@@ -519,7 +558,7 @@ Deno.serve(async (req) => {
     );
 
     if ((dodelaRows ?? []).length === 0) {
-      await client.from("v3_eta_results").delete().eq("slot_id", activeSlot.id).eq("vozac_id", vozacId);
+      await client.from("v3_eta_results").delete().in("slot_id", matchingSlotIds).eq("vozac_id", vozacId);
       return json(200, { ok: true, reason: "no_passengers_for_this_vozac", updated: 0 });
     }
 
@@ -547,7 +586,8 @@ Deno.serve(async (req) => {
     const remaining = rawPassengers.filter((p) => !completedTerminIds.has(p.termin_id));
 
     if (remaining.length === 0) {
-      await client.from("v3_eta_results").delete().eq("slot_id", activeSlot.id).eq("vozac_id", vozacId);
+      // Svi duplikat slotovi — redovi na drugom duplikatu ne smeju da zastanu.
+      await client.from("v3_eta_results").delete().in("slot_id", matchingSlotIds).eq("vozac_id", vozacId);
       return json(200, { ok: true, reason: "no_remaining_passengers", updated: 0 });
     }
 
@@ -555,14 +595,14 @@ Deno.serve(async (req) => {
     const { data: existingEtaRows } = await client
       .from("v3_eta_results")
       .select("putnik_id, optimized_order")
-      .eq("slot_id", activeSlot.id)
+      .in("slot_id", matchingSlotIds)
       .eq("vozac_id", vozacId);
     const toDelete = (existingEtaRows ?? [])
       .map((r: any) => String(r.putnik_id ?? "").trim())
       .filter((pid: string) => pid && !remainingPutnikIds.has(pid));
     if (toDelete.length > 0) {
       await client.from("v3_eta_results").delete()
-        .eq("slot_id", activeSlot.id)
+        .in("slot_id", matchingSlotIds)
         .eq("vozac_id", vozacId)
         .in("putnik_id", toDelete);
     }
@@ -575,7 +615,7 @@ Deno.serve(async (req) => {
 
     const waypointCount = orderedPassengers.length + 2;
     if (waypointCount > OSRM_MAX_WAYPOINTS) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_too_many_waypoints", {
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_too_many_waypoints", {
         count: waypointCount,
         max: OSRM_MAX_WAYPOINTS,
       });
@@ -598,13 +638,13 @@ Deno.serve(async (req) => {
     try {
       osrmResponse = await fetchWithRetry(osrmUrl);
     } catch (e) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_fetch_error", {
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_fetch_error", {
         warning: e instanceof Error ? e.message : "Unknown error",
       });
     }
 
     if (!osrmResponse.ok) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_http_error", {
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_http_error", {
         status: osrmResponse.status,
       });
     }
@@ -612,7 +652,7 @@ Deno.serve(async (req) => {
     const osrmData = await osrmResponse.json();
 
     if (osrmData.code !== "Ok") {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_code_error", {
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_code_error", {
         code: osrmData.code,
       });
     }
@@ -632,18 +672,18 @@ Deno.serve(async (req) => {
     const expectedWaypointCount = orderedPassengers.length + 2;
     if (!Array.isArray(rawWaypoints) || rawWaypoints.length !== expectedWaypointCount) {
       console.warn(`[v3-compute-eta] waypoints mismatch: expected=${expectedWaypointCount} got=${rawWaypoints?.length}`);
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_waypoints_mismatch", {
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_waypoints_mismatch", {
         expected: expectedWaypointCount,
         got: rawWaypoints?.length,
       });
     }
     if (!Array.isArray(rawTrips) || rawTrips.length === 0) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_no_trips");
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_no_trips");
     }
 
     const legs = rawTrips[0].legs;
     if (!Array.isArray(legs)) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_no_legs");
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_no_legs");
     }
 
     const passengerWaypoints = rawWaypoints
@@ -663,7 +703,7 @@ Deno.serve(async (req) => {
     }
     const builtRows = etaRowsFromFixedOrder(tripOrdered, legs, upsertCtx);
     if (builtRows === null) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "osrm_invalid_leg");
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "osrm_invalid_leg");
     }
     upsertRows = builtRows;
 
@@ -679,7 +719,7 @@ Deno.serve(async (req) => {
     });
 
     if (upsertRows.length === 0) {
-      return await buildOsrmFallbackResponse(client, activeSlot.id, vozacId, "no_eta_rows");
+      return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "no_eta_rows");
     }
 
     // 6. Upsert v3_eta_results — koristi slot_id za conflict resolution

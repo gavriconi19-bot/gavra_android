@@ -425,7 +425,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
   /// Jedan aktivan tracking termin po vozaču = jedina live OSRM istina.
   /// Vozač sme da gleda bilo koji slot; tuđi/neaktivni slot ne sme da
   /// nasledi rutu aktivnog termina.
-  /// 1) live tick — samo dok gleda aktivni termin (prozor 55 min)
+  /// 1) live tick — samo dok gleda aktivni termin (T-15..hard-stop)
   /// 2) `v3_eta_results` — fallback za isti aktivni termin
   /// 3) slot `optimized_order` — pregled / pre prvog tick-a
   List<String> _resolveOptimizedOrder(List<_PutnikEntry> putnici) {
@@ -482,7 +482,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
 
   /// Poslednji redosled iz v3_eta_results za ovog vozača + prikazane putnike.
   /// Koristi se samo za aktivni tracking termin.
-  /// Prozor: samo redovi iz T-15..T+40 aktivne sesije — stari termin ne curi.
+  /// Prozor: samo redovi iz T-15..hard-stop aktivne sesije — stari termin ne curi.
   List<String> _getOsrmOrderFromEtaResults(List<_PutnikEntry> putnici) {
     final vozacId = (_efektivniVozac?.id?.toString() ?? '').trim();
     if (vozacId.isEmpty) return const [];

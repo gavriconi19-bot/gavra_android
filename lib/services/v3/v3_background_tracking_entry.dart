@@ -25,7 +25,20 @@ Future<void> onStart(ServiceInstance service) async {
   String? vreme;
   DateTime? startedAt;
   DateTime? polazakAt;
+  DateTime? lastEtaComputeAt;
   int noSlotStrikes = 0;
+  int lastPersistedStandstill = -1;
+
+  /// Upisuje akumuliranu standstill kaznu u session prefs — main isolate je
+  /// usvaja na BG→FG prelazu (vidi _pauseBgTicks), bez staleness-a.
+  Future<void> persistStandstillSeconds() async {
+    try {
+      final saved = await v3LoadBgTrackingSession();
+      if (saved == null) return;
+      saved['standstill_seconds'] = v3GetStandstillSeconds();
+      await v3SaveBgTrackingSession(saved);
+    } catch (_) {}
+  }
   V3SelfReschedulingTicker? ticker;
   Timer? expiryWatchdog;
   SupabaseClient? client;
@@ -65,12 +78,15 @@ Future<void> onStart(ServiceInstance service) async {
     vreme = null;
     startedAt = null;
     polazakAt = null;
+    lastEtaComputeAt = null;
     noSlotStrikes = 0;
+    v3SetStandstillSeconds(0);
   }
 
   void pauseTicks() {
     ticker?.cancel();
     ticker = null;
+    unawaited(persistStandstillSeconds());
     debugPrint('[BG_TRACKING] pauseTicks');
   }
 
@@ -111,12 +127,17 @@ Future<void> onStart(ServiceInstance service) async {
         return;
       }
 
+      // Isti ETA throttle kao FG: lokacija svaki tick, compute-eta na interval.
+      final computeEta = lastEtaComputeAt == null ||
+          DateTime.now().difference(lastEtaComputeAt!) >= v3EtaComputeInterval;
+      if (computeEta) lastEtaComputeAt = DateTime.now();
       final result = await v3RunTrackingTick(
         client: client!,
         vozacId: vozacId!,
         grad: grad!,
         vreme: vreme!,
         datumIso: datumIso!,
+        computeEta: computeEta,
         logTag: '[BG_TRACKING]',
       );
 
@@ -134,6 +155,14 @@ Future<void> onStart(ServiceInstance service) async {
       }
     } catch (e) {
       debugPrint('[BG_TRACKING] tick greška: $e');
+    }
+
+    // Persist samo kad se kazna promenila (stajanje → svaki tick ~5s,
+    // mala prefs vrednost; u pokretu → jedan write na reset u 0).
+    final ss = v3GetStandstillSeconds();
+    if (ss != lastPersistedStandstill) {
+      lastPersistedStandstill = ss;
+      unawaited(persistStandstillSeconds());
     }
   }
 
@@ -154,6 +183,9 @@ Future<void> onStart(ServiceInstance service) async {
     grad = g;
     vreme = v;
     noSlotStrikes = 0;
+    lastEtaComputeAt = null;
+    // Standstill kazna iz FG sesije — BG nastavlja akumulaciju, ne resetuje.
+    v3SetStandstillSeconds((m['standstill_seconds'] as num?)?.toInt() ?? 0);
     startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();
     polazakAt = V3BelgradeTime.parseTs(m['polazak_at']?.toString()) ?? v3PolazakDateTime(datumIso: datum, vreme: v);
     debugPrint('[BG_TRACKING] start $g $v polazak=$polazakAt');

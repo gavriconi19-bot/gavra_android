@@ -44,7 +44,8 @@ extension V3TrackingStartResultX on V3TrackingStartResult {
 /// GPS/ETA tracking vozača — jedan izvor istine za FG i BG.
 ///
 /// Start: V3VozacScreen auto-start (T-15). Zahteva GPS + **Always**.
-/// Tick (5s): live GPS → `v3_vozac_location` → `v3-compute-eta`.
+/// Tick (5s): live GPS → `v3_vozac_location`; `v3-compute-eta` throttle-ovan
+/// na [v3EtaComputeInterval].
 /// Stop: svi putnici gotovi, hard-stop (polazak+[v3TrackingHardStop]),
 /// ili ručni stop.
 ///
@@ -75,6 +76,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   DateTime? _startedAt;
   DateTime? _polazakAt;
   DateTime? _lastTickAt;
+  DateTime? _lastEtaComputeAt;
   V3SelfReschedulingTicker? _fgTicker;
   StreamSubscription<Map<String, dynamic>?>? _bgEndedSub;
   StreamSubscription<Position>? _iosKeepAliveSub;
@@ -141,6 +143,8 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         'started_at': _startedAt?.toUtc().toIso8601String(),
         'polazak_at': _polazakAt?.toUtc().toIso8601String(),
         'ticks_paused': ticksPaused,
+        // FG↔BG handoff: BG isolate nastavlja kaznu umesto da je resetuje.
+        'standstill_seconds': v3GetStandstillSeconds(),
       };
 
   bool _isSameSession({
@@ -255,11 +259,13 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _startedAt = startedAt ?? V3BelgradeTime.now();
       _polazakAt = polazakAt;
       _lastTickAt = null;
+      _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
+      v3SetStandstillSeconds((saved['standstill_seconds'] as num?)?.toInt() ?? 0);
       _setRunning(true);
 
       debugPrint('$_tag restore OK $g $v bgRunning=$bgRunning fg=$_isAppInForeground');
-      // Jednom po T-15..T+40 prozoru — RPC je no-op ako je već poslato.
+      // Jednom po T-15..hard-stop prozoru — RPC je no-op ako je već poslato.
       await activateSlotWithRetry(
         client: Supabase.instance.client,
         vozacId: id,
@@ -337,10 +343,12 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _polazakAt = v3PolazakDateTime(datumIso: datum, vreme: v);
       _startedAt = V3BelgradeTime.now();
       _lastTickAt = null;
+      _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
+      v3SetStandstillSeconds(0);
 
       if (_polazakAt == null || !v3IsTrackingWindowOpen(polazakAt: _polazakAt!)) {
-        debugPrint('$_tag start prekinut: van T-15..T+40');
+        debugPrint('$_tag start prekinut: van T-15..hard-stop');
         await _resetLocalSessionFields();
         return V3TrackingStartResult.failed;
       }
@@ -387,7 +395,9 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     _polazakAt = null;
     _startedAt = null;
     _lastTickAt = null;
+    _lastEtaComputeAt = null;
     _optimizedPutnikIds.clear();
+    v3SetStandstillSeconds(0);
     _setRunning(false);
     await v3ClearBgTrackingSession();
     await _stopBg();
@@ -410,8 +420,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _polazakAt = null;
       _startedAt = null;
       _lastTickAt = null;
+      _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
       _noSlotStrikes = 0;
+      v3SetStandstillSeconds(0);
       _setRunning(false);
 
       _fgTicker?.cancel();
@@ -421,19 +433,19 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       await _stopBg();
 
       // ETA se NE briše ovde. Poslednji red ostaje putniku do:
-      // T+40 prozora / pokupljen / otkazan / retention 55min (sve u edge-u).
+      // pokupljen / otkazan / retention 55min (edge + cleanup cron).
     } finally {
       _stopInProgress = false;
     }
   }
 
-  /// Jednokratni GPS+ETA (UI resume / reoptimizacija).
+  /// Jednokratni GPS+ETA (UI resume / reoptimizacija) — bez throttle-a.
   Future<({Map<String, int> etaMap, List<String> order, String? reason})> fetchPositionAndComputeEta() async {
     if (_vozacId.isEmpty) {
       return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds), reason: null);
     }
     try {
-      return await _runTick();
+      return await _runTick(forceEta: true);
     } catch (e) {
       debugPrint('$_tag fetchPositionAndComputeEta error: $e');
       return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds), reason: null);
@@ -476,13 +488,20 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     debugPrint('$_tag iOS location keep-alive stop');
   }
 
-  Future<({Map<String, int> etaMap, List<String> order, String? reason})> _runTick() async {
+  /// [forceEta] preskače throttle (resume / reoptimizacija).
+  Future<({Map<String, int> etaMap, List<String> order, String? reason})> _runTick({bool forceEta = false}) async {
+    final lastEta = _lastEtaComputeAt;
+    final computeEta = forceEta ||
+        lastEta == null ||
+        DateTime.now().difference(lastEta) >= v3EtaComputeInterval;
+    if (computeEta) _lastEtaComputeAt = DateTime.now();
     final result = await v3RunTrackingTick(
       client: Supabase.instance.client,
       vozacId: _vozacId,
       grad: _grad,
       vreme: _vreme,
       datumIso: _datumIso,
+      computeEta: computeEta,
       logTag: _tag,
     );
     _lastTickAt = DateTime.now();
@@ -525,7 +544,8 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       // Slot obrisan u hodu (admin) → edge vraća no_active_slot a
       // allPassengersCompleted ne može da dokaze "gotovo". Pre polaska je
       // no_active_slot legitiman (auto-prepare kasni), pa strikes brojimo
-      // tek od polazka; posle ~30s konzistentnog odgovora gasimo.
+      // tek od polazka; posle ~60s konzistentnog odgovora gasimo (6 strikes
+      // po ETA tick-u — compute-eta je throttle-ovan na v3EtaComputeInterval).
       final postDeparture = _polazakAt == null || !V3BelgradeTime.now().isBefore(_polazakAt!);
       if (result.reason == 'no_active_slot' && postDeparture) {
         _noSlotStrikes++;
@@ -677,7 +697,17 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   Future<void> _pauseBgTicks() async {
     if (Platform.isIOS) return;
     try {
-      await v3SaveBgTrackingSession(_sessionPayload(ticksPaused: true));
+      final payload = _sessionPayload(ticksPaused: true);
+      // BG isolate je vlasnik standstill brojača dok je on tickovao —
+      // usvoji njegovu persist-ovanu vrednost da se kazna ne resetuje
+      // na BG→FG prelazu.
+      final saved = await v3LoadBgTrackingSession();
+      final bgStandstill = (saved?['standstill_seconds'] as num?)?.toInt();
+      if (bgStandstill != null) {
+        payload['standstill_seconds'] = bgStandstill;
+        v3SetStandstillSeconds(bgStandstill);
+      }
+      await v3SaveBgTrackingSession(payload);
       final service = FlutterBackgroundService();
       if (!await service.isRunning()) return;
       // servicePipe može dropovati event — retry kao u _startBg, inače bi BG
