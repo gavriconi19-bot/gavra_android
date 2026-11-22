@@ -937,6 +937,13 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Angebot gültig ~%s Min.',
       'zh': '优惠有效期约 %s 分钟',
     },
+    'rasporedSeUcitava': {
+      'sr': 'Raspored se još učitava, pokušajte za par sekundi',
+      'en': 'Schedule is still loading, try again in a few seconds',
+      'ru': 'Расписание ещё загружается, попробуйте через пару секунд',
+      'de': 'Fahrplan wird noch geladen, bitte in ein paar Sekunden erneut versuchen',
+      'zh': '时刻表仍在加载中，请稍后再试',
+    },
   },
   'putnikStatistikaScreen': {
     'detaljneStatistike': {

@@ -559,9 +559,26 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
 
     final now = V3BelgradeTime.now();
     final dayFullName = V3DanHelper.fullName(datumPolaska);
-    final vremena = getRasporedVremena(grad.toLowerCase(), navBarTypeNotifier.value, day: dayFullName)
+    var vremena = getRasporedVremena(grad.toLowerCase(), navBarTypeNotifier.value, day: dayFullName)
         .where((v) => _normalizeValidTime(v) != null)
         .toList();
+    if (vremena.isEmpty) {
+      // Raspored stiže sa v3_app_settings u kritičnoj bootstrap fazi — na
+      // sporoj vezi (Funnel/cold start) može kasniti i picker bi se otvorio
+      // prazan. Sačekaj kratko da init/bootstrap završi pa preracunaj.
+      try {
+        await rm.initV3().timeout(const Duration(seconds: 6), onTimeout: () {});
+      } catch (_) {}
+      vremena = getRasporedVremena(grad.toLowerCase(), navBarTypeNotifier.value, day: dayFullName)
+          .where((v) => _normalizeValidTime(v) != null)
+          .toList();
+    }
+    if (vremena.isEmpty) {
+      // Bez termina ne otvaraj prazan dijalog — putnik bi video samo
+      // naslov bez ikakvih opcija.
+      if (mounted) V3AppSnackBar.info(ctx, _tr('rasporedSeUcitava'));
+      return;
+    }
     final currentVreme = info?.vreme;
     final hasActive =
         info != null && !V3StatusPolicy.isCanceledOrRejected(info.status) && !V3StatusPolicy.isOfferLike(info.status);
