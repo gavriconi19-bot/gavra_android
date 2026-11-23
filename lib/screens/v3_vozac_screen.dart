@@ -92,7 +92,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
   List<_PutnikEntry> _mojiPutnici = [];
   Set<String> _assignedOperativnaIds = <String>{};
   List<Map<String, String>> _assignedSlotRows = <Map<String, String>>[];
-  Map<String, String> _allTerminToVozac = <String, String>{};
   bool _isNavigating = false;
   String _lastSyncedPassengersSignature = '';
   bool _hasSentRouteToMap = false;
@@ -156,7 +155,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     if (vozac == null) {
       _assignedOperativnaIds = <String>{};
       _assignedSlotRows = <Map<String, String>>[];
-      _allTerminToVozac = <String, String>{};
       return;
     }
 
@@ -164,7 +162,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     if (vozacAuthId.isEmpty) {
       _assignedOperativnaIds = <String>{};
       _assignedSlotRows = <Map<String, String>>[];
-      _allTerminToVozac = <String, String>{};
       return;
     }
 
@@ -179,8 +176,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
         rm.trenutnaDodelaSlotCache,
         vozacId: vozacAuthId,
       );
-      _allTerminToVozac =
-          V3TrenutnaDodelaService.vozacByTerminIdFromCache(rm.trenutnaDodelaCache);
     } catch (e) {
       debugPrint('[V3VozacScreen] _reloadTrenutnaDodelaForVozac error: $e');
       // Ne briši prethodnu dodelu — prazan spisak bi ugasio tracking (AKTIVNO→ČEKAM).
@@ -494,12 +489,10 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     // Sakupi SVE slot ID-jeve koji fizički odgovaraju ovom terminu
     // (datum+grad+vreme). Server ponekad ima format-duplikate istog termina
     // (npr. vreme "15:25" vs "15:25:00" — vidi komentar u v3-compute-eta:
-    // "Više redova (format time vs text)") i bira activeSlot.id na osnovu
-    // toga koji red ima dodelu za KONKRETNOG vozača. To znači da dva vozača
-    // na istom deljenom terminu mogu imati različit "aktivan" slot_id.
-    // Zato ne smemo da tražimo TAČNO JEDAN selectedSlotId — moramo prihvatiti
-    // eta_results red čiji je slot_id BILO KOJI od ovih fizičkih duplikata,
-    // inače bismo mogli pogrešno odbaciti sveže live rezultate ovog vozača.
+    // "Više redova (format time vs text)"). Zato ne smemo da tražimo TAČNO
+    // JEDAN selectedSlotId — moramo prihvatiti eta_results red čiji je
+    // slot_id BILO KOJI od ovih fizičkih duplikata, inače bismo mogli
+    // pogrešno odbaciti sveže live rezultate ovog vozača.
     final matchingSlotIds = <String>{};
     for (final slot in V3MasterRealtimeManager.instance.trenutnaDodelaSlotCache.values) {
       final rowDatum = V3BelgradeTime.parseIsoDatePart(slot['datum']?.toString() ?? '');
@@ -579,8 +572,8 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       }
       final all = _toPutnikIds(_idListFrom(row['optimized_order']), putnici);
       if (all.isEmpty) continue;
-      // Slot je deljen (admin dodeljuje) — optimized_order je merge svih vozača.
-      // Nikad ne vraćaj tuđi deo: samo moji putnici.
+      // Jedan vozač po slotu — optimized_order je ceo slot; vraća se samo
+      // presek sa prikazanim putnicima.
       final mine = all.where(myIds.contains).toList();
       if (mine.isNotEmpty) return mine;
       // Ovaj duplikat ne sadrži moje putnike — probaj sledeći poklapajući red.
@@ -882,13 +875,10 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       return;
     }
 
-    // 2. Putnici za ovaj dan/grad/vreme:
-    //    Individualna dodela + slot dodela (ostali putnici iz termina
-    //    koji nisu individualno dodeljeni drugom vozaču)
+    // 2. Putnici za ovaj dan/grad/vreme — svi putnici slota pripadaju
+    //    vozaču slota (jedan vozač po slotu).
 
-    final vozacAuthId = vozac.id.toString().trim();
-
-    // Najpre individualno dodeljeni putnici
+    // Najpre putnici sa dodelom (link ka slotu + GPS koordinate)
     final terminPutnici = _assignedOperativnaRows(
       datumIso: _selectedDatumIso,
       grad: _selectedGrad,
@@ -904,7 +894,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       allSelectedRowsById.putIfAbsent(entryId, () => row);
     }
 
-    // Uključi i ostale putnike iz tog termina koji nemaju individualnu dodelu drugom vozaču
+    // Uključi i ostale putnike iz tog termina (svi pripadaju vozaču slota)
     for (final raw in rm.operativnaNedeljaCache.values) {
       final rowDatum = V3BelgradeTime.parseIsoDatePart(raw['datum'] as String? ?? '');
       final rowGrad = raw['grad']?.toString().toUpperCase() ?? '';
@@ -915,14 +905,9 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       final entryId = raw['id']?.toString() ?? '';
       if (entryId.isEmpty) continue;
 
-      // Ako je već individualno dodeljen ovom vozaču, preskoči (već dodat)
+      // Već dodat gore kroz dodelu
       if (_assignedOperativnaIds.contains(entryId)) continue;
 
-      // Ako je individualno dodeljen drugom vozaču, preskoči
-      final assignedVozac = _allTerminToVozac[entryId];
-      if (assignedVozac != null && assignedVozac != vozacAuthId) continue;
-
-      // Inače dodaj iz slota
       final row = Map<String, dynamic>.from(raw);
       row['vreme'] = row['vreme'] ?? row['polazak_at'];
       allSelectedRowsById.putIfAbsent(entryId, () => row);
@@ -1127,7 +1112,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     final rm = V3MasterRealtimeManager.instance;
     final vozac = V3VozacService.currentVozac;
     if (vozac == null) return 0;
-    final vozacAuthId = vozac.id.toString().trim();
 
     final vremeNorm = V3BelgradeTime.normalizeToHHmm(vreme);
     final gradUp = grad.toUpperCase();
@@ -1161,9 +1145,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       final entryId = raw['id']?.toString() ?? '';
       if (entryId.isEmpty) continue;
       if (rowsById.containsKey(entryId)) continue;
-
-      final assignedVozac = _allTerminToVozac[entryId];
-      if (assignedVozac != null && assignedVozac != vozacAuthId) continue;
 
       final row = Map<String, dynamic>.from(raw);
       row['vreme'] = row['vreme'] ?? row['polazak_at'];
@@ -1471,7 +1452,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     final rm = V3MasterRealtimeManager.instance;
     final vozac = _efektivniVozac;
     if (vozac == null) return false;
-    final vozacAuthId = vozac.id.toString().trim();
     final gradUp = grad.toUpperCase();
     final vremeNorm = V3BelgradeTime.normalizeToHHmm(vreme);
 
@@ -1483,7 +1463,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       );
     }
 
-    // 1. Individualno dodeljeni putnici
+    // 1. Putnici sa dodelom (link ka slotu)
     for (final row in _assignedOperativnaRows(
       datumIso: datumIso,
       grad: gradUp,
@@ -1494,7 +1474,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       if (isActive(row)) return true;
     }
 
-    // 2. Ostali putnici iz istog termina koji nisu dodeljeni drugom vozaču
+    // 2. Ostali putnici iz istog termina (svi pripadaju vozaču slota)
     for (final raw in rm.operativnaNedeljaCache.values) {
       final rowDatum = V3BelgradeTime.parseIsoDatePart(raw['datum'] as String? ?? '');
       final rowGrad = raw['grad']?.toString().toUpperCase() ?? '';
@@ -1505,9 +1485,6 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       final entryId = raw['id']?.toString() ?? '';
       if (entryId.isEmpty) continue;
       if (_assignedOperativnaIds.contains(entryId)) continue;
-
-      final assignedVozac = _allTerminToVozac[entryId];
-      if (assignedVozac != null && assignedVozac != vozacAuthId) continue;
 
       if (isActive(raw)) return true;
     }

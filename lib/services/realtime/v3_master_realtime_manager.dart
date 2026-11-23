@@ -1320,7 +1320,7 @@ class V3MasterRealtimeManager {
   }
 
   /// `true`/`false` iz cache-a; `null` ako nema dovoljno podataka (BG isolate / prazan cache).
-  /// Samo putnici ovog vozača na slotu (multi-driver safe).
+  /// Samo putnici ovog vozača na slotu (jedan vozač po slotu = sve dodele).
   bool? tryAllPassengersCompleted({
     required String datumIso,
     required String grad,
@@ -1362,7 +1362,6 @@ class V3MasterRealtimeManager {
       return null;
 
     final terminIds = <String>{};
-    final otherVozacTerminIds = <String>{};
     for (final row in trenutnaDodelaCache.values) {
       final rowSlotId = row['slot_id']?.toString() ?? '';
       if (!slotIds.contains(rowSlotId)) continue;
@@ -1370,14 +1369,12 @@ class V3MasterRealtimeManager {
       if (tid == null || tid.isEmpty) continue;
       if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() == wantVozac) {
         terminIds.add(tid);
-      } else {
-        otherVozacTerminIds.add(tid);
       }
     }
     if (terminIds.isEmpty) {
       // Prazna dodela ≠ svi gotovi (auto-prepare race) — isto kao DB put u
       // v3AllPassengersCompleted. Gasi kad ni jedan slot nije moj, ili kad
-      // termin nema aktivnih putnika koji nisu tuđi.
+      // termin nema aktivnih putnika.
       final slotIsMine = matchingSlots.any((s) =>
           (s['vozac_v3_auth_id']?.toString() ?? '').trim() == wantVozac);
       if (!slotIsMine) return true;
@@ -1392,9 +1389,8 @@ class V3MasterRealtimeManager {
           continue;
         }
         final tid = row['id']?.toString() ?? '';
-        if (tid.isEmpty || otherVozacTerminIds.contains(tid)) continue;
+        if (tid.isEmpty) continue;
         final active = V3StatusPolicy.canAssign(
-          status: row['status']?.toString(),
           otkazanoAt: row['otkazano_at'],
           pokupljenAt: row['pokupljen_at'],
         );

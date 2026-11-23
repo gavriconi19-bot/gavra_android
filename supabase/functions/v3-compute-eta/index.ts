@@ -486,7 +486,7 @@ Deno.serve(async (req) => {
     await client.from("v3_eta_results").delete().lt("computed_at", retentionThreshold);
 
     // 2. Dohvati aktivan SLOT (v3_trenutna_dodela_slot) po grad+datum+vreme.
-    //    Fizički ključ slota — NE po vozaču (override putnik može biti na drugom vozaču).
+    //    Fizički ključ slota (jedan vozač po slotu — migracija 20261123000000).
     const { data: slotRows, error: slotError } = await client
       .from("v3_trenutna_dodela_slot")
       .select("id, vreme, vozac_v3_auth_id, optimized_order")
@@ -537,10 +537,12 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // 2.5. Putnici ovog vozača na slotu. Ako dodela nema GPS, uzmi iz adrese.
-    // Dodele mogu biti raspoređene na više format-duplikata istog fizičkog
-    // slota (vreme "15:25" vs "15:25:00") — .eq() na samo activeSlot.id bi
-    // tiho isključio putnike sa ostalih duplikata.
+    // 2.5. Putnici ovog vozača na slotu (jedan vozač po slotu — filter po
+    // vozaču je i dalje sesijski scope, ne multi-driver). Ako dodela nema
+    // GPS, uzmi iz adrese. Dodele mogu biti raspoređene na više
+    // format-duplikata istog fizičkog slota (vreme "15:25" vs "15:25:00")
+    // — .eq() na samo activeSlot.id bi tiho isključio putnike sa ostalih
+    // duplikata.
     const { data: dodelaRows, error: dodelaError } = await client
       .from("v3_trenutna_dodela")
       .select("termin_id, putnik_v3_auth_id, adresa_gps_lat, adresa_gps_lng")

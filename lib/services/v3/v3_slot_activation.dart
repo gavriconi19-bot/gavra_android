@@ -10,8 +10,8 @@ import '../../utils/v3_belgrade_time.dart';
 /// dobijaju tačno jedan push ("Vozač je krenuo…") — RPC je idempotentan preko
 /// `v3_trenutna_dodela.driver_started_notified_at`.
 ///
-/// Slot (datum,grad,vreme) je zajednički; ne prepisuje se `vozac_v3_auth_id`
-/// ako već postoji (multi-driver).
+/// Slot (datum,grad,vreme) ima jednog vlasnika; ne prepisuje se
+/// `vozac_v3_auth_id` ako već postoji (jedan vozač po slotu).
 Future<void> activateSlotWithRetry({
   SupabaseClient? client,
   required String vozacId,

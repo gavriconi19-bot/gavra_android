@@ -146,6 +146,38 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   koji odstupa >500m od sveze tabelske pozicije gubi prednost; sanity
   check `vozac_id` mora biti `uloga='vozac'` u v3_auth. Komentar drift:
   "T+40" -> hard-stop (3h) na svim mestima.
+- `20261123000000_single_vozac_per_slot.sql` = uklanja multi-driver
+  ("deljeni slot") logiku: jedan fizicki slot (datum,grad,vreme) ima
+  tacno JEDNOG vozaca za sve putnike. Ranije je admin mogao pojedinacno
+  dodeliti putnika drugom vozacu na istom slotu (dodela.vozac !=
+  slot.vozac). Trigger `tr_v3_trenutna_dodela_normalize` sada enforce-uje
+  invariant: svaka dodela dobija vozac_v3_auth_id = vlasnik slota, a
+  slot_id se resolve-uje i kad je NULL (preko operativna termina ->
+  fizicki kljuc) — pa ni STARE app verzije koje pisu override ne mogu da
+  naprave split (trigger im tiho prepise vozac; BC putanja do prelaska
+  svih uredjaja). `fn_v3_operativna_sync_dodela` ON CONFLICT vise ne cuva
+  override — sync uvek pise vlasnika. Jednokratni data fix svodi
+  postojece split dodele na vlasnika (0 redova na lokalu) + backfill
+  slot_id. Verifikovano rollback testom T0–T4 (sync kreira sa vlasnikom,
+  UPDATE/INSERT override prepisan, slot_id resolve, otkazano brise).
+- Edge + app-side (isti commit): v3-auto-prepare-termins grupise po
+  fizickom slotu (datum|grad|vreme — bez vozac_id u kljucu), bez merge-a
+  optimized_order izmedju vozaca i bez cuvanja per-putnik override-a;
+  v3-compute-eta dodela select ostaje .eq(vozac) (sesijski scope, ne
+  multi-driver); v3_notify_passengers_driver_started i dalje filtrira po
+  p_vozac_id (potpis zadrzan za stare build-ove), ali trigger invariant
+  garantuje da sve dodele na slotu nose vlasnika — owner-ov poziv
+  pokriva sve putnike slota. Admin raspored:
+  uklonjen per-putnik dijalog dodele (_showDodeliVozacaDialog,
+  assignPutnikOverride/clearPutnikOverride iz orchestratora,
+  onDodeliVozaca callback na V3PutnikCard) — dodela vozaca je iskljucivo
+  na nivou slota. Vozac screen: uklonjen _allTerminToVozac map i filteri
+  "tudji putnici" — vozac vidi SVE aktivne putnike svog slota; tracking
+  all-completed check-i (v3AllPassengersCompleted, tryAllPassengersCompleted)
+  gledaju ceo fizicki slot bez otherVozacTerminIds izuzetaka.
+  V3StatusPolicy.sharedVozacIdForTermin/assignedVozacIdForPutnik zadrzani
+  kao read-resolution helperi (sada uvek resolvuju na vlasnika slota).
+  flutter analyze: 0 issues na svim dirnutim fajlovima.
 
 ## Release (GitHub Actions)
 

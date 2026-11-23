@@ -127,63 +127,6 @@ class V3DodelaOrchestratorService {
     return terminIds.length;
   }
 
-  static Future<bool> assignPutnikOverride({
-    required Iterable<Map<String, dynamic>> operativnaRows,
-    required String datumIso,
-    required String putnikId,
-    required String grad,
-    required String vreme,
-    required String vozacId,
-    String? updatedBy,
-    required bool Function(Map<String, dynamic> row) includeRow,
-  }) async {
-    final row = _findOperativnaRowForPutnik(
-      operativnaRows: operativnaRows,
-      datumIso: datumIso,
-      putnikId: putnikId,
-      grad: grad,
-      vreme: vreme,
-      includeRow: includeRow,
-    );
-    if (row == null) return false;
-
-    final terminId = row['id']?.toString() ?? '';
-    if (terminId.isEmpty) return false;
-
-    await V3TrenutnaDodelaService.upsertActiveTerminDodela(
-      terminId: terminId,
-      putnikId: putnikId,
-      vozacId: vozacId,
-      updatedBy: updatedBy,
-    );
-
-    return true;
-  }
-
-  static Future<void> clearPutnikOverride({
-    required Iterable<Map<String, dynamic>> operativnaRows,
-    required String datumIso,
-    required String putnikId,
-    required String grad,
-    required String vreme,
-    required bool Function(Map<String, dynamic> row) includeRow,
-  }) async {
-    final row = _findOperativnaRowForPutnik(
-      operativnaRows: operativnaRows,
-      datumIso: datumIso,
-      putnikId: putnikId,
-      grad: grad,
-      vreme: vreme,
-      includeRow: includeRow,
-    );
-    if (row == null) return;
-
-    final terminId = row['id']?.toString() ?? '';
-    if (terminId.isEmpty) return;
-
-    await V3TrenutnaDodelaService.deleteByTerminId(terminId);
-  }
-
   static List<Map<String, dynamic>> _rowsForSlot({
     required Iterable<Map<String, dynamic>> operativnaRows,
     required String datumIso,
@@ -200,29 +143,5 @@ class V3DodelaOrchestratorService {
       if (datum != datumIso || rowGrad != grad || rowVreme != normVreme) return false;
       return includeRow(row);
     }).toList(growable: false);
-  }
-
-  static Map<String, dynamic>? _findOperativnaRowForPutnik({
-    required Iterable<Map<String, dynamic>> operativnaRows,
-    required String datumIso,
-    required String putnikId,
-    required String grad,
-    required String vreme,
-    required bool Function(Map<String, dynamic> row) includeRow,
-  }) {
-    final normVreme = V3BelgradeTime.normalizeToHHmm(vreme);
-
-    for (final row in operativnaRows) {
-      final datum = V3BelgradeTime.parseIsoDatePart(row['datum']);
-      final rowPutnikId = V3PutnikIdResolver.fromRow(row);
-      final rowGrad = row['grad']?.toString() ?? '';
-      final rowVreme = V3BelgradeTime.normalizeToHHmm(row['polazak_at']?.toString());
-
-      if (datum == datumIso && rowPutnikId == putnikId && rowGrad == grad && rowVreme == normVreme && includeRow(row)) {
-        return row;
-      }
-    }
-
-    return null;
   }
 }

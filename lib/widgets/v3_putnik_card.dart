@@ -43,7 +43,6 @@ class V3PutnikCard extends StatefulWidget {
     this.entry,
     this.redniBroj,
     this.onChanged,
-    this.onDodeliVozaca,
     this.vozacBoja,
   });
 
@@ -52,7 +51,6 @@ class V3PutnikCard extends StatefulWidget {
   final V3OperativnaNedeljaEntry? entry;
   final int? redniBroj;
   final VoidCallback? onChanged;
-  final VoidCallback? onDodeliVozaca;
   final Color? vozacBoja;
 
   @override
@@ -779,7 +777,6 @@ class _V3PutnikCardState extends State<V3PutnikCard> {
                                     spacing: 6,
                                     runSpacing: 4,
                                     children: [
-                                      if (widget.onDodeliVozaca != null) iconBtn('👤', widget.onDodeliVozaca!),
                                       if (hasTel) iconBtn('📞', () => _pokaziKontakt(context)),
                                       if (!isOtkazan) iconBtn('💰', _handlePayment),
                                       // Otkazivanje nije dozvoljeno nakon što je putnik već pokupljen —

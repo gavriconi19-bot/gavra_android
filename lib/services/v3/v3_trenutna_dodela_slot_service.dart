@@ -211,7 +211,7 @@ class V3TrenutnaDodelaSlotService {
 
     if (existing != null) {
       final id = existing['id']?.toString();
-      // Multi-driver: ne prepisuj vozac_v3_auth_id na deljenom slotu.
+      // Ne prepisuj vozac_v3_auth_id na postojećem slotu — vlasnik ostaje.
       if ((updatedBy ?? '').trim().isNotEmpty && id != null && id.isNotEmpty) {
         await supabase.from(tableName).update({colUpdatedBy: updatedBy!.trim()}).eq('id', id);
       }
@@ -244,7 +244,7 @@ class V3TrenutnaDodelaSlotService {
     final vremeNorm = _normalizeVreme(vreme);
     if (datum.isEmpty || gradNorm.isEmpty || vremeNorm.isEmpty) return null;
 
-    // Slot je po (datum,grad,vreme) — vozacId se ne koristi (multi-driver shared).
+    // Slot je po (datum,grad,vreme) — vozacId se ne koristi (jedan vozač po slotu).
     final rows = await supabase
         .from(tableName)
         .select('id')
