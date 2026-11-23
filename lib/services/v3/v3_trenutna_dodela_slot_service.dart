@@ -167,25 +167,6 @@ class V3TrenutnaDodelaSlotService {
     await supabase.from(tableName).delete().eq(colDatum, datum).eq(colGrad, gradNorm).eq(colVreme, vremeNorm);
   }
 
-  static Future<void> deleteSlot({
-    required String datumIso,
-    required String grad,
-    required String vreme,
-    String? vozacId,
-  }) async {
-    final datum = _normalizeDatumIso(datumIso);
-    final gradNorm = _normalizeGrad(grad);
-    final vremeNorm = _normalizeVreme(vreme);
-    if (datum.isEmpty || gradNorm.isEmpty || vremeNorm.isEmpty) return;
-
-    dynamic query = supabase.from(tableName).delete().eq(colDatum, datum).eq(colGrad, gradNorm).eq(colVreme, vremeNorm);
-    final vozacNorm = (vozacId ?? '').trim();
-    if (vozacNorm.isNotEmpty) {
-      query = query.eq(colVozacId, vozacNorm);
-    }
-    await query;
-  }
-
   static Future<String?> activateSlot({
     required String datumIso,
     required String grad,

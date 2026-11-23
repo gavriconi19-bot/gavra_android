@@ -31,13 +31,6 @@ const Map<String, Map<String, Map<String, String>>> _screensA = {
       'zh': '⚠️ 所选乘客/时段无运营记录',
     },
     'putnik': {'sr': 'putnik', 'en': 'passenger', 'ru': 'пассажир', 'de': 'Passagier', 'zh': '乘客'},
-    'individualnaDodelaUklonjena': {
-      'sr': '🗑️ Individualna dodela uklonjena',
-      'en': '🗑️ Individual assignment removed',
-      'ru': '🗑️ Индивидуальное назначение удалено',
-      'de': '🗑️ Individuelle Zuweisung entfernt',
-      'zh': '🗑️ 个人分配已移除',
-    },
     'nemaRegistrovanihVozaca': {
       'sr': 'Nema registrovanih vozača',
       'en': 'No registered drivers',
@@ -62,20 +55,6 @@ const Map<String, Map<String, Map<String, String>>> _screensA = {
     },
     'potvrdi': {'sr': 'Potvrdi', 'en': 'Confirm', 'ru': 'Подтвердить', 'de': 'Bestätigen', 'zh': '确认'},
     'putnikDefault': {'sr': 'Putnik', 'en': 'Passenger', 'ru': 'Пассажир', 'de': 'Passagier', 'zh': '乘客'},
-    'dodeliVozacaPutniku': {
-      'sr': 'Dodeli vozača putniku',
-      'en': 'Assign driver to passenger',
-      'ru': 'Назначить водителя пассажиру',
-      'de': 'Fahrer dem Passagier zuweisen',
-      'zh': '将司机分配给乘客',
-    },
-    'ukloniIndividualnuDodelu': {
-      'sr': 'Ukloni individualnu dodelu',
-      'en': 'Remove individual assignment',
-      'ru': 'Удалить индивидуальное назначение',
-      'de': 'Individuelle Zuweisung entfernen',
-      'zh': '移除个人分配',
-    },
     'rasporedVozaca': {
       'sr': 'Raspored vozača',
       'en': 'Driver schedule',
