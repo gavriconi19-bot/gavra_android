@@ -306,9 +306,13 @@ Deno.serve(async (req) => {
         if (t.adresa_override_id) {
           adresaId = t.adresa_override_id;
         } else if (grad === "BC") {
-          adresaId = t.koristi_sekundarnu ? auth.adresa_secondary_bc_id : auth.adresa_primary_bc_id;
+          // Isti fallback kao pickAdresaId u v3-compute-eta: sekundarna
+          // NULL -> primarna, inace putnik tiho ispada iz optimized_order.
+          adresaId = (t.koristi_sekundarnu ? auth.adresa_secondary_bc_id : auth.adresa_primary_bc_id)
+            ?? auth.adresa_primary_bc_id;
         } else if (grad === "VS") {
-          adresaId = t.koristi_sekundarnu ? auth.adresa_secondary_vs_id : auth.adresa_primary_vs_id;
+          adresaId = (t.koristi_sekundarnu ? auth.adresa_secondary_vs_id : auth.adresa_primary_vs_id)
+            ?? auth.adresa_primary_vs_id;
         }
 
         if (adresaId) {

@@ -137,8 +137,9 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
 - App-side + edge (isti commit) — tracking/ETA audit fix-ovi:
   `v3RunTrackingTick` odbija GPS fix stariji od `v3TrackingMaxPositionAge`
   (30s) — getLastKnownPosition fallback je ranije upisivao staru poziciju
-  kao svez; ETA compute throttle-ovan na `v3EtaComputeInterval` (10s, FG i
-  BG; lokacija se i dalje pise svakih 5s) — prepolovljen edge/OSRM load;
+  kao svez; ETA compute throttle je naknadno UKLONJEN (2026-11-23) —
+  `v3-compute-eta` (OSRM /trip reoptimizacija) ide na SVAKI tick (5s), FG i
+  BG; no_active_slot strikes podignut 6->12 da zadrzi ~60s toleranciju;
   standstill kazna putuje u session payload-u (`standstill_seconds`) pa se
   ne resetuje na FG<->BG handoff; edge: sve eta_results select/delete
   operacije rade po SVIM duplikat slotovima (`.in(slot_id, matchingSlotIds)`)

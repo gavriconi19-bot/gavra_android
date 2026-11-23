@@ -45,8 +45,8 @@ extension V3TrackingStartResultX on V3TrackingStartResult {
 /// GPS/ETA tracking vozača — jedan izvor istine za FG i BG.
 ///
 /// Start: V3VozacScreen auto-start (T-15). Zahteva GPS + **Always**.
-/// Tick (5s): live GPS → `v3_vozac_location`; `v3-compute-eta` throttle-ovan
-/// na [v3EtaComputeInterval].
+/// Tick (5s): live GPS → `v3_vozac_location`; `v3-compute-eta` na svaki tick
+/// (OSRM /trip reoptimizacija preostalih putnika sa sveže pozicije).
 /// Stop: svi putnici gotovi, hard-stop (polazak+[v3TrackingHardStop]),
 /// ili ručni stop.
 ///
@@ -77,7 +77,6 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   DateTime? _startedAt;
   DateTime? _polazakAt;
   DateTime? _lastTickAt;
-  DateTime? _lastEtaComputeAt;
   V3SelfReschedulingTicker? _fgTicker;
   StreamSubscription<Map<String, dynamic>?>? _bgEndedSub;
   StreamSubscription<Position>? _iosKeepAliveSub;
@@ -268,7 +267,6 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _startedAt = startedAt ?? V3BelgradeTime.now();
       _polazakAt = polazakAt;
       _lastTickAt = null;
-      _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
       v3SetStandstillSeconds((saved['standstill_seconds'] as num?)?.toInt() ?? 0);
 
@@ -363,7 +361,6 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _polazakAt = v3PolazakDateTime(datumIso: datum, vreme: v);
       _startedAt = V3BelgradeTime.now();
       _lastTickAt = null;
-      _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
       v3SetStandstillSeconds(0);
 
@@ -420,7 +417,6 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     _polazakAt = null;
     _startedAt = null;
     _lastTickAt = null;
-    _lastEtaComputeAt = null;
     _optimizedPutnikIds.clear();
     v3SetStandstillSeconds(0);
     _setRunning(false);
@@ -449,7 +445,6 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _polazakAt = null;
       _startedAt = null;
       _lastTickAt = null;
-      _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
       _noSlotStrikes = 0;
       v3SetStandstillSeconds(0);
@@ -468,13 +463,13 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     }
   }
 
-  /// Jednokratni GPS+ETA (UI resume / reoptimizacija) — bez throttle-a.
+  /// Jednokratni GPS+ETA (UI resume / reoptimizacija).
   Future<({Map<String, int> etaMap, List<String> order, String? reason})> fetchPositionAndComputeEta() async {
     if (_vozacId.isEmpty) {
       return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds), reason: null);
     }
     try {
-      return await _runTick(forceEta: true);
+      return await _runTick();
     } catch (e) {
       debugPrint('$_tag fetchPositionAndComputeEta error: $e');
       return (etaMap: <String, int>{}, order: List<String>.from(_optimizedPutnikIds), reason: null);
@@ -517,20 +512,13 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     debugPrint('$_tag iOS location keep-alive stop');
   }
 
-  /// [forceEta] preskače throttle (resume / reoptimizacija).
-  Future<({Map<String, int> etaMap, List<String> order, String? reason})> _runTick({bool forceEta = false}) async {
-    final lastEta = _lastEtaComputeAt;
-    final computeEta = forceEta ||
-        lastEta == null ||
-        DateTime.now().difference(lastEta) >= v3EtaComputeInterval;
-    if (computeEta) _lastEtaComputeAt = DateTime.now();
+  Future<({Map<String, int> etaMap, List<String> order, String? reason})> _runTick() async {
     final result = await v3RunTrackingTick(
       client: Supabase.instance.client,
       vozacId: _vozacId,
       grad: _grad,
       vreme: _vreme,
       datumIso: _datumIso,
-      computeEta: computeEta,
       logTag: _tag,
     );
     _lastTickAt = DateTime.now();
@@ -573,12 +561,12 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       // Slot obrisan u hodu (admin) → edge vraća no_active_slot a
       // allPassengersCompleted ne može da dokaze "gotovo". Pre polaska je
       // no_active_slot legitiman (auto-prepare kasni), pa strikes brojimo
-      // tek od polazka; posle ~60s konzistentnog odgovora gasimo (6 strikes
-      // po ETA tick-u — compute-eta je throttle-ovan na v3EtaComputeInterval).
+      // tek od polazka; posle ~60s konzistentnog odgovora gasimo (12 strikes
+      // po tick-u — compute-eta ide na svaki tick).
       final postDeparture = _polazakAt == null || !V3BelgradeTime.now().isBefore(_polazakAt!);
       if (result.reason == 'no_active_slot' && postDeparture) {
         _noSlotStrikes++;
-        if (_noSlotStrikes >= 6) {
+        if (_noSlotStrikes >= 12) {
           debugPrint('$_tag stop reason=no_active_slot strikes=$_noSlotStrikes');
           await stop();
           return;

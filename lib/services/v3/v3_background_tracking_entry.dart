@@ -25,7 +25,6 @@ Future<void> onStart(ServiceInstance service) async {
   String? vreme;
   DateTime? startedAt;
   DateTime? polazakAt;
-  DateTime? lastEtaComputeAt;
   int noSlotStrikes = 0;
   int lastPersistedStandstill = -1;
   bool tickInFlight = false;
@@ -80,7 +79,6 @@ Future<void> onStart(ServiceInstance service) async {
     vreme = null;
     startedAt = null;
     polazakAt = null;
-    lastEtaComputeAt = null;
     noSlotStrikes = 0;
     prefsCheckCounter = 0;
     v3SetStandstillSeconds(0);
@@ -148,26 +146,23 @@ Future<void> onStart(ServiceInstance service) async {
         return;
       }
 
-      // Isti ETA throttle kao FG: lokacija svaki tick, compute-eta na interval.
-      final computeEta = lastEtaComputeAt == null ||
-          DateTime.now().difference(lastEtaComputeAt!) >= v3EtaComputeInterval;
-      if (computeEta) lastEtaComputeAt = DateTime.now();
+      // Kao FG: compute-eta (OSRM reoptimizacija) na svaki tick.
       final result = await v3RunTrackingTick(
         client: client!,
         vozacId: vozacId!,
         grad: grad!,
         vreme: vreme!,
         datumIso: datumIso!,
-        computeEta: computeEta,
         logTag: '[BG_TRACKING]',
       );
 
       // Isti guard kao FG: slot obrisan u hodu → no_active_slot zauvek.
-      // Strikes se broje tek od polazka (pre toga auto-prepare može kasniti).
+      // Strikes se broje tek od polazka (pre toga auto-prepare može kasniti);
+      // 12 strikes ≈ ~60s konzistentnog odgovora (compute-eta na svaki tick).
       final postDeparture = polazakAt == null || !V3BelgradeTime.now().isBefore(polazakAt!);
       if (result.reason == 'no_active_slot' && postDeparture) {
         noSlotStrikes++;
-        if (noSlotStrikes >= 6) {
+        if (noSlotStrikes >= 12) {
           finishAndStop('no_active_slot');
           return;
         }
@@ -208,7 +203,6 @@ Future<void> onStart(ServiceInstance service) async {
     vreme = v;
     noSlotStrikes = 0;
     prefsCheckCounter = 0;
-    lastEtaComputeAt = null;
     // Standstill kazna iz FG sesije — BG nastavlja akumulaciju, ne resetuje.
     v3SetStandstillSeconds((m['standstill_seconds'] as num?)?.toInt() ?? 0);
     startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();

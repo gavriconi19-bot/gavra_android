@@ -15,11 +15,6 @@ const Duration v3AutoStartLeadTime = Duration(minutes: 15);
 
 const Duration v3TrackingTickInterval = Duration(seconds: 5);
 
-/// `v3-compute-eta` se poziva najviše ovako često — lokacija se i dalje
-/// upisuje svaki tick (5s), ali OSRM/edge trošak se smanjuje. Putnik ionako
-/// odbrojava ETA lokalno između dva računanja.
-const Duration v3EtaComputeInterval = Duration(seconds: 10);
-
 /// Maksimalna starost GPS fix-a koji sme u `v3_vozac_location` i ETA payload.
 /// `getLastKnownPosition` fallback bez ovoga upisuje staru poziciju kao svežu
 /// (updated_at=now) — otrovan admin prikaz i ETA.
@@ -278,8 +273,9 @@ void v3SetStandstillSeconds(int seconds) {
 /// Jedan tick: live GPS fix + upsert `v3_vozac_location` + `v3-compute-eta`.
 ///
 /// Trenutna GPS lokacija ide u tabelu i u payload edge funkcije (payload je
-/// preferiran izvor da se izbegne race/clock na updated_at). `computeEta`
-/// throttle-uje edge/OSRM deo — lokacija se upisuje na svaki tick bez obzira.
+/// preferiran izvor da se izbegne race/clock na updated_at). Edge
+/// `v3-compute-eta` se poziva na SVAKI tick — OSRM /trip reoptimizuje
+/// preostale putnike sa sveže pozicije vozača.
 /// Koriste ga i foreground servis i background isolate.
 Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTrackingTick({
   required SupabaseClient client,
@@ -287,7 +283,6 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
   required String grad,
   required String vreme,
   required String datumIso,
-  bool computeEta = true,
   String logTag = '[v3RunTrackingTick]',
 }) async {
   Position position;
@@ -365,12 +360,6 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     speedKmh: position.speed >= 0 ? position.speed * 3.6 : null,
     logTag: logTag,
   );
-
-  // ETA throttle: edge invoke ide samo kad pozivalac prosledi computeEta
-  // (servis drži interval). Lokacija je gore već upisana — ovaj tick je gotov.
-  if (!computeEta) {
-    return (etaMap: <String, int>{}, order: <String>[], reason: 'eta_throttled');
-  }
 
   // lat/lng u payload-u: edge preferira ovo nad čitanjem tabele (isti tick).
   final requestBody = <String, dynamic>{
