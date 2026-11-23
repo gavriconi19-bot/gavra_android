@@ -12,12 +12,19 @@ import '../../utils/v3_belgrade_time.dart';
 ///
 /// Slot (datum,grad,vreme) ima jednog vlasnika; ne prepisuje se
 /// `vozac_v3_auth_id` ako već postoji (jedan vozač po slotu).
+///
+/// `installationId`/`hardwareId`/`deviceToken`: device-identity dokaz za
+/// RPC (server proverava protiv vozačevih v3_auth slotova — bez njih RPC
+/// odbija sa `unauthorized`).
 Future<void> activateSlotWithRetry({
   SupabaseClient? client,
   required String vozacId,
   required String datumIso,
   required String grad,
   required String vreme,
+  String? installationId,
+  String? hardwareId,
+  String? deviceToken,
   String logTag = '[SlotActivation]',
   void Function(String message)? log,
   Future<Map<String, dynamic>?> Function()? findExistingSlot,
@@ -91,6 +98,9 @@ Future<void> activateSlotWithRetry({
         'p_datum': datumIso,
         'p_grad': grad,
         'p_vreme': vreme,
+        'p_device_token': (deviceToken ?? '').trim(),
+        'p_hardware_id': (hardwareId ?? '').trim(),
+        'p_installation_id': (installationId ?? '').trim(),
       },
     );
   }

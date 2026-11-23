@@ -338,17 +338,28 @@ async function sendHms(
       throw new Error('HMS app ID missing');
     }
 
+    // NAPOMENA: `dataOnly` se svesno NE primenjuje na HMS — app nema
+    // HmsMessageService (push kit se koristi samo za token + sistemske
+    // notifikacije), pa bi data-message bez notification bloka bio
+    // tiho odbačen. Sistemski banner je jedini pouzdani put isporuke.
     const messageData: Record<string, string> = { ...data };
     if (title) messageData.title = title;
     if (body) messageData.body = body;
 
     // HMS v1 API: token je array, collapse_key je integer (-1..100), ne string.
-    // Hash zahtev_id-ja u int opseg da collapse bude po zahtevu (paritet sa FCM).
+    // Collapse po konkretnom entitetu (zahtev/entity), pa po tipu poruke —
+    // ne 'default' za sve: dok je uredjaj offline samo poslednja poruka po
+    // kljucu prezivljava, pa bi npr. weather alert pregazio driver_started.
+    // Paritet sa FCM granom (isti collapseKey izvor).
+    const collapseKey =
+      String(data.zahtev_id ?? '').trim() ||
+      String(data.entity_id ?? '').trim() ||
+      String(data.type ?? '').trim() ||
+      'default';
     let collapseHash = 1;
-    const zahtevId = String(data.zahtev_id ?? '').trim();
-    if (zahtevId) {
-      for (let i = 0; i < zahtevId.length; i++) {
-        collapseHash = ((collapseHash * 31 + zahtevId.charCodeAt(i)) % 100 + 100) % 100;
+    if (collapseKey !== 'default') {
+      for (let i = 0; i < collapseKey.length; i++) {
+        collapseHash = ((collapseHash * 31 + collapseKey.charCodeAt(i)) % 100 + 100) % 100;
       }
     }
 
@@ -445,14 +456,22 @@ async function sendFcm(
       apnsHeaders['apns-collapse-id'] = zahtevId.slice(0, 64);
     }
 
+    // Collapse po konkretnom entitetu, pa po tipu — ne 'default' za sve:
+    // offline uredjaj zadrzava samo poslednju poruku po collapse kljucu, pa
+    // bi razliciti tipovi push-a (weather, driver_started, otkazano) jedan
+    // drugom gutali isporuku dok uredjaj nije online. Paritet sa HMS granom.
+    const collapseKey =
+      zahtevId ||
+      String(data.entity_id ?? '').trim() ||
+      String(data.type ?? '').trim() ||
+      'default';
+
     const message: Record<string, unknown> = {
       token,
       data: messageData,
       android: {
-        // Paritet sa HMS granom: collapse po zahtevu + 1h TTL da se ne isporuče
-        // zastarele alternative nakon dužeg offline perioda. `android.data` se ne
-        // šalje — top-level `data` važi i za Android (override je bio identičan).
-        collapse_key: zahtevId || 'default',
+        // `android.data` se ne šalje — top-level `data` važi i za Android.
+        collapse_key: collapseKey,
         priority: 'high',
         ttl: '3600s',
       },

@@ -514,10 +514,13 @@ Future<bool> _v3TerminHasActivePassengers({
   try {
     // `status` ne postoji na operativna_nedelja — select sa njom pada (400) i
     // pogrešno "dokazuje" da putnika nema. Aktivnost = nije pokupljen/otkazan.
+    // Server-side datum filter: bez njega upit vuče celu nedelju za grad i
+    // PostgREST max_rows=1000 može tiho odseći redove baš ovog termina.
     final rows = await client
         .from('v3_operativna_nedelja')
         .select('id, datum, polazak_at, pokupljen_at, otkazano_at')
-        .eq('grad', grad);
+        .eq('grad', grad)
+        .eq('datum', datumIso);
 
     for (final raw in (rows as List<dynamic>? ?? const [])) {
       if (raw is! Map) continue;

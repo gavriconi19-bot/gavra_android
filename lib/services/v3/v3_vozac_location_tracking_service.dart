@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../utils/v3_belgrade_time.dart';
+import 'v3_device_identity_service.dart';
 import 'v3_slot_activation.dart';
 import 'v3_tracking_config.dart';
 
@@ -106,6 +107,14 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   /// Ključ poslednje stop-ovane sesije (`datum|grad|vreme`) i kada je stopovana.
   String get lastStoppedSessionKey => _lastStoppedSessionKey;
   DateTime? get lastStoppedAt => _lastStoppedAt;
+
+  /// Device-identity dokaz za `v3_notify_passengers_driver_started` RPC.
+  /// Kesirano — vrednosti su stabilne za trajanje sesije.
+  ({String installationId, String? hardwareId})? _deviceIds;
+
+  Future<({String installationId, String? hardwareId})> _resolveDeviceIds() async {
+    return _deviceIds ??= await V3DeviceIdentityService.getDeviceIds();
+  }
 
   Stream<({Map<String, int> etaMap, List<String> order, String? reason})> get onEtaTick =>
       _etaTickController.stream;
@@ -262,23 +271,31 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       _lastEtaComputeAt = null;
       _optimizedPutnikIds.clear();
       v3SetStandstillSeconds((saved['standstill_seconds'] as num?)?.toInt() ?? 0);
-      _setRunning(true);
 
       debugPrint('$_tag restore OK $g $v bgRunning=$bgRunning fg=$_isAppInForeground');
       // Jednom po T-15..hard-stop prozoru — RPC je no-op ako je već poslato.
+      // Pre _setRunning: ako ovde padne (Supabase nije spreman), sesija ostaje
+      // u prefs i sledeći resume ponovo pokušava restore.
+      final ids = await _resolveDeviceIds();
       await activateSlotWithRetry(
         client: Supabase.instance.client,
         vozacId: id,
         datumIso: datum,
         grad: g,
         vreme: v,
+        installationId: ids.installationId,
+        hardwareId: ids.hardwareId,
         logTag: _tag,
         log: debugPrint,
       );
+      _setRunning(true);
       await _syncEngines(immediateTick: true);
       return true;
     } catch (e) {
       debugPrint('$_tag restore greška: $e');
+      // Ne diraj prefs sesiju — sledeći resume ponovo pokušava restore.
+      // Bez reset-a bi _isRunning/polja mogli ostati u pola-postavljenom stanju.
+      _clearLocalSessionState();
       return false;
     } finally {
       _restoreInProgress = false;
@@ -314,12 +331,15 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         return V3TrackingStartResult.failed;
       }
       // Garantuj push jednom po prozoru ako prvi put nije prošao.
+      final sameIds = await _resolveDeviceIds();
       await activateSlotWithRetry(
         client: Supabase.instance.client,
         vozacId: id,
         datumIso: datum,
         grad: g,
         vreme: v,
+        installationId: sameIds.installationId,
+        hardwareId: sameIds.hardwareId,
         logTag: _tag,
         log: debugPrint,
       );
@@ -361,12 +381,15 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       }
 
       // Slot aktivacija SAMO ovde (main) — BG ne radi activate.
+      final ids = await _resolveDeviceIds();
       await activateSlotWithRetry(
         client: Supabase.instance.client,
         vozacId: id,
         datumIso: datum,
         grad: g,
         vreme: v,
+        installationId: ids.installationId,
+        hardwareId: ids.hardwareId,
         logTag: _tag,
         log: debugPrint,
       );
@@ -387,7 +410,9 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _resetLocalSessionFields() async {
+  /// Resetuje samo lokalno stanje (bez prefs/BG) — za prekidane restore/start
+  /// putanje gde sesija treba da ostane u prefs za sledeći pokušaj.
+  void _clearLocalSessionState() {
     _vozacId = '';
     _datumIso = '';
     _grad = '';
@@ -399,6 +424,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     _optimizedPutnikIds.clear();
     v3SetStandstillSeconds(0);
     _setRunning(false);
+  }
+
+  Future<void> _resetLocalSessionFields() async {
+    _clearLocalSessionState();
     await v3ClearBgTrackingSession();
     await _stopBg();
   }

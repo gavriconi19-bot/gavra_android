@@ -28,6 +28,8 @@ Future<void> onStart(ServiceInstance service) async {
   DateTime? lastEtaComputeAt;
   int noSlotStrikes = 0;
   int lastPersistedStandstill = -1;
+  bool tickInFlight = false;
+  int prefsCheckCounter = 0;
 
   /// Upisuje akumuliranu standstill kaznu u session prefs — main isolate je
   /// usvaja na BG→FG prelazu (vidi _pauseBgTicks), bez staleness-a.
@@ -80,6 +82,7 @@ Future<void> onStart(ServiceInstance service) async {
     polazakAt = null;
     lastEtaComputeAt = null;
     noSlotStrikes = 0;
+    prefsCheckCounter = 0;
     v3SetStandstillSeconds(0);
   }
 
@@ -104,18 +107,36 @@ Future<void> onStart(ServiceInstance service) async {
 
   Future<void> doTick() async {
     if (vozacId == null || datumIso == null || grad == null || vreme == null) return;
-
-    if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
-      finishAndStop('timeout polazak=$polazakAt');
-      return;
-    }
-
-    await ensureSupabase();
-    if (client == null) return;
+    // Ticker zakazuje sledeci tick i kad prethodni timeout-uje (ne otkazuje ga)
+    // — bez ovog guard-a bi 90s+ zaglavljen tick pravio paralelne upise.
+    if (tickInFlight) return;
+    tickInFlight = true;
 
     try {
-      // allDone pre tick-a (kao FG): jeftinije, bez suvišnog compute-eta.
-      final allDone = await v3AllPassengersCompleted(
+      // Pause flag zivi u prefs; servicePipe ('pauseTicks') moze dropovati
+      // event pa BG i FG ticker rade paralelno — self-heal re-check ~svakih
+      // 30s (6 tickova) dokazuje flag i gasi ticker.
+      if (++prefsCheckCounter >= 6) {
+        prefsCheckCounter = 0;
+        final saved = await v3LoadBgTrackingSession();
+        if (saved?['ticks_paused'] == true) {
+          debugPrint('[BG_TRACKING] ticks_paused u prefs — pauseTicks (self-heal)');
+          pauseTicks();
+          return;
+        }
+      }
+
+      if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
+        finishAndStop('timeout polazak=$polazakAt');
+        return;
+      }
+
+      await ensureSupabase();
+      if (client == null) return;
+
+      try {
+        // allDone pre tick-a (kao FG): jeftinije, bez suvišnog compute-eta.
+        final allDone = await v3AllPassengersCompleted(
         client: client!,
         vozacId: vozacId!,
         datumIso: datumIso!,
@@ -153,16 +174,19 @@ Future<void> onStart(ServiceInstance service) async {
       } else {
         noSlotStrikes = 0;
       }
-    } catch (e) {
-      debugPrint('[BG_TRACKING] tick greška: $e');
-    }
+      } catch (e) {
+        debugPrint('[BG_TRACKING] tick greška: $e');
+      }
 
-    // Persist samo kad se kazna promenila (stajanje → svaki tick ~5s,
-    // mala prefs vrednost; u pokretu → jedan write na reset u 0).
-    final ss = v3GetStandstillSeconds();
-    if (ss != lastPersistedStandstill) {
-      lastPersistedStandstill = ss;
-      unawaited(persistStandstillSeconds());
+      // Persist samo kad se kazna promenila (stajanje → svaki tick ~5s,
+      // mala prefs vrednost; u pokretu → jedan write na reset u 0).
+      final ss = v3GetStandstillSeconds();
+      if (ss != lastPersistedStandstill) {
+        lastPersistedStandstill = ss;
+        unawaited(persistStandstillSeconds());
+      }
+    } finally {
+      tickInFlight = false;
     }
   }
 
@@ -183,6 +207,7 @@ Future<void> onStart(ServiceInstance service) async {
     grad = g;
     vreme = v;
     noSlotStrikes = 0;
+    prefsCheckCounter = 0;
     lastEtaComputeAt = null;
     // Standstill kazna iz FG sesije — BG nastavlja akumulaciju, ne resetuje.
     v3SetStandstillSeconds((m['standstill_seconds'] as num?)?.toInt() ?? 0);
@@ -303,6 +328,10 @@ Future<bool> onIosBackground(ServiceInstance service) async {
       client = Supabase.instance.client;
     }
 
+    // Standstill kazna iz sesije — bez ovoga bi BG-fetch tick slao 0 i
+    // gubio akumuliranu kaznu iz FG/FGS isolate-a.
+    v3SetStandstillSeconds((saved['standstill_seconds'] as num?)?.toInt() ?? 0);
+
     await v3RunTrackingTick(
       client: client,
       vozacId: id,
@@ -311,6 +340,12 @@ Future<bool> onIosBackground(ServiceInstance service) async {
       datumIso: datum,
       logTag: '[BG_TRACKING_IOS]',
     ).timeout(const Duration(seconds: 25));
+
+    // Persist nazad — kazna se nastavlja, ne resetuje na handoff-u.
+    try {
+      saved['standstill_seconds'] = v3GetStandstillSeconds();
+      await v3SaveBgTrackingSession(saved);
+    } catch (_) {}
 
     final allDone = await v3AllPassengersCompleted(
       client: client,

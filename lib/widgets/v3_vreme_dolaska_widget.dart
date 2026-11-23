@@ -36,7 +36,8 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
     'v3_auth',
     'v3_operativna_nedelja',
     'v3_trenutna_dodela_slot',
-    'v3_trenutna_dodela'
+    'v3_trenutna_dodela',
+    'v3_vozac_location'
   ]);
 
   String get putnikId => widget.putnikId;
@@ -57,6 +58,21 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
 
   static const String _colVozacId = 'vozac_id';
   static const String _colEtaSeconds = 'eta_seconds';
+
+  /// Vozačeva `v3_vozac_location.updated_at` mora biti ovako sveža da se ETA
+  /// smatra live — tick piše svakih 5s pa ~2min pokriva i seriju propuštenih
+  /// tickova. Bez ovoga bi poslednja ETA red (retention 55min) prikazivala
+  /// "za 0 min" do 55 min nakon što vozačev tracking nestane (kill/battery).
+  static const Duration _driverLocationMaxAge = Duration(seconds: 120);
+
+  bool _isDriverLocationFresh(String? vozacId, DateTime now) {
+    if (vozacId == null || vozacId.isEmpty) return false;
+    final loc = V3MasterRealtimeManager.instance.vozacLocationCache[vozacId];
+    if (loc == null) return false;
+    final updatedAt = _parseRowTimestamp(loc['updated_at']);
+    if (updatedAt == null) return false;
+    return now.difference(updatedAt).inSeconds.abs() <= _driverLocationMaxAge.inSeconds;
+  }
 
   // Prevodi za ETA widget (SR/EN/RU/DE).
   static final Map<String, Map<String, String>> _t = AppTranslations.ns('vremeDolaskaWidget');
@@ -338,7 +354,10 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
               assignedVozacId.isNotEmpty &&
               etaVozacId.isNotEmpty &&
               assignedVozacId != etaVozacId;
-          final hasActiveEta = effectiveEta != null && inTrackingWindow && !vozacMismatch;
+          // ETA je live samo dok vozač i dalje upisuje lokaciju — bez ovoga
+          // zastareli red pokazuje "za 0 min" do 55min posle prestanka trackinga.
+          final driverLive = _isDriverLocationFresh(etaVozacId ?? assignedVozacId, now);
+          final hasActiveEta = effectiveEta != null && inTrackingWindow && !vozacMismatch && driverLive;
           final minutes = hasActiveEta ? _buildEtaMinutes(effectiveEta < 0 ? 0 : effectiveEta) : null;
           final nextRideLabel =
               nextRide == null ? _tr('nemaZakazaneVoznje') : _formatNextRide(nextRide.departure, nextRide.grad);

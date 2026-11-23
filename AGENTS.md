@@ -178,6 +178,36 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   V3StatusPolicy.sharedVozacIdForTermin/assignedVozacIdForPutnik zadrzani
   kao read-resolution helperi (sada uvek resolvuju na vlasnika slota).
   flutter analyze: 0 issues na svim dirnutim fajlovima.
+- `20261123000001_tracking_push_fixes.sql` = tracking/push audit fix-ovi:
+  `v3_notify_passengers_driver_started` dobija 3 nova parametra
+  (p_device_token/p_hardware_id/p_installation_id) + device-identity gate
+  isti OR-pattern kao fn_v3_alternativa_action (identity protiv VOZAC-evih
+  v3_auth slotova) — ranije je anon RPC bez identiteta mogao tudji termin da
+  claim-uje i posalje prerani "vozac je krenuo" push; stari 4-param potpis
+  je DROP-ovan (stare app verzije dobijaju ok=false/unauthorized — tracking
+  im radi, samo driver-started push ne izlazi dok se ne azuriraju).
+  `notify_push`: `(payload_data->>'data_only')::boolean` zamenjen sigurnim
+  `= 'true'` poredjenjem (cast je bacao exception za ne-boolean ulaz pa se
+  push tiho gubio kroz WHEN OTHERS). Primenjeno docker exec psql +
+  schema_migrations insert + NOTIFY pgrst 'reload schema'.
+- App-side (isti commit): activateSlotWithRetry prosledjuje
+  installationId/hardwareId (V3DeviceIdentityService.getDeviceIds,
+  kesirano po sesiji); tryRestoreFromSession _setRunning(true) TEK POSLE
+  activate (ranije ostajao "running" bez engine-a kad Supabase nije spreman
+  — catch sada radi _clearLocalSessionState, prefs sesija ostaje za retry
+  na sledecem resume-u); BG doTick tickInFlight guard (ticker timeout ne
+  otkazuje zaglavljen tick — bez guard-a paralelni upisi/compute-eta);
+  BG self-heal pause re-check — svaki 6. tick cita ticks_paused iz prefs
+  (servicePipe moze dropovati pauseTicks event); onIosBackground ucitava
+  standstill_seconds iz sesije i persist-uje nazad; _v3TerminHasActivePassengers
+  dobija server-side .eq('datum') (max_rows=1000 mogao tiho odseci termin);
+  V3VremeDolaskaWidget ETA live gate — prikazuje samo dok je
+  v3_vozac_location.updated_at < 120s (ranije "za 0 min" do 55min retention
+  posle prestanka trackinga); send-push-notification collapse_key po
+  zahtev_id/entity_id/type umesto 'default' (offline uredjaj — weather
+  alert je mogao pregaziti driver_started), HMS data_only komentar
+  (nema HmsMessageService — sistemski banner jedini put); obrisan mrtav
+  v3_driver_push_notification_service.dart. flutter analyze: 0 issues.
 
 ## Release (GitHub Actions)
 
