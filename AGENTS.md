@@ -310,6 +310,20 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   timestamp umesto bool — re-prompt na 24h dok je app optimizovan (ranije
   jednom po instalaciji pa je odbijanje bilo trajno). flutter analyze:
   0 issues.
+- App-side (isti commit, 2026-11-24 — zaglavljena FGS notifikacija):
+  "Praćenje lokacije je aktivno" je ostajalo i kad tracking ne radi:
+  FGS ticker je pauziran dok je app u FG (ticks_paused=true); ako se app
+  ubije u pauzi (swipe/OEM kill — pluginov WatchdogReceiver respawna FGS
+  za ~5s), niko vise ne skida pause flag → FGS + notifikacija stoje do
+  hard-stopa (do 3h) bez ijednog tick-a. Fix: `fg_alive_at` heartbeat —
+  _fgTick stampa session prefs ~30s; BG watchdog (maybeResumeTicks) na
+  ticks_paused=true + zastareo heartbeat (>150s) skida pauzu i nastavlja
+  tickove (vozac je i dalje u voznji; allDone/hard-stop normalno gase).
+  Dropovani 'stopService' invoke: doTick (svaki 6. tick) i watchdog sada
+  na `saved==null` (sesija obrisana u stop()) rade stopTracking+stopSelf
+  — granica zaglavljene notifikacije ≤60s umesto ≤3h. _stopBg poziva
+  invoke('stopService') bezuslovno — isRunning() (ActivityManager) moze
+  vracati false dok se native servis jos dize. flutter analyze: 0 issues.
 - Edge fix (2026-11-24, GPS tracking test): `v3-compute-eta` sanity check
   je odbijao sve sto nije `uloga='vozac'` ('not_a_driver') — Bojan i
   review nalozi su `uloga='admin'`/`tip='vozac'` i vaze kao vozaci na

@@ -120,7 +120,15 @@ Future<void> onStart(ServiceInstance service) async {
       if (++prefsCheckCounter >= 6) {
         prefsCheckCounter = 0;
         final saved = await v3LoadBgTrackingSession();
-        if (saved?['ticks_paused'] == true) {
+        if (saved == null) {
+          // Session obrisan (stop() u main-u) dok je 'stopService' invoke
+          // dropovao — bez ovoga FGS + notifikacija stoje do hard-stopa.
+          debugPrint('[BG_TRACKING] sesija obrisana — stopSelf (heal za dropovan stop)');
+          stopTracking();
+          service.stopSelf();
+          return;
+        }
+        if (saved['ticks_paused'] == true) {
           debugPrint('[BG_TRACKING] ticks_paused u prefs — pauseTicks (self-heal)');
           pauseTicks();
           return;
@@ -195,8 +203,28 @@ Future<void> onStart(ServiceInstance service) async {
     if (ticker != null || vozacId == null) return;
     try {
       final saved = await v3LoadBgTrackingSession();
-      if (saved == null) return;
-      if (saved['ticks_paused'] == true) return;
+      if (saved == null) {
+        // Isto kao doTick check: main je obrisao sesiju (stop) a 'stopService'
+        // invoke nije stigao — FGS + notifikacija ne smeju stajati.
+        debugPrint('[BG_TRACKING] sesija obrisana — stopSelf (heal za dropovan stop)');
+        stopTracking();
+        service.stopSelf();
+        return;
+      }
+      if (saved['ticks_paused'] == true) {
+        // FG pauza važi samo dok main živi — _fgTick stampa fg_alive_at
+        // (~30s). Zastareo heartbeat = app ugašena u pauzi (watchdog respawn
+        // posle kill-a, OEM kill bez detached event-a): nastavi tickove —
+        // vozač je i dalje u vožnji, a lažna "aktivno" notifikacija uz
+        // mrtav tracking je najgori ishod.
+        final fgAliveAt = V3BelgradeTime.parseTs(saved['fg_alive_at']?.toString());
+        final fgDead = fgAliveAt == null ||
+            DateTime.now().difference(fgAliveAt) > const Duration(seconds: 150);
+        if (!fgDead) return;
+        debugPrint('[BG_TRACKING] fg heartbeat zastareo — main mrtav, nastavljam tickove');
+        saved['ticks_paused'] = false;
+        await v3SaveBgTrackingSession(saved);
+      }
       debugPrint('[BG_TRACKING] self-heal: ticker mrtav a sesija aktivna — restartujem');
       ticker = V3SelfReschedulingTicker(interval: v3TrackingTickInterval, onTick: doTick)..start();
     } catch (e) {

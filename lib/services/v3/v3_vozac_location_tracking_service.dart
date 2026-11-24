@@ -153,6 +153,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         'ticks_paused': ticksPaused,
         // FG↔BG handoff: BG isolate nastavlja kaznu umesto da je resetuje.
         'standstill_seconds': v3GetStandstillSeconds(),
+        // FG heartbeat — BG watchdog iz zastarelog timestamp-a zaključuje da
+        // je main mrtav (app ugašena dok su BG tickovi pauzirani) i nastavlja
+        // tickove; inače ticks_paused ostaje true zauvek i notifikacija laže.
+        'fg_alive_at': DateTime.now().toUtc().toIso8601String(),
       };
 
   bool _isSameSession({
@@ -534,6 +538,24 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     return result;
   }
 
+  DateTime? _lastFgAliveStamp;
+
+  /// FG heartbeat u session prefs — BG watchdog iz njega zaključuje da je
+  /// main isolate mrtav (app ugašena u FG pauzi) i nastavlja tickove.
+  /// Throttle ~30s (watchdog jede na 60s; prag zastarelosti je 150s).
+  Future<void> _stampFgAlive() async {
+    final now = DateTime.now();
+    final last = _lastFgAliveStamp;
+    if (last != null && now.difference(last) < const Duration(seconds: 30)) return;
+    _lastFgAliveStamp = now;
+    try {
+      final saved = await v3LoadBgTrackingSession();
+      if (saved == null) return;
+      saved['fg_alive_at'] = now.toUtc().toIso8601String();
+      await v3SaveBgTrackingSession(saved);
+    } catch (_) {}
+  }
+
   Future<void> _fgTick() async {
     if (!_isRunning || _tickInFlight || _vozacId.isEmpty) return;
     if (v3TrackingTimedOut(startedAt: _startedAt, polazakAt: _polazakAt)) {
@@ -544,6 +566,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
 
     _tickInFlight = true;
     try {
+      unawaited(_stampFgAlive());
       final allDone = await v3AllPassengersCompleted(
         client: Supabase.instance.client,
         vozacId: _vozacId,
@@ -770,8 +793,11 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     if (Platform.isIOS) return;
     try {
       final service = FlutterBackgroundService();
+      // Invoke bezuslovno: isRunning() može vratiti false dok se native
+      // servis još diže (engine boot), a invoke je u tom slučaju no-op —
+      // onStart će ionako videti obrisanu sesiju i sam uraditi stopSelf.
+      service.invoke('stopService');
       if (await service.isRunning()) {
-        service.invoke('stopService');
         for (var i = 0; i < 15; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
           if (!await service.isRunning()) {
