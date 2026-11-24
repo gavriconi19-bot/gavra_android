@@ -295,7 +295,9 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     // Fallback na poslednju poznatu poziciju umesto da tick potpuno propadne
     // — inače optimized_order ostaje "zamrznut" i novi putnici trajno
     // dobijaju OsrmIdx=999 dok se ne desi sledeći uspešan tick.
-    final last = await Geolocator.getLastKnownPosition();
+    // Timeout i ovde: zaglavljen method-channel poziv bi držao tickInFlight
+    // zauvek (ticker timeout ne resetuje flag) — tracking bi se tiho smrzao.
+    final last = await Geolocator.getLastKnownPosition().timeout(const Duration(seconds: 5));
     if (last == null) rethrow;
     debugPrint('$logTag getCurrentPosition timeout — koristim getLastKnownPosition fallback');
     position = last;
@@ -351,6 +353,8 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
   }
 
   // Mora uspeti pre compute-eta — inače edge bi računao na staroj lokaciji.
+  // Timeout: half-open TCP (prelazak mreže u vožnji) bi bez njega držao
+  // tickInFlight zauvek — svi sledeći tick-ovi bi se tiho preskakali.
   await v3UpdateVozacLocation(
     client: client,
     vozacId: vozacId,
@@ -359,7 +363,7 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     // Geolocator: m/s; negativno = invalid.
     speedKmh: position.speed >= 0 ? position.speed * 3.6 : null,
     logTag: logTag,
-  );
+  ).timeout(const Duration(seconds: 15));
 
   // lat/lng u payload-u: edge preferira ovo nad čitanjem tabele (isti tick).
   final requestBody = <String, dynamic>{
@@ -412,6 +416,35 @@ Future<bool> v3AllPassengersCompleted({
     if (cached != null) return cached;
   } catch (_) {}
 
+  try {
+    // Timeout: zaglavljen REST poziv (half-open TCP pri prelasku mreže) bi bez
+    // njega držao tickInFlight zauvek — tracking bi se tiho smrzao. `false`
+    // = "ne dokazuje kraj" = tracking nastavlja (isti fail-safe kao catch).
+    return await _v3AllPassengersCompletedDb(
+      client: client,
+      vozacId: id,
+      datumIso: datumIso,
+      grad: grad,
+      vreme: vreme,
+    ).timeout(const Duration(seconds: 20), onTimeout: () {
+      debugPrint('[v3AllPassengersCompleted] DB timeout — ne dokazuje kraj');
+      return false;
+    });
+  } catch (e) {
+    debugPrint('[v3AllPassengersCompleted] greška: $e');
+    return false;
+  }
+}
+
+/// DB deo [v3AllPassengersCompleted] — poziva se pod timeout-om.
+Future<bool> _v3AllPassengersCompletedDb({
+  required SupabaseClient client,
+  required String vozacId,
+  required String datumIso,
+  required String grad,
+  required String vreme,
+}) async {
+  final id = vozacId.trim();
   try {
     // Isto kao edge: datum+grad, pa match HH:mm (DB može biti 07:00 ili
     // 07:00:00). Svih fizičkih duplikata — dodele mogu biti na bilo kom.

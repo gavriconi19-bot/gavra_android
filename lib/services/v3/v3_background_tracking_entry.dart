@@ -81,6 +81,9 @@ Future<void> onStart(ServiceInstance service) async {
     polazakAt = null;
     noSlotStrikes = 0;
     prefsCheckCounter = 0;
+    // Ako je prethodni tick zaglavio (half-open TCP), flag bi preživeo
+    // stop/start i onemogućio svaki sledeći doTick zauvek.
+    tickInFlight = false;
     v3SetStandstillSeconds(0);
   }
 
@@ -203,6 +206,8 @@ Future<void> onStart(ServiceInstance service) async {
     vreme = v;
     noSlotStrikes = 0;
     prefsCheckCounter = 0;
+    // Novi ticker ne sme naslediti flag zaglavljenog tick-a.
+    tickInFlight = false;
     // Standstill kazna iz FG sesije — BG nastavlja akumulaciju, ne resetuje.
     v3SetStandstillSeconds((m['standstill_seconds'] as num?)?.toInt() ?? 0);
     startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();
