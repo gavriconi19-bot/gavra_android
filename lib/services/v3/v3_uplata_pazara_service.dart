@@ -117,7 +117,7 @@ class V3UplataPazaraService {
           'p_ukupno': ukupno,
           'p_zahtevan_unos': zahtevanUnos,
           'p_saberi_sa_postojecim': saberiSaPostojecimPredao,
-        });
+        }).timeout(const Duration(seconds: 15));
         if (data is Map && data['ok'] == true) {
           final row = data['uplata'];
           debugPrint('[V3UplataPazaraService] sacuvajDnevnuUplatu: uspešno (RPC)');
@@ -193,7 +193,7 @@ class V3UplataPazaraService {
           'p_vozac_id': id,
           'p_datum': V3BelgradeTime.toIsoDate(datum),
           'p_ukupno': ukupno,
-        });
+        }).timeout(const Duration(seconds: 15));
         if (data is Map && data['ok'] == true) {
           final row = data['uplata'];
           return (

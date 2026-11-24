@@ -2046,7 +2046,7 @@ class V3FinansijeService {
           'p_iznos': iznos,
           'p_mesec': mesec,
           'p_godina': godina,
-        });
+        }).timeout(const Duration(seconds: 15));
         if (data is Map && data['ok'] == true) {
           final fin = data['finansije'];
           if (fin is Map) {

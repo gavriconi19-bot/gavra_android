@@ -209,6 +209,46 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   alert je mogao pregaziti driver_started), HMS data_only komentar
   (nema HmsMessageService — sistemski banner jedini put); obrisan mrtav
   v3_driver_push_notification_service.dart. flutter analyze: 0 issues.
+- `20261124000000_gorivo_pregled_rpc.sql` = `fn_v3_gorivo_pregled` (8
+  timestamptz granica perioda -> jsonb sa svim agregatima): kartica
+  "potrosnja goriva po periodima" je po refresh-u zvala 6 RPC-ova kroz
+  Funnel (4× sum_potrosnja + 2× dnevni_prosek — RTT ~250-500ms + TLS
+  handshake po pozivu, baza trivijalna). Granice dolaze iz app-a
+  (V3BelgradeTime/V3DanHelper — bez dupliranja DST/nedelja logike u SQL);
+  proseci se povlace iz postojecih v3_gorivo_dnevni_prosek(_uplata).
+  GRANT EXECUTE anon+authenticated. Primenjeno docker exec psql +
+  schema_migrations insert + NOTIFY pgrst 'reload schema'.
+- App-side (isti commit): V3GorivoService.getPotrosnjaPregled je
+  RPC-first (fn_v3_gorivo_pregled) sa legacy 6-RPC fallback-om +
+  memoizacija po tableRevision('v3_gorivo') — istorija se menja samo
+  kroz trigger na v3_gorivo pa isti revision = isti podaci (in-flight
+  dedupe). _FuelConsumptionPeriodCard dobija initialData iz
+  potrosnjaPregledCached — bez spinnera pri refetch-u. flutter analyze:
+  0 issues.
+- App-side (2026-11-24): `_handlePickup` na V3PutnikCard je sada
+  optimisticki — pokupljen_at/pokupljen_by se odmah upisu u
+  operativnaNedeljaCache pa kartica reaguje trenutno (Funnel RTT
+  ~0.6-0.9s po pozivu, mereno curl-om; fn_v3_pokupi u bazi 20-50ms warm /
+  do ~600ms cold po pg_stat_statements). Mrezni deo (RPC -> legacy REST
+  fallback) ide u pozadini sa timeout-ima (15s / 45s) — ranije poziv nije
+  imao timeout pa je zaglavljen TCP drzao _globalProcessingLock i tapovi
+  na druge kartice su se tiho odbacivali. Lock se otpusta posle
+  optimistickog dela; pri totalnom neuspehu se vraca originalni red +
+  error snackbar. flutter analyze: 0 issues.
+- App-side (isti commit, 2026-11-24 — vozac/profil optimizacije):
+  `_handleOtkazivanje` (vozac otkazuje putnika) isto optimisticki
+  (otkazano_at odmah u kes, mrezni update u pozadini, revert pri gresci);
+  nedostajuci .timeout(15s) dodat na fn_v3_mesecna_naplata,
+  fn_v3_vozac_putnik_upsert, fn_v3_pazar_sacuvaj, fn_v3_pazar_sync_zahtev
+  i fn_v3_dodela_termina RPC pozive (isti "half-open TCP" rizik);
+  _odgovoriNaPonudu (alternativa/mesto_ponuda) paralelno dovlaci
+  getBestToken/getHardwareId/getInstallationId preko record .wait —
+  ranije serijski, getBestToken zna da pojede sekunde u 10-min prozoru
+  ponude; V3DeviceIdentityService.getDeviceIds isto paralelno; busy
+  indikatori (_pendingActionContexts na celiji rasporeda,
+  _pendingPonudaZahtevi na banneru ponude) sada stvarno re-renderuju
+  (safeSetState — ranije se flag menjao bez rebuild-a pa se spinner
+  nikad nije video). flutter analyze: 0 issues.
 
 ## Release (GitHub Actions)
 

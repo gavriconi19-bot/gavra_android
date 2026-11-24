@@ -31,7 +31,7 @@ class V3DodelaOrchestratorService {
         'p_vozac_id': vozacId,
         'p_vozilo_id': voziloId,
         'p_actor': updatedBy,
-      });
+      }).timeout(const Duration(seconds: 15));
       if (data is Map && data['ok'] == true) {
         final assigned = data['assigned'];
         return assigned is int ? assigned : (assigned as num?)?.toInt() ?? 0;
@@ -96,7 +96,7 @@ class V3DodelaOrchestratorService {
         'p_vozac_id': null,
         'p_vozilo_id': null,
         'p_actor': null,
-      });
+      }).timeout(const Duration(seconds: 15));
       if (data is Map && data['ok'] == true) {
         final cleared = data['cleared'];
         return cleared is int ? cleared : (cleared as num?)?.toInt() ?? 0;

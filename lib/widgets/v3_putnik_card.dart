@@ -168,11 +168,50 @@ class _V3PutnikCardState extends State<V3PutnikCard> {
     if (_globalProcessingLock || _isProcessing) return;
     _globalProcessingLock = true;
     V3StateUtils.safeSetState(this, () => _isProcessing = true);
+
+    final currentVozac = V3VozacService.currentVozac;
+    final operativnaId = widget.entry?.id;
+    Map<String, dynamic>? prePickupRow;
+
+    // Optimisticki kes update: kartica odmah prikazuje "pokupljeno" dok
+    // mrezni poziv ide u pozadini (Funnel RTT ~0.5-1s+, na losijoj vezi i
+    // vise — bez ovoga izgleda da kartica "stoji"). Tacnu vrednost kasnije
+    // uskladuje realtime UPDATE event; pri gresci vracamo stari red.
     try {
       V3HapticService.mediumImpact();
-      final currentVozac = V3VozacService.currentVozac;
       if (currentVozac == null) throw _tr('notLoggedIn');
-      final operativnaId = widget.entry?.id;
+      if (operativnaId != null && operativnaId.isNotEmpty) {
+        final existing =
+            V3MasterRealtimeManager.instance.operativnaNedeljaCache[operativnaId];
+        if (existing != null) {
+          prePickupRow = existing;
+          final optimistic = Map<String, dynamic>.from(existing)
+            ..['pokupljen_at'] = V3BelgradeTime.nowIsoUtc()
+            ..['pokupljen_by'] = currentVozac.id;
+          V3MasterRealtimeManager.instance.v3UpsertToCache(
+            'v3_operativna_nedelja',
+            optimistic,
+          );
+        }
+        await V3HapticService.putnikPokupljen();
+        if (mounted) {
+          V3AppSnackBar.success(context, _tr('rideRecorded'));
+          widget.onChanged?.call();
+        }
+      }
+    } catch (e) {
+      V3ErrorUtils.safeError(this, context, '${_tr('pickupRecordError')}: $e');
+      _globalProcessingLock = false;
+      V3StateUtils.safeSetState(this, () => _isProcessing = false);
+      return;
+    }
+    // Globalni lock se otpusta odmah — sledeci putnik se moze pokupljati dok
+    // je ovaj poziv jos na mrezi (server-side lock-ovi su po putnik+mesec).
+    _globalProcessingLock = false;
+
+    // Mrezni deo u pozadini. Timeout sprecava da half-open TCP (mrtav
+    // Funnel/server) drzi karticu zakljucanom do OS-level TCP timeouta.
+    try {
       // Brza putanja: fn_v3_pokupi radi pokupljenje + finansijsku evidenciju
       // u 1 pozivu (ranije 2-5 sekvencijalnih REST poziva). Legacy putanja
       // ispod ostaje kao fallback.
@@ -182,7 +221,7 @@ class _V3PutnikCardState extends State<V3PutnikCard> {
           final data = await supabase.rpc('fn_v3_pokupi', params: {
             'p_operativna_id': operativnaId,
             'p_actor': V3UuidUtils.normalizeUuid(currentVozac.id),
-          });
+          }).timeout(const Duration(seconds: 15));
           if (data is Map && data['ok'] == true) {
             final op = data['operativna'];
             if (op is Map) {
@@ -205,32 +244,36 @@ class _V3PutnikCardState extends State<V3PutnikCard> {
         }
       }
       if (!rpcDone) {
-        await V3ZahtevService.oznaciPokupljen(pokupljenBy: currentVozac.id, operativnaId: operativnaId);
-        final tipPutnika = widget.putnik.tipPutnika.trim().toLowerCase();
-        if (tipPutnika != 'vozac') {
-          await V3FinansijeService.evidentirajRealizacijuPriPokupljanju(
-            putnikId: widget.putnik.id,
-            tipPutnika: widget.putnik.tipPutnika,
-            datum: widget.entry?.datum ?? widget.zahtev?.datum ?? V3BelgradeTime.now(),
-            operativnaId: operativnaId,
-            evidentiraoBy: currentVozac.id,
-            pokupljenAt: V3BelgradeTime.nowIsoUtc(),
-            dodaoBy: widget.entry?.createdBy,
-            azuriraoBy: widget.entry?.updatedBy,
-            grad: widget.entry?.grad,
-            vreme: widget.entry?.polazakAt,
-          );
-        }
-      }
-      await V3HapticService.putnikPokupljen();
-      if (mounted) {
-        V3AppSnackBar.success(context, _tr('rideRecorded'));
-        widget.onChanged?.call();
+        await Future(() async {
+          await V3ZahtevService.oznaciPokupljen(pokupljenBy: currentVozac.id, operativnaId: operativnaId);
+          final tipPutnika = widget.putnik.tipPutnika.trim().toLowerCase();
+          if (tipPutnika != 'vozac') {
+            await V3FinansijeService.evidentirajRealizacijuPriPokupljanju(
+              putnikId: widget.putnik.id,
+              tipPutnika: widget.putnik.tipPutnika,
+              datum: widget.entry?.datum ?? widget.zahtev?.datum ?? V3BelgradeTime.now(),
+              operativnaId: operativnaId,
+              evidentiraoBy: currentVozac.id,
+              pokupljenAt: V3BelgradeTime.nowIsoUtc(),
+              dodaoBy: widget.entry?.createdBy,
+              azuriraoBy: widget.entry?.updatedBy,
+              grad: widget.entry?.grad,
+              vreme: widget.entry?.polazakAt,
+            );
+          }
+        }).timeout(const Duration(seconds: 45));
       }
     } catch (e) {
+      // Totalni neuspeh (RPC + legacy) — vrati optimisticki prikaz.
+      if (prePickupRow != null) {
+        V3MasterRealtimeManager.instance.v3UpsertToCache(
+          'v3_operativna_nedelja',
+          prePickupRow,
+        );
+        widget.onChanged?.call();
+      }
       V3ErrorUtils.safeError(this, context, '${_tr('pickupRecordError')}: $e');
     } finally {
-      _globalProcessingLock = false;
       V3StateUtils.safeSetState(this, () => _isProcessing = false);
     }
   }
@@ -419,11 +462,42 @@ class _V3PutnikCardState extends State<V3PutnikCard> {
           throw _tr('notLoggedIn');
         }
 
-        await V3ZahtevService.otkaziZahtev('',
-            otkazaoVozacId: currentVozac.id, operativnaId: operativnaId, putnikId: widget.putnik.id);
+        // Optimisticki otkaz — isti pattern kao pokupljenje: red se odmah
+        // oznaci otkazanim u kesu, mrezni update ide u pozadini; pri gresci
+        // se vraca original (realtime UPDATE ionako uskladuje stanje).
+        Map<String, dynamic>? preCancelRow;
+        final existing =
+            V3MasterRealtimeManager.instance.operativnaNedeljaCache[operativnaId];
+        if (existing != null) {
+          preCancelRow = existing;
+          final optimistic = Map<String, dynamic>.from(existing)
+            ..['otkazano_at'] = V3BelgradeTime.nowIsoUtc()
+            ..['otkazano_by'] = currentVozac.id
+            ..['updated_by'] = currentVozac.id;
+          V3MasterRealtimeManager.instance.v3UpsertToCache(
+            'v3_operativna_nedelja',
+            optimistic,
+          );
+        }
         if (mounted) {
           V3AppSnackBar.warning(context, _trf('canceledPassenger', {'NAME': widget.putnik.imePrezime}));
           widget.onChanged?.call();
+        }
+        // Lock se otpusta odmah — druge kartice ne cekaju ovu mreznu akciju.
+        _globalProcessingLock = false;
+
+        try {
+          await V3ZahtevService.otkaziZahtev('',
+              otkazaoVozacId: currentVozac.id, operativnaId: operativnaId, putnikId: widget.putnik.id);
+        } catch (e) {
+          if (preCancelRow != null) {
+            V3MasterRealtimeManager.instance.v3UpsertToCache(
+              'v3_operativna_nedelja',
+              preCancelRow,
+            );
+            widget.onChanged?.call();
+          }
+          rethrow;
         }
       }
     } catch (e) {

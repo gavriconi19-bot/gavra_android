@@ -331,7 +331,7 @@ class V3OperativnaNedeljaService {
         'p_actor': actor,
         'p_koristi_sekundarnu': koristiSekundarnu,
         'p_adresa_override_id': adresaIdOverride,
-      });
+      }).timeout(const Duration(seconds: 15));
       if (data is Map && data['ok'] == true) {
         final zahtev = data['zahtev'];
         if (zahtev is Map) {

@@ -54,10 +54,10 @@ class V3DeviceIdentityService {
     return null;
   }
 
-  /// Vraća oba identifikatora odjednom.
+  /// Vraća oba identifikatora odjednom (paralelno — secure storage +
+  /// platform channel su nezavisni pozivi).
   static Future<({String installationId, String? hardwareId})> getDeviceIds() async {
-    final installationId = await getStableDeviceId();
-    final hardwareId = await getHardwareId();
+    final (installationId, hardwareId) = await (getStableDeviceId(), getHardwareId()).wait;
     return (installationId: installationId, hardwareId: hardwareId);
   }
 

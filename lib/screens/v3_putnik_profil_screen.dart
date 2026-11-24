@@ -587,7 +587,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       }
     }
 
-    _pendingActionContexts.add(contextKey);
+    V3StateUtils.safeSetState(this, () => _pendingActionContexts.add(contextKey));
     try {
       if (validNovoVreme == null) {
         // Otkaži postojeći zahtev
@@ -616,7 +616,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     } catch (e) {
       V3ErrorUtils.asyncError(this, context, e);
     } finally {
-      _pendingActionContexts.remove(contextKey);
+      V3StateUtils.safeSetState(this, () => _pendingActionContexts.remove(contextKey));
     }
   }
 
@@ -1156,13 +1156,16 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   Future<void> _odgovoriNaPonudu(Map<String, dynamic> zahtev, {required String action}) async {
     final zahtevId = zahtev['id']?.toString() ?? '';
     if (zahtevId.isEmpty || _pendingPonudaZahtevi.contains(zahtevId)) return;
-    _pendingPonudaZahtevi.add(zahtevId);
+    V3StateUtils.safeSetState(this, () => _pendingPonudaZahtevi.add(zahtevId));
     try {
       // Dokaz identiteta uređaja — edge/RPC proverava da token ili device id
-      // odgovara vlasniku zahteva (v3_auth slotovi).
-      final tokenResult = await V3PushTokenProvider.getBestToken();
-      final hardwareId = await V3DeviceIdentityService.getHardwareId();
-      final installationId = await V3PushTokenProvider.getInstallationId();
+      // odgovara vlasniku zahteva (v3_auth slotovi). Paralelno — getBestToken
+      // može pojedini sekunde (FCM), a ponuda ima 10-min prozor.
+      final (tokenResult, hardwareId, installationId) = await (
+        V3PushTokenProvider.getBestToken(),
+        V3DeviceIdentityService.getHardwareId(),
+        V3PushTokenProvider.getInstallationId(),
+      ).wait;
       final deviceToken = tokenResult?.token.trim() ?? '';
       final hwId = hardwareId ?? '';
       final instId = installationId?.trim() ?? '';
@@ -1213,7 +1216,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     } catch (e) {
       V3ErrorUtils.asyncError(this, context, e);
     } finally {
-      _pendingPonudaZahtevi.remove(zahtevId);
+      V3StateUtils.safeSetState(this, () => _pendingPonudaZahtevi.remove(zahtevId));
     }
   }
 
@@ -2201,6 +2204,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                       child: _ZahtevCell(
                         info: bcInfo,
                         disabled: isPast,
+                        busy: _pendingActionContexts.contains('${_currentPutnikId()}|$dan|BC'),
                         onTap: () => _showTimePicker(context, dan, 'BC', bcInfo),
                       ),
                     ),
@@ -2210,6 +2214,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                       child: _ZahtevCell(
                         info: vsInfo,
                         disabled: isPast,
+                        busy: _pendingActionContexts.contains('${_currentPutnikId()}|$dan|VS'),
                         onTap: () => _showTimePicker(context, dan, 'VS', vsInfo),
                       ),
                     ),
@@ -2348,9 +2353,29 @@ class _ZahtevCell extends StatelessWidget {
   final _ZahtevInfo? info;
   final VoidCallback? onTap;
   final bool disabled;
-  const _ZahtevCell({this.info, this.onTap, this.disabled = false});
+
+  /// Akcija (sacuvaj/otkazi polazak) za ovaj kontekst je na mrezi — umesto
+  /// sadrzaja celije prikazujemo spinner da korisnik vidi da tap radi.
+  final bool busy;
+  const _ZahtevCell({this.info, this.onTap, this.disabled = false, this.busy = false});
+
+  static const Widget _busyIndicator = SizedBox(
+    height: 14,
+    width: 14,
+    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+  );
+
   @override
   Widget build(BuildContext context) {
+    if (busy) {
+      return V3ContainerUtils.styledContainer(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        backgroundColor: V3StyleHelper.whiteAlpha25,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: V3StyleHelper.whiteAlpha5),
+        child: const Center(child: _busyIndicator),
+      );
+    }
     if (info == null) {
       if (disabled) {
         // Prošli dan bez termina — samo crtica, bez "dodaj" poziva na akciju.
