@@ -54,6 +54,14 @@ String _trProfileDialog(String key) {
 
 class V3PutnikProfilScreen extends StatefulWidget {
   final Map<String, dynamic> putnikData;
+
+  /// Da li je instanca profil ekrana trenutno u navigation stack-u.
+  /// Sprečava da tap na uzastopne push notifikacije nagomila više instanci
+  /// istog ekrana — sve koriste iste V3StreamUtils ključeve
+  /// ('putnik_profil_cache'/'putnik_profil_fin'), pa bi se ekran ispod
+  /// novog tiho prestao osvežavati dok drži svoje timere.
+  static bool isOpen = false;
+
   const V3PutnikProfilScreen({super.key, required this.putnikData});
   @override
   State<V3PutnikProfilScreen> createState() => _V3PutnikProfilScreenState();
@@ -243,6 +251,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    V3PutnikProfilScreen.isOpen = true;
     _putnikData = Map<String, dynamic>.from(widget.putnikData);
     _refresh();
     _refreshWeather(forceRefresh: true);
@@ -282,6 +291,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
 
   @override
   void dispose() {
+    V3PutnikProfilScreen.isOpen = false;
     WidgetsBinding.instance.removeObserver(this);
     V3StreamUtils.cancelSubscription('putnik_profil_cache');
     V3StreamUtils.cancelSubscription('putnik_profil_fin');
@@ -1203,6 +1213,35 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
       final reason = data is Map ? (data['reason'] ?? '').toString() : '';
       if (!mounted) return;
       if (ok) {
+        // Optimistički upis u keš — banner nestaje odmah (~250ms debounce),
+        // autoritativni red ionako stiže realtime-om. Semantika preslikana
+        // sa fn_v3_alternativa_action na serveru.
+        final cachedRow = V3MasterRealtimeManager.instance.zahteviCache[zahtevId];
+        if (cachedRow != null) {
+          final mutated = Map<String, dynamic>.from(cachedRow);
+          final offerKind = (data['offer_kind'] ?? '').toString();
+          if (action == 'reject' && offerKind == 'mesto_oslobodjeno') {
+            mutated['mesto_ponuda'] = false;
+            mutated['mesto_ponuda_odbijena'] = true;
+            mutated['mesto_ponuda_at'] = null;
+          } else if (action == 'reject') {
+            mutated['status'] = 'odbijeno';
+            mutated['alternativa_pre_at'] = null;
+            mutated['alternativa_posle_at'] = null;
+            mutated['alternativa_offered_at'] = null;
+          } else {
+            mutated['status'] = 'odobreno';
+            final selectedTime = (data['selected_time'] ?? '').toString().trim();
+            if (selectedTime.isNotEmpty) mutated['polazak_at'] = selectedTime;
+            mutated['mesto_ponuda'] = false;
+            mutated['mesto_ponuda_at'] = null;
+            mutated['alternativa_pre_at'] = null;
+            mutated['alternativa_posle_at'] = null;
+            mutated['alternativa_offered_at'] = null;
+          }
+          mutated['updated_at'] = V3BelgradeTime.nowIsoUtc();
+          V3MasterRealtimeManager.instance.v3UpsertToCache('v3_zahtevi', mutated);
+        }
         if (action != 'reject') {
           V3AppSnackBar.success(context, V3PutnikProfilMessages.seatAccepted);
         } else {

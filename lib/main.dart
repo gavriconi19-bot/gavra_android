@@ -1401,21 +1401,40 @@ Future<Map<String, dynamic>> _executeAlternativaEdgeAction({
   final hardwareId = await V3DeviceIdentityService.getHardwareId();
   final installationId = await V3PushTokenProvider.getInstallationId();
 
-  final response = await supabase.functions.invoke(
-    'v3-alternativa-action',
-    body: {
-      'zahtev_id': safeZahtevId,
-      'action': safeActionId,
-      'device_token': tokenResult?.token.trim() ?? '',
-      'hardware_id': hardwareId ?? '',
-      'installation_id': installationId?.trim() ?? '',
-    },
-  );
+  // Brza putanja: fn_v3_alternativa_action RPC (~0.3s naspram 1-4s edge
+  // cold start-a — ponuda ima 10-min prozor). Edge invoke je fallback, isti
+  // pattern kao in-app odgovor u v3_putnik_profil_screen.
+  dynamic data;
+  try {
+    data = await supabase.rpc('fn_v3_alternativa_action', params: {
+      'p_zahtev_id': safeZahtevId,
+      'p_action': safeActionId,
+      'p_device_token': tokenResult?.token.trim() ?? '',
+      'p_hardware_id': hardwareId ?? '',
+      'p_installation_id': installationId?.trim() ?? '',
+    }).timeout(const Duration(seconds: 15));
+  } catch (e) {
+    debugPrint('[Alternativa] push akcija RPC fallback na edge: $e');
+    final response = await supabase.functions.invoke(
+      'v3-alternativa-action',
+      body: {
+        'zahtev_id': safeZahtevId,
+        'action': safeActionId,
+        'device_token': tokenResult?.token.trim() ?? '',
+        'hardware_id': hardwareId ?? '',
+        'installation_id': installationId?.trim() ?? '',
+      },
+    ).timeout(const Duration(seconds: 20));
 
-  final data = response.data;
-  if (response.status < 200 || response.status >= 300 || data is! Map) {
-    throw Exception(
-        'Edge alternativa action failed (status=${response.status}, data=$data)');
+    if (response.status < 200 || response.status >= 300) {
+      throw Exception(
+          'Edge alternativa action failed (status=${response.status}, data=${response.data})');
+    }
+    data = response.data;
+  }
+
+  if (data is! Map) {
+    throw Exception('Alternativa action vratio neocekivan odgovor: $data');
   }
 
   final map = Map<String, dynamic>.from(data);
@@ -1704,6 +1723,15 @@ Future<void> _openPutnikProfilFromNotification(String payload) async {
     if (putnikData == null) {
       debugPrint(
           '⚠️ [Push] Ne mogu da otvorim putnik profil (putnik nije pronađen).');
+      return;
+    }
+
+    // Profil ekran je vec otvoren — novi tap na notifikaciju ne sme da
+    // nagomila jos jednu instancu (istanciranje deli iste stream kljuceve
+    // pa bi se ekran ispod prestao osvežavati). Otvoreni ekran i tako
+    // prikazuje sveze ponude preko realtime-a.
+    if (V3PutnikProfilScreen.isOpen) {
+      debugPrint('[Push] Putnik profil vec otvoren — preskacem dupli push nav.');
       return;
     }
 

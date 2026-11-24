@@ -149,10 +149,12 @@ class V3ClosedAuthService {
     if (phone.isEmpty) return null;
 
     debugPrint('[findAuthIdByPhone] Calling RPC v3_auth_find_id_by_phone...');
+    // Timeout obavezan — bez njega half-open TCP (mrtav Funnel/server)
+    // drzi login ekran u _isLoading stanju beskonacno.
     final data = await _client.rpc(
       'v3_auth_find_id_by_phone',
       params: {'p_telefon': phone},
-    );
+    ).timeout(const Duration(seconds: 15));
     debugPrint('[findAuthIdByPhone] RPC response: $data');
 
     final authId = data?.toString().trim() ?? '';
@@ -230,7 +232,7 @@ class V3ClosedAuthService {
       final response = await _client.functions.invoke(
         'v3-pin-auth',
         body: {'action': 'verify', 'v3_auth_id': authId, 'pin': cleanPin},
-      );
+      ).timeout(const Duration(seconds: 15));
       final status = response.status;
       final data = response.data;
       if (status < 200 || status >= 300 || data is! Map) {
@@ -273,7 +275,7 @@ class V3ClosedAuthService {
           'old_pin': cleanOldPin,
           'pin': cleanNewPin,
         },
-      );
+      ).timeout(const Duration(seconds: 15));
       final status = response.status;
       final data = response.data;
       if (status < 200 || status >= 300 || data is! Map) {
@@ -377,7 +379,10 @@ class V3ClosedAuthService {
     );
     if (verifiedAuthId == null || verifiedAuthId.isEmpty) return null;
 
-    final putnik = await V3PutnikService.getActiveById(verifiedAuthId);
+    final putnik = await V3PutnikService.getActiveById(verifiedAuthId).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => null,
+    );
     if (putnik == null) return null;
 
     V3PutnikService.currentPutnik = putnik;
@@ -408,7 +413,10 @@ class V3ClosedAuthService {
     if (verifiedAuthId == null || verifiedAuthId.isEmpty) return;
 
     var vozac = V3VozacService.getVozacById(verifiedAuthId);
-    vozac ??= await V3VozacService.getVozacByIdDirect(verifiedAuthId);
+    vozac ??= await V3VozacService.getVozacByIdDirect(verifiedAuthId).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => null,
+    );
     if (vozac == null || vozac.id.trim() != verifiedAuthId) return;
 
     V3VozacService.currentVozac = vozac;

@@ -264,6 +264,25 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   pushScreen/pushReplacement/pushAndRemoveUntil + svi direktni
   MaterialPageRoute pozivi konvertovani (logout->welcome, statistika,
   finansije, putnici, deep-link u main.dart). flutter analyze: 0 issues.
+- App-side (isti commit, 2026-11-24 — putnik flow audit): popunjeni
+  preostali mrezni pozivi bez timeout-a u login/profil toku (isti
+  "half-open TCP drzi _isLoading zauvek" rizik): findAuthIdByPhone,
+  verifyPin, changePin (v3-pin-auth), getActiveById x3,
+  getVozacByIdDirect, addUpdatePutnik i writeLoginColumns u
+  v3_sms_login_screen, getActiveById/getVozacByIdDirect u
+  restore*FromManualSmsSession — svi na 15s (addUpdatePutnik 20s),
+  greska propusta se u postojece catch blokove. Push alternativa/mesto
+  akcija (_executeAlternativaEdgeAction u main.dart) sada RPC-first
+  (fn_v3_alternativa_action, 15s) + edge fallback (20s) — isti pattern
+  kao in-app odgovor; ranije samo edge bez timeout-a. _odgovoriNaPonudu:
+  optimisticki zahtevi-cache upis po ok:true (preslikana semantika
+  servera: accept->'odobreno'+polazak_at=selected_time+clear flags,
+  reject mesto->mesto_ponuda=false/odbijena, reject alternativa->
+  'odbijeno'+clear) — banner nestaje odmah umesto da ceka realtime.
+  V3PutnikProfilScreen.isOpen static + guard u
+  _openPutnikProfilFromNotification — tap na notifikaciju vise ne
+  slaze dupli profil ekran (instance dele iste V3StreamUtils kljuceve
+  pa bi se donja prestala osvežavati). flutter analyze: 0 issues.
 
 ## Release (GitHub Actions)
 

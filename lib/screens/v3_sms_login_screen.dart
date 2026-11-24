@@ -268,7 +268,10 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     }
 
     debugPrint('[V3SmsLogin] Calling getActiveById...');
-    final putnik = await V3PutnikService.getActiveById(authId);
+    // Timeout baca dalje u _sendSms catch — bez njega half-open TCP drzi
+    // _isLoading zauvek i korisnik ne moze ni da ponovi pokusaj.
+    final putnik = await V3PutnikService.getActiveById(authId)
+        .timeout(const Duration(seconds: 15));
     debugPrint(
         '[V3SmsLogin] getActiveById returned: ${putnik != null ? 'data' : 'null'}');
     if (!mounted) return;
@@ -277,7 +280,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
       // Putnik nije pronađen - možda je vozač
       debugPrint('[V3SmsLogin] putnik is null, checking vozac...');
       var vozac = V3VozacService.getVozacById(authId);
-      vozac ??= await V3VozacService.getVozacByIdDirect(authId);
+      vozac ??= await V3VozacService.getVozacByIdDirect(authId)
+          .timeout(const Duration(seconds: 15));
 
       if (vozac == null) {
         debugPrint('[V3SmsLogin] vozac also null - user not in system');
@@ -559,7 +563,7 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
         installationId: resolvedInstallationId,
         hardwareId: hardwareId,
         pinVerified: true,
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
       V3AppSnackBar.success(context, _tr('pinPotvrdjenUredjaj'));
@@ -654,7 +658,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
     });
 
     try {
-      final existing = await V3PutnikService.getActiveById(authId);
+      final existing = await V3PutnikService.getActiveById(authId)
+          .timeout(const Duration(seconds: 15));
       if (existing == null) {
         if (!mounted) return;
         V3AppSnackBar.error(context,
@@ -682,7 +687,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
         adresaVsIdOverride: targetVsId,
       );
 
-      await V3PutnikService.addUpdatePutnik(putnik);
+      await V3PutnikService.addUpdatePutnik(putnik)
+          .timeout(const Duration(seconds: 20));
 
       if (_requirePin) {
         final pinSaved = await V3ClosedAuthService.setPin(
@@ -697,7 +703,8 @@ class _V3SmsLoginScreenState extends State<V3SmsLoginScreen> {
         }
       }
 
-      final refreshed = await V3PutnikService.getActiveById(authId);
+      final refreshed = await V3PutnikService.getActiveById(authId)
+          .timeout(const Duration(seconds: 15));
       final missingAfterSave = _missingRequiredProfileFields(
         refreshed,
         includeIdentityFields: !_addressOnlyOnboarding,
