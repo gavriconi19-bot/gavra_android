@@ -26,6 +26,7 @@ import 'services/v3/v3_device_identity_service.dart';
 import 'services/v3/v3_push_token_provider.dart';
 import 'services/v3/v3_putnik_service.dart';
 import 'services/v3/v3_role_permission_service.dart';
+import 'services/v3/v3_tracking_config.dart';
 import 'services/v3/v3_vozac_location_tracking_service.dart';
 import 'services/v3/v3_vozac_service.dart';
 import 'services/v3_locale_manager.dart';
@@ -1064,6 +1065,14 @@ Future<void> _handleIncomingFcmMessage(
     return;
   }
 
+  if (type == 'tracking_stalled') {
+    // pg_cron watchdog: tickovi su zamrzli dok termin ima aktivnih putnika.
+    // High-priority push je probudio proces — pokušaj da oživiš FGS
+    // (onStart čita sesiju iz prefs i sam nastavlja tickove), lokalna
+    // notifikacija ispod ostaje kao fallback za tap.
+    unawaited(_reviveBackgroundTrackingService());
+  }
+
   if (title.isEmpty && body.isEmpty) return;
 
   if (source == 'foreground') {
@@ -1107,6 +1116,27 @@ Future<void> _handleIncomingFcmMessage(
   );
 }
 
+/// 'tracking_stalled' push (pg_cron watchdog): pokušaj oživljavanja FGS
+/// tickova bez tap-a — FGS onStart čita sesiju iz prefs i sam nastavlja
+/// tickove. Radi i u FCM BG isolate-u (plugin kanal je registrovan kroz
+/// DartPluginRegistrant; native config servisa je persisovan pa ovde ne
+/// treba configure()).
+Future<void> _reviveBackgroundTrackingService() async {
+  if (!Platform.isAndroid) return;
+  try {
+    final saved = await v3LoadBgTrackingSession();
+    if (saved == null || saved['ticks_paused'] == true) return;
+    final service = FlutterBackgroundService();
+    if (await service.isRunning()) {
+      service.invoke('startTracking', saved);
+      return;
+    }
+    await service.startService();
+  } catch (e) {
+    debugPrint('[FCM] tracking_stalled revive greška: $e');
+  }
+}
+
 /// Rutira na pravi ekran kada korisnik tapne FCM notifikaciju dok je app bila killed/background.
 ///
 /// Tipovi koji otvaraju V3PutnikProfilScreen:
@@ -1140,6 +1170,11 @@ Future<void> _handleFcmLaunch(String type, Map<String, String> data) async {
         await _openPutnikProfilFromNotification(navPayload);
         return;
       }
+
+    case 'tracking_stalled':
+      // Samo otvori app — initialize()/tryRestoreFromSession obnavlja
+      // tracking; vozač ostaje na svom default ekranu.
+      return;
 
     case 'zahtev_status':
     case 'v3_zahtev_odobren':

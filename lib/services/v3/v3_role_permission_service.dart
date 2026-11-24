@@ -239,7 +239,9 @@ class V3RolePermissionService {
     return t[key]?[code] ?? t[key]?['sr'] ?? key;
   }
 
-  /// SharedPreferences ključ — prompt se prikazuje samo jednom po instalaciji.
+  /// SharedPreferences ključ — timestamp poslednjeg prikaza prompta.
+  /// Re-prompt jednom dnevno dok je app i dalje optimizovan (za vozača je
+  /// exemption praktično uslov rada; OEM optimizacija ubija FGS/tickove).
   static const _batteryOptPromptShownKey = 'v3_battery_opt_prompt_shown';
 
   /// `isIgnoringBatteryOptimizations` je query API — ne zahteva manifest
@@ -273,8 +275,15 @@ class V3RolePermissionService {
       if (await _isIgnoringBatteryOptimizations()) return;
 
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool(_batteryOptPromptShownKey) ?? false) return;
-      await prefs.setBool(_batteryOptPromptShownKey, true);
+      final rawShown = prefs.get(_batteryOptPromptShownKey);
+      // Legacy: bool true (jednom po instalaciji) tretiraj kao "davno" →
+      // dozvoli ponovni prompt; int = timestamp poslednjeg prikaza.
+      final lastShownMs = rawShown is int ? rawShown : 0;
+      if (DateTime.now().millisecondsSinceEpoch - lastShownMs <
+          const Duration(hours: 24).inMilliseconds) {
+        return;
+      }
+      await prefs.setInt(_batteryOptPromptShownKey, DateTime.now().millisecondsSinceEpoch);
 
       if (!context.mounted) return;
       final accepted = await V3DialogHelper.showBasicDialog<bool>(

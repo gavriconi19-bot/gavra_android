@@ -670,6 +670,28 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     }
   }
 
+  /// startService() + verifikacija: na nekim OEM-ima FGS tiho propadne
+  /// (startForeground izuzetak u nativnom delu) pa isRunning ostane false —
+  /// tracking bi onda zamro bez ijedne greške. Retry jednom.
+  Future<bool> _startBgServiceVerified() async {
+    final service = FlutterBackgroundService();
+    await _ensureBgNotificationChannel();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await service.startService();
+      } catch (e) {
+        debugPrint('$_tag startService greška (attempt ${attempt + 1}): $e');
+      }
+      for (var i = 0; i < 10; i++) {
+        if (await service.isRunning()) return true;
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      debugPrint('$_tag BG service nije podignut (attempt ${attempt + 1})');
+    }
+    debugPrint('$_tag BG service se nije podigao nakon 2 pokušaja');
+    return false;
+  }
+
   Future<void> _startBg() async {
     if (_vozacId.isEmpty || !_isRunning || Platform.isIOS) return;
     try {
@@ -681,8 +703,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         // Na API 31+ startService iz pozadine baca izuzetak — servis se
         // podiže na sledećem resume-u; sesija je već u prefs.
         if (!_isAppInForeground && !await _canStartFgsFromBackground()) return;
-        await _ensureBgNotificationChannel();
-        await service.startService();
+        if (!await _startBgServiceVerified()) return;
       }
 
       // servicePipe može dropovati event pre listenera — prefs je fallback.
@@ -704,8 +725,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       final service = FlutterBackgroundService();
       if (await service.isRunning()) return;
       if (!_isAppInForeground && !await _canStartFgsFromBackground()) return;
-      await _ensureBgNotificationChannel();
-      await service.startService();
+      await _startBgServiceVerified();
     } catch (e) {
       debugPrint('$_tag BG ensure greška: $e');
     }

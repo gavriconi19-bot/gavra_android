@@ -188,6 +188,22 @@ Future<void> onStart(ServiceInstance service) async {
     }
   }
 
+  /// Self-heal suprotno od doTick pause-check-a: ako je ticker mrtav a prefs
+  /// kažu da tickovi treba da rade — restartuje ticker. Zove ga watchdog
+  /// (svakih 60s), pa najviše ~1min izgubljenih tickova.
+  Future<void> maybeResumeTicks() async {
+    if (ticker != null || vozacId == null) return;
+    try {
+      final saved = await v3LoadBgTrackingSession();
+      if (saved == null) return;
+      if (saved['ticks_paused'] == true) return;
+      debugPrint('[BG_TRACKING] self-heal: ticker mrtav a sesija aktivna — restartujem');
+      ticker = V3SelfReschedulingTicker(interval: v3TrackingTickInterval, onTick: doTick)..start();
+    } catch (e) {
+      debugPrint('[BG_TRACKING] self-heal greška: $e');
+    }
+  }
+
   void startTracking(Map<String, dynamic>? args) {
     final m = args ?? <String, dynamic>{};
     final id = (m['vozac_id']?.toString() ?? '').trim();
@@ -219,6 +235,14 @@ Future<void> onStart(ServiceInstance service) async {
     expiryWatchdog ??= Timer.periodic(const Duration(minutes: 1), (_) {
       if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
         finishAndStop('timeout_watchdog');
+        return;
+      }
+      // Self-heal: 'startTracking' invoke je servicePipe (best-effort) i može
+      // dropovati — ticker tada ostaje null dok prefs kažu da treba da radi
+      // (ticks_paused=false). Bez ovoga tracking ćutke zamre do sledećeg
+      // invoke-a ili resume-a. Radi i dok je ticker pauziran (watchdog živi).
+      if (ticker == null && vozacId != null) {
+        unawaited(maybeResumeTicks());
       }
     });
 

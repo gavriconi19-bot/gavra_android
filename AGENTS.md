@@ -283,6 +283,33 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   _openPutnikProfilFromNotification — tap na notifikaciju vise ne
   slaze dupli profil ekran (instance dele iste V3StreamUtils kljuceve
   pa bi se donja prestala osvežavati). flutter analyze: 0 issues.
+- `20261124000001_tracking_stall_watchdog.sql` = pg_cron job
+  `tracking_stall_watchdog` (*/2min) + kolona
+  `v3_trenutna_dodela_slot.tracking_stall_notified_at` (throttle 10min po
+  slotu, auto-NULL kad lokacija osvezi). `fn_v3_tracking_stall_watchdog`
+  (SECURITY DEFINER, EXECUTE revoke-an sa PUBLIC/anon/authenticated) salje
+  `tracking_stalled` push vozacu kad: slot ima tracking_started_at u
+  poslednja 4h + termin ima aktivnih putnika + njegova vozac_location
+  zastarela >3min. Lokacija je po VOZACU pa svez tick sa bilo kog slota
+  ucutkuje watchdog za sve njegove slotove. Razlog: potvrdjeno da tickovi
+  na zakljucanom telefonu umiru (14-22min tišine tokom vožnje) — FGS se
+  ne podigne ili ga ubije OEM/doze; server detektuje zamrzak i budi app
+  kroz high-priority push (vozac tapne ili se FGS sam oživi).
+- App-side (isti commit, 2026-11-24 — tracking stall self-heal):
+  `tracking_stalled` push u _handleIncomingFcmMessage (FCM BG + FG) poziva
+  _reviveBackgroundTrackingService — best-effort startService/invoke
+  'startTracking' iz prefs sesije (skip kad ticks_paused=true); tap na
+  notifikaciju samo otvara app (initialize/tryRestoreFromSession obnavlja).
+  BG isolate self-heal: expiryWatchdog (zivi i dok je ticker pauziran) na
+  svaki minut proverava prefs — ticker==null + sesija aktivna +
+  ticks_paused=false -> maybeResumeTicks restartuje ticker (pokriva
+  dropovani 'startTracking' invoke; ranije self-heal postojao samo u
+  suprotnom smeru). _startBgServiceVerified: posle startService() poll
+  isRunning do 2s + retry — na nekim OEM-ima FGS tiho propadne pa se
+  ranije nastavljalo kao da radi. Battery-optimization prompt za vozace:
+  timestamp umesto bool — re-prompt na 24h dok je app optimizovan (ranije
+  jednom po instalaciji pa je odbijanje bilo trajno). flutter analyze:
+  0 issues.
 
 ## Release (GitHub Actions)
 
