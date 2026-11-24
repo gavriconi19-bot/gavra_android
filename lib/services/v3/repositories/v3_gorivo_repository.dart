@@ -41,6 +41,12 @@ class V3GorivoRepository {
     }
   }
 
+  /// Jedan RPC poziv: svi agregati potrošnje po periodima + dnevni proseci (jsonb).
+  /// (Ranije: 6 paralelnih RPC-ova kroz Funnel — RTT ~250-500ms + handshake po pozivu.)
+  Future<dynamic> selectPotrosnjaPregledRpc(Map<String, String> params) {
+    return supabase.rpc('fn_v3_gorivo_pregled', params: params);
+  }
+
   /// Dnevni prosek potrošnje po radnim danima (pon–pet) — RPC agregat.
   /// Vraća jedan red: prosek_litri, radnih_dana, ukupno_litri.
   Future<dynamic> selectDnevniProsek() {

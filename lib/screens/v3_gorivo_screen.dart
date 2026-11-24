@@ -1496,6 +1496,7 @@ class _FuelConsumptionPeriodCard extends StatelessWidget {
       builder: (context, _) {
         return FutureBuilder<V3GorivoPotrosnjaPregled>(
           future: V3GorivoService.getPotrosnjaPregled(),
+          initialData: V3GorivoService.potrosnjaPregledCached,
           builder: (context, snapshot) {
             final data = snapshot.data;
             final loading = snapshot.connectionState == ConnectionState.waiting && data == null;

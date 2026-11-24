@@ -414,9 +414,35 @@ class V3GorivoService {
     }
   }
 
+  static V3GorivoPotrosnjaPregled? _pregledCache;
+  static int _pregledCacheRevision = -1;
+  static Future<V3GorivoPotrosnjaPregled>? _pregledInFlight;
+
+  /// Poslednji izračunati pregled (za instant render dok se refresh završava).
+  static V3GorivoPotrosnjaPregled? get potrosnjaPregledCached => _pregledCache;
+
   /// Potrošnja danas / operativna nedelja (pon–pet) / tekući mesec / tekuća godina.
   /// Iste granice perioda kao Finansije, sve u Europe/Belgrade.
-  static Future<V3GorivoPotrosnjaPregled> getPotrosnjaPregled() async {
+  /// RPC-first (fn_v3_gorivo_pregled = 1 round-trip) + fallback na 6 RPC-ova;
+  /// memoizovano po v3_gorivo revision-u — istorija se menja samo kroz trigger
+  /// na v3_gorivo, pa isti revision znači da se podaci nisu promenili.
+  static Future<V3GorivoPotrosnjaPregled> getPotrosnjaPregled() {
+    final revision = V3MasterRealtimeManager.instance.tableRevision('v3_gorivo');
+    final cached = _pregledCache;
+    if (cached != null && _pregledCacheRevision == revision) {
+      return Future.value(cached);
+    }
+    final inFlight = _pregledInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _fetchPotrosnjaPregled(revision);
+    _pregledInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_pregledInFlight, future)) _pregledInFlight = null;
+    });
+  }
+
+  static Future<V3GorivoPotrosnjaPregled> _fetchPotrosnjaPregled(int revision) async {
     final now = V3BelgradeTime.now();
 
     final danas = _bgMidnight(now.year, now.month, now.day);
@@ -435,6 +461,89 @@ class V3GorivoService {
     final godStart = _bgMidnight(now.year, 1, 1);
     final godEnd = _bgMidnight(now.year + 1, 1, 1);
 
+    V3GorivoPotrosnjaPregled pregled;
+    try {
+      // Jedan RPC: svi agregati u 1 round-trip-u (Funnel RTT ~250-500ms × 6 -> 1).
+      final res = await _repo.selectPotrosnjaPregledRpc({
+        'p_danas_start': V3BelgradeTime.toIsoUtc(danas),
+        'p_danas_end': V3BelgradeTime.toIsoUtc(sutra),
+        'p_nedelja_start': V3BelgradeTime.toIsoUtc(nedeljaStart),
+        'p_nedelja_end': V3BelgradeTime.toIsoUtc(nedeljaEndExclusive),
+        'p_mesec_start': V3BelgradeTime.toIsoUtc(mesStart),
+        'p_mesec_end': V3BelgradeTime.toIsoUtc(mesEnd),
+        'p_godina_start': V3BelgradeTime.toIsoUtc(godStart),
+        'p_godina_end': V3BelgradeTime.toIsoUtc(godEnd),
+      });
+      final m = Map<String, dynamic>.from(res as Map);
+      pregled = _pregledFromValues(
+        danasLitri: (m['danas_litri'] as num?)?.toDouble() ?? 0,
+        nedeljaLitri: (m['nedelja_litri'] as num?)?.toDouble() ?? 0,
+        mesecLitri: (m['mesec_litri'] as num?)?.toDouble() ?? 0,
+        godinaLitri: (m['godina_litri'] as num?)?.toDouble() ?? 0,
+        prosekLitri: (m['prosek_litri'] as num?)?.toDouble() ?? 0,
+        prosekRsd: (m['prosek_rsd'] as num?)?.toDouble() ?? 0,
+        radnihDana: (m['radnih_dana'] as num?)?.toInt() ?? 0,
+        danas: danas,
+        nedeljaStart: nedeljaStart,
+        nedeljaEnd: nedeljaEnd,
+      );
+    } catch (e) {
+      debugPrint('[V3GorivoService] fn_v3_gorivo_pregled failed, legacy fallback: $e');
+      pregled = await _legacyPotrosnjaPregled(
+        danas: danas,
+        sutra: sutra,
+        nedeljaStart: nedeljaStart,
+        nedeljaEnd: nedeljaEnd,
+        nedeljaEndExclusive: nedeljaEndExclusive,
+        mesStart: mesStart,
+        mesEnd: mesEnd,
+        godStart: godStart,
+        godEnd: godEnd,
+      );
+    }
+
+    _pregledCache = pregled;
+    _pregledCacheRevision = revision;
+    return pregled;
+  }
+
+  static V3GorivoPotrosnjaPregled _pregledFromValues({
+    required double danasLitri,
+    required double nedeljaLitri,
+    required double mesecLitri,
+    required double godinaLitri,
+    required double prosekLitri,
+    required double prosekRsd,
+    required int radnihDana,
+    required DateTime danas,
+    required DateTime nedeljaStart,
+    required DateTime nedeljaEnd,
+  }) {
+    return V3GorivoPotrosnjaPregled(
+      danasLitri: danasLitri,
+      nedeljaLitri: nedeljaLitri,
+      mesecLitri: mesecLitri,
+      godinaLitri: godinaLitri,
+      dnevniProsekLitri: prosekLitri,
+      dnevniProsekUplataRsd: prosekRsd,
+      dnevniProsekRadnihDana: radnihDana,
+      danasPeriod: V3DanHelper.formatDanMesec(danas),
+      nedeljaPeriod: '${V3DanHelper.formatDanMesec(nedeljaStart)} - ${V3DanHelper.formatDanMesec(nedeljaEnd)}',
+    );
+  }
+
+  /// Fallback za baze bez fn_v3_gorivo_pregled: 4 SUM-a + 2 prosek RPC-a.
+  static Future<V3GorivoPotrosnjaPregled> _legacyPotrosnjaPregled({
+    required DateTime danas,
+    required DateTime sutra,
+    required DateTime nedeljaStart,
+    required DateTime nedeljaEnd,
+    required DateTime nedeljaEndExclusive,
+    required DateTime mesStart,
+    required DateTime mesEnd,
+    required DateTime godStart,
+    required DateTime godEnd,
+  }) async {
     Future<double> sumRange(DateTime start, DateTime endExclusive) {
       return _repo.sumPotrosnjaBetween(
         startIsoUtc: V3BelgradeTime.toIsoUtc(start),
@@ -470,16 +579,17 @@ class V3GorivoService {
       debugPrint('[V3GorivoService] getPotrosnjaPregled error: $e');
     }
 
-    return V3GorivoPotrosnjaPregled(
+    return _pregledFromValues(
       danasLitri: dan,
       nedeljaLitri: ned,
       mesecLitri: mes,
       godinaLitri: god,
-      dnevniProsekLitri: prosek.prosekLitri,
-      dnevniProsekUplataRsd: prosekUplata.prosekRsd,
-      dnevniProsekRadnihDana: prosek.radnihDana,
-      danasPeriod: V3DanHelper.formatDanMesec(danas),
-      nedeljaPeriod: '${V3DanHelper.formatDanMesec(nedeljaStart)} - ${V3DanHelper.formatDanMesec(nedeljaEnd)}',
+      prosekLitri: prosek.prosekLitri,
+      prosekRsd: prosekUplata.prosekRsd,
+      radnihDana: prosek.radnihDana,
+      danas: danas,
+      nedeljaStart: nedeljaStart,
+      nedeljaEnd: nedeljaEnd,
     );
   }
 }
