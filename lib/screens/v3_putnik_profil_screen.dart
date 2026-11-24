@@ -28,6 +28,7 @@ import '../utils/v3_container_utils.dart';
 import '../utils/v3_dialog_helper.dart';
 import '../utils/v3_error_utils.dart';
 import '../utils/v3_input_utils.dart';
+import '../utils/v3_navigation_utils.dart';
 import '../utils/v3_phone_utils.dart';
 import '../utils/v3_putnik_id_resolver.dart';
 import '../utils/v3_safe_text.dart';
@@ -36,6 +37,7 @@ import '../utils/v3_status_policy.dart';
 import '../utils/v3_stream_utils.dart';
 import '../utils/v3_style_helper.dart';
 import '../utils/v3_uuid_utils.dart';
+import '../widgets/v3_fade_slide_in.dart';
 import '../widgets/v3_info_banner.dart';
 import '../widgets/v3_update_banner.dart';
 import '../widgets/v3_vreme_dolaska_widget.dart';
@@ -1098,7 +1100,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const V3WelcomeScreen()),
+      V3SmoothPageRoute<void>(screen: const V3WelcomeScreen()),
       (r) => false,
     );
   }
@@ -1502,45 +1504,59 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                               // Forced update gate
                               const V3UpdateBanner(),
                               // ── HEADER CARD ──────────────────────────────────────
-                              _buildHeaderCard(
-                                tip: tip,
-                                imePrezime: imePrezime,
-                                telefon: telefon,
-                                telefon2: telefon2,
-                                adresaBcNaziv: adresaBcNaziv,
-                                adresaVsNaziv: adresaVsNaziv,
-                                adresaBcNaziv2: adresaBcNaziv2,
-                                adresaVsNaziv2: adresaVsNaziv2,
+                              V3FadeSlideIn(
+                                child: _buildHeaderCard(
+                                  tip: tip,
+                                  imePrezime: imePrezime,
+                                  telefon: telefon,
+                                  telefon2: telefon2,
+                                  adresaBcNaziv: adresaBcNaziv,
+                                  adresaVsNaziv: adresaVsNaziv,
+                                  adresaBcNaziv2: adresaBcNaziv2,
+                                  adresaVsNaziv2: adresaVsNaziv2,
+                                ),
                               ),
-                              if (putnikId != null && putnikId.isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                V3VremeDolaskaWidget(putnikId: putnikId),
-                              ],
-                              if (_aktivnePonude.isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                _buildMestoPonudaCard(),
-                              ],
-                              if (_aktivneAlternative.isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                _buildAlternativaCard(),
-                              ],
+                              _animatedSection(
+                                visible: putnikId != null && putnikId.isNotEmpty,
+                                delay: const Duration(milliseconds: 70),
+                                child: V3VremeDolaskaWidget(putnikId: putnikId ?? ''),
+                              ),
+                              _animatedSection(
+                                visible: _aktivnePonude.isNotEmpty,
+                                delay: const Duration(milliseconds: 130),
+                                child: _buildMestoPonudaCard(),
+                              ),
+                              _animatedSection(
+                                visible: _aktivneAlternative.isNotEmpty,
+                                delay: const Duration(milliseconds: 170),
+                                child: _buildAlternativaCard(),
+                              ),
                               const SizedBox(height: 16),
-                              _buildStatistikaCard(
-                                tip: tip,
-                                stats: stats,
-                                cenaInfo: cenaInfo,
-                                ukupanDug: ukupanDug,
-                                ukupanVisak: ukupanVisak,
+                              V3FadeSlideIn(
+                                delay: const Duration(milliseconds: 210),
+                                child: _buildStatistikaCard(
+                                  tip: tip,
+                                  stats: stats,
+                                  cenaInfo: cenaInfo,
+                                  ukupanDug: ukupanDug,
+                                  ukupanVisak: ukupanVisak,
+                                ),
                               ),
                               const SizedBox(height: 10),
-                              _buildDetaljneStatistikeSection(
-                                putnikId: putnikId,
-                                imePrezime: imePrezime,
-                                tipPutnika: tip,
+                              V3FadeSlideIn(
+                                delay: const Duration(milliseconds: 260),
+                                child: _buildDetaljneStatistikeSection(
+                                  putnikId: putnikId,
+                                  imePrezime: imePrezime,
+                                  tipPutnika: tip,
+                                ),
                               ),
                               const SizedBox(height: 16),
                               // ── RASPORED TERMINA ─────────────────────────────────
-                              _buildRasporedCard(nedeljaInfo: nedeljaInfo),
+                              V3FadeSlideIn(
+                                delay: const Duration(milliseconds: 320),
+                                child: _buildRasporedCard(nedeljaInfo: nedeljaInfo),
+                              ),
                               const SizedBox(height: 16),
                             ],
                           ),
@@ -1586,6 +1602,34 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   // ─────────────────────────────────────────────────────────────────
   // WIDGETS
   // ─────────────────────────────────────────────────────────────────
+
+  /// Uslovna sekcija — "rasklopi se" (size + fade animacija) umesto naglog
+  /// pojavljivanja kad podatak stigne preko realtime-a. Child se montira
+  /// tek kad postane vidljiv pa V3FadeSlideIn odradi entrance.
+  Widget _animatedSection({
+    required bool visible,
+    required Widget child,
+    Duration delay = Duration.zero,
+  }) {
+    return AnimatedCrossFade(
+      firstChild: const SizedBox(width: double.infinity),
+      secondChild: visible
+          ? V3FadeSlideIn(
+              delay: delay,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: child,
+              ),
+            )
+          : const SizedBox(width: double.infinity),
+      crossFadeState: visible ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+      duration: const Duration(milliseconds: 320),
+      sizeCurve: Curves.easeInOut,
+      firstCurve: Curves.easeOut,
+      secondCurve: Curves.easeIn,
+    );
+  }
+
   Widget _buildPreviousMonthDebtLockOverlay(double dugIznos) {
     final formatiranIznos = _formatWholeRsd(dugIznos);
     return Container(
@@ -2063,8 +2107,8 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                 ? null
                 : () {
                     Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => V3PutnikStatistikaScreen(
+                      V3SmoothPageRoute<void>(
+                        screen: V3PutnikStatistikaScreen(
                           putnikId: putnikId,
                           imePrezime: imePrezime,
                           tipPutnika: tipPutnika,

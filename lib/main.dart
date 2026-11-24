@@ -31,6 +31,7 @@ import 'services/v3/v3_vozac_service.dart';
 import 'services/v3_locale_manager.dart';
 import 'services/v3_theme_manager.dart';
 import 'utils/v3_belgrade_time.dart';
+import 'utils/v3_navigation_utils.dart';
 import 'widgets/v3_seasonal_overlay.dart';
 
 // Globalna instanca za lokalne notifikacije
@@ -1710,8 +1711,8 @@ Future<void> _openPutnikProfilFromNotification(String payload) async {
     V3PutnikService.currentPutnik = resolvedPutnikData;
 
     nav.push(
-      MaterialPageRoute<void>(
-        builder: (_) => V3PutnikProfilScreen(
+      V3SmoothPageRoute<void>(
+        screen: V3PutnikProfilScreen(
           putnikData: resolvedPutnikData,
         ),
       ),

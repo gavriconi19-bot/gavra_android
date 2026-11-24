@@ -22,6 +22,7 @@ import '../utils/v3_dialog_helper.dart';
 import '../utils/v3_error_utils.dart';
 import '../utils/v3_format_utils.dart';
 import '../utils/v3_input_utils.dart';
+import '../utils/v3_navigation_utils.dart';
 import '../utils/v3_state_utils.dart';
 
 class _FinTr {
@@ -379,7 +380,7 @@ class _V3FinansijeScreenState extends State<V3FinansijeScreen> {
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const V3DugoviScreen()),
+        V3SmoothPageRoute(screen: const V3DugoviScreen()),
       ),
       child: V3ContainerUtils.gradientContainer(
         gradient: LinearGradient(
@@ -432,7 +433,7 @@ class _V3FinansijeScreenState extends State<V3FinansijeScreen> {
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const V3KreditiScreen()),
+        V3SmoothPageRoute(screen: const V3KreditiScreen()),
       ),
       child: V3ContainerUtils.gradientContainer(
         gradient: LinearGradient(

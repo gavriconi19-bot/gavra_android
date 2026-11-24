@@ -23,6 +23,7 @@ import '../utils/v3_phone_utils.dart';
 import '../utils/v3_safe_text.dart';
 import '../utils/v3_state_utils.dart';
 import '../utils/v3_string_utils.dart';
+import '../utils/v3_navigation_utils.dart';
 import '../utils/v3_text_utils.dart';
 import '../utils/v3_tip_putnika_utils.dart';
 import '../utils/v3_uuid_utils.dart';
@@ -255,8 +256,8 @@ class _V3PutniciScreenState extends State<V3PutniciScreen> {
                                     onDelete: () => _obrisi(lista[i]),
                                     onDetaljneStatistike: () {
                                       Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => V3PutnikStatistikaScreen(
+                                        V3SmoothPageRoute<void>(
+                                          screen: V3PutnikStatistikaScreen(
                                             putnikId: lista[i].id,
                                             imePrezime: lista[i].imePrezime,
                                             tipPutnika: lista[i].tipPutnika,

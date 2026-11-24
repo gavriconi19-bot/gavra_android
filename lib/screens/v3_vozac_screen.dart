@@ -39,6 +39,7 @@ import '../utils/v3_putnik_id_resolver.dart';
 import '../utils/v3_state_utils.dart';
 import '../utils/v3_status_policy.dart';
 import '../widgets/v3_bottom_nav_bar_slotovi.dart';
+import '../widgets/v3_fade_slide_in.dart';
 import '../widgets/v3_info_banner.dart';
 import '../widgets/v3_neradni_dani_banner.dart';
 import '../widgets/v3_pazar_listener.dart';
@@ -90,6 +91,16 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
 
   // Moji putnici (izvor: v3_operativna_nedelja)
   List<_PutnikEntry> _mojiPutnici = [];
+
+  /// AnimatedList stanje — [_animPutnici] je lista koju AnimatedList
+  /// renderuje; diff u [_syncAnimatedPutnici] je drzi u koraku sa
+  /// [_mojiPutnici]. [_cascadeDelays] = staggered entrance delay po
+  /// kljucu kartice posle reseta (otvaranje ekrana / promena slota).
+  final GlobalKey<SliverAnimatedListState> _putnikListKey = GlobalKey<SliverAnimatedListState>();
+  final List<_PutnikEntry> _animPutnici = [];
+  final Map<String, int> _cascadeDelays = {};
+  String _animSlotKey = '';
+  static const Duration _animItemDuration = Duration(milliseconds: 280);
   Set<String> _assignedOperativnaIds = <String>{};
   List<Map<String, String>> _assignedSlotRows = <Map<String, String>>[];
   bool _isNavigating = false;
@@ -456,6 +467,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
         _mojiPutnici = sorted;
         _lastPutniciSignature = _putniciSignature(sorted);
       });
+      _syncAnimatedPutnici(sorted);
     }
   }
 
@@ -869,6 +881,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       }
       // Nema termina za ovaj dan — prikaži prazno
       V3StateUtils.safeSetState(this, () => _mojiPutnici = []);
+      _syncAnimatedPutnici(const []);
       if (!V3VozacLocationTrackingService.instance.isRunning) {
         _scheduleAutoStart();
       }
@@ -950,8 +963,10 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
         _mojiPutnici = putniciZaPrikaz;
         _lastPutniciSignature = nextSig;
       });
+      _syncAnimatedPutnici(putniciZaPrikaz);
     } else {
       _mojiPutnici = putniciZaPrikaz;
+      _replaceAnimPutniciData(putniciZaPrikaz);
     }
 
     // Sigurnosna mreža: ETA redosled samo na tracking terminu.
@@ -1102,7 +1117,7 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
       await V3ClosedAuthService.clearManualSmsPutnikPhone();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const V3WelcomeScreen()),
+        V3SmoothPageRoute<void>(screen: const V3WelcomeScreen()),
         (r) => false,
       );
     }
@@ -1294,8 +1309,10 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
             _mojiPutnici.map((p) => p.putnik.id).join('|');
     if (!sameOrder) {
       setState(() => _mojiPutnici = sortedAll);
+      _syncAnimatedPutnici(sortedAll);
     } else {
       _mojiPutnici = sortedAll;
+      _replaceAnimPutniciData(sortedAll);
     }
 
     final preostali = sortedAll.where((item) => !_isPutnikEntryCompleted(item)).toList(growable: false);
@@ -1857,16 +1874,191 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildBody() {
-    final vozacBoja = _getVozacBojaRaw(_efektivniVozac);
-    int redniCounter = 0;
-    final redniBrojevi = _mojiPutnici.map<int?>((pz) {
-      final tip = pz.putnik.tipPutnika.toLowerCase().trim();
-      if (tip == 'posiljka') return null;
-      redniCounter += 1;
-      return redniCounter;
-    }).toList(growable: false);
+  // ── SliverAnimatedList sync ──────────────────────────────────────────
 
+  /// Kljuc kartice — operativna id kad postoji, inace putnik id.
+  String _animItemKey(_PutnikEntry item) {
+    final entryId = item.entry?.id ?? '';
+    return entryId.isNotEmpty ? 'e:$entryId' : 'p:${item.putnik.id}';
+  }
+
+  int _animIndexOf(String key, int start) {
+    for (var i = start; i < _animPutnici.length; i++) {
+      if (_animItemKey(_animPutnici[i]) == key) return i;
+    }
+    return -1;
+  }
+
+  /// Drzi [_animPutnici] (listu koju SliverAnimatedList renderuje) u koraku
+  /// sa novom listom: insert/remove/move se animiraju, a na promenu slota se
+  /// lista resetuje trenutno (entrance cascade rade kartice kroz
+  /// V3FadeSlideIn). Zvati odmah posle setState-a koji menja [_mojiPutnici].
+  void _syncAnimatedPutnici(List<_PutnikEntry> target) {
+    final slotKey =
+        '$_selectedDatumIso|$_selectedGrad|${V3BelgradeTime.normalizeToHHmm(_selectedVreme)}';
+    final state = _putnikListKey.currentState;
+
+    if (state == null || slotKey != _animSlotKey) {
+      // Reset — AnimatedList nema reset API: instant remove + insert.
+      _animSlotKey = slotKey;
+      _cascadeDelays
+        ..clear()
+        ..addEntries(
+          target.asMap().entries.map(
+                (e) => MapEntry(_animItemKey(e.value), e.key.clamp(0, 8) * 55),
+              ),
+        );
+      if (state == null) {
+        _animPutnici
+          ..clear()
+          ..addAll(target);
+        return;
+      }
+      for (var i = _animPutnici.length - 1; i >= 0; i--) {
+        final removed = _animPutnici.removeAt(i);
+        state.removeItem(
+          i,
+          (context, animation) => _buildRemovedPutnikCard(removed, animation),
+          duration: Duration.zero,
+        );
+      }
+      for (var i = 0; i < target.length; i++) {
+        _animPutnici.insert(i, target[i]);
+        state.insertItem(i, duration: Duration.zero);
+      }
+      return;
+    }
+
+    // Diff — isti slot: prvo izbaci sve sto vise ne postoji.
+    final targetKeys = target.map(_animItemKey).toSet();
+    for (var i = _animPutnici.length - 1; i >= 0; i--) {
+      if (!targetKeys.contains(_animItemKey(_animPutnici[i]))) {
+        final removed = _animPutnici.removeAt(i);
+        state.removeItem(
+          i,
+          (context, animation) => _buildRemovedPutnikCard(removed, animation),
+          duration: _animItemDuration,
+        );
+      }
+    }
+    // Zatim sleva nadesno uvedi ciljani redosled (insert ili move).
+    for (var i = 0; i < target.length; i++) {
+      final key = _animItemKey(target[i]);
+      if (i < _animPutnici.length && _animItemKey(_animPutnici[i]) == key) {
+        _animPutnici[i] = target[i]; // osvezi podatke bez animacije
+        continue;
+      }
+      final existing = _animIndexOf(key, i + 1);
+      if (existing == -1) {
+        _animPutnici.insert(i, target[i]);
+        state.insertItem(i, duration: _animItemDuration);
+      } else {
+        // AnimatedList ne zna move — remove na staroj + insert na novoj poziciji.
+        final moved = _animPutnici.removeAt(existing);
+        state.removeItem(
+          existing,
+          (context, animation) => _buildRemovedPutnikCard(moved, animation),
+          duration: const Duration(milliseconds: 200),
+        );
+        _animPutnici.insert(i, moved);
+        state.insertItem(i, duration: _animItemDuration);
+      }
+    }
+    // Posle walk-a duzine i kljucevi se poklapaju — osvezi objekte.
+    for (var i = 0; i < target.length && i < _animPutnici.length; i++) {
+      _animPutnici[i] = target[i];
+    }
+  }
+
+  /// Tihi refresh objekata u [_animPutnici] kad se kljucevi/redosled nisu
+  /// promenili (kartice dobijaju svez entry pri sledecem rebuild-u).
+  void _replaceAnimPutniciData(List<_PutnikEntry> target) {
+    if (_animPutnici.length != target.length) {
+      _syncAnimatedPutnici(target);
+      return;
+    }
+    for (var i = 0; i < target.length; i++) {
+      if (_animItemKey(_animPutnici[i]) != _animItemKey(target[i])) {
+        _syncAnimatedPutnici(target);
+        return;
+      }
+    }
+    for (var i = 0; i < target.length; i++) {
+      _animPutnici[i] = target[i];
+    }
+  }
+
+  /// Kartica u listi — wrapuje V3PutnikCard u fade+slide koji pokrece
+  /// AnimatedList-ova [animation] (insert) + V3FadeSlideIn za staggered
+  /// entrance posle reseta.
+  Widget _buildAnimatedPutnikCard(
+    _PutnikEntry pz,
+    int index,
+    Animation<double> animation,
+  ) {
+    final delayMs = _cascadeDelays[_animItemKey(pz)] ?? 0;
+    return SizeTransition(
+      // Key na najspoljnijem widgetu — findChildIndexCallback ga koristi
+      // da odrzi element (i state kartice) prilikom promene pozicije.
+      key: ValueKey(pz.putnik.id),
+      sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+      child: FadeTransition(
+        opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+        child: SlideTransition(
+          position: animation.drive(
+            Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+                .chain(CurveTween(curve: Curves.easeOutCubic)),
+          ),
+          child: V3FadeSlideIn(
+            delay: Duration(milliseconds: delayMs),
+            child: V3PutnikCard(
+              key: ValueKey(pz.putnik.id),
+              putnik: pz.putnik,
+              entry: pz.entry,
+              redniBroj: _redniBrojForIndex(index),
+              vozacBoja: _getVozacBojaRaw(_efektivniVozac),
+              onChanged: _rebuild,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Kartica prikazana dok AnimatedList animira njen izlazak
+  /// (collapse + fade + blagi slide levo).
+  Widget _buildRemovedPutnikCard(_PutnikEntry item, Animation<double> animation) {
+    final curved = CurvedAnimation(parent: animation, curve: Curves.easeInCubic);
+    return SizeTransition(
+      sizeFactor: curved,
+      child: FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(-0.08, 0), end: Offset.zero).animate(curved),
+          child: V3PutnikCard(
+            putnik: item.putnik,
+            entry: item.entry,
+            vozacBoja: _getVozacBojaRaw(_efektivniVozac),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Redni broj kartice — posiljke ne dobijaju broj (isti kriterijum kao
+  /// raniji pre-compute po [_mojiPutnici]).
+  int? _redniBrojForIndex(int index) {
+    if (index < 0 || index >= _animPutnici.length) return null;
+    bool isPosiljka(_PutnikEntry p) => p.putnik.tipPutnika.toLowerCase().trim() == 'posiljka';
+    if (isPosiljka(_animPutnici[index])) return null;
+    var n = 0;
+    for (var i = 0; i <= index; i++) {
+      if (!isPosiljka(_animPutnici[i])) n++;
+    }
+    return n;
+  }
+
+  Widget _buildBody() {
     return Column(
       children: [
         const V3UpdateBanner(),
@@ -1919,20 +2111,32 @@ class _V3VozacScreenState extends State<V3VozacScreen> with WidgetsBindingObserv
                               ),
                             ),
                           )
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(top: 4, bottom: 16),
-                            itemCount: _mojiPutnici.length,
-                            itemBuilder: (context, index) {
-                              final pz = _mojiPutnici[index];
-                              return V3PutnikCard(
-                                key: ValueKey(pz.putnik.id),
-                                putnik: pz.putnik,
-                                entry: pz.entry,
-                                redniBroj: redniBrojevi[index],
-                                vozacBoja: vozacBoja,
-                                onChanged: _rebuild,
-                              );
-                            },
+                        : CustomScrollView(
+                            slivers: [
+                              SliverPadding(
+                                padding: const EdgeInsets.only(top: 4, bottom: 16),
+                                sliver: SliverAnimatedList(
+                                  key: _putnikListKey,
+                                  initialItemCount: _animPutnici.length,
+                                  // Bez ovoga bi insert/move reindexovao elemente
+                                  // poziciono pa bi kartice ispod izgubile state.
+                                  findChildIndexCallback: (key) {
+                                    if (key is! ValueKey<String>) return null;
+                                    final idx = _animPutnici.indexWhere(
+                                      (pz) => pz.putnik.id == key.value,
+                                    );
+                                    return idx == -1 ? null : idx;
+                                  },
+                                  itemBuilder: (context, index, animation) {
+                                    if (index >= _animPutnici.length) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return _buildAnimatedPutnikCard(
+                                        _animPutnici[index], index, animation);
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                   ),
                 ],

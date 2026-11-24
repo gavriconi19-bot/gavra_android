@@ -249,6 +249,21 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   _pendingPonudaZahtevi na banneru ponude) sada stvarno re-renderuju
   (safeSetState — ranije se flag menjao bez rebuild-a pa se spinner
   nikad nije video). flutter analyze: 0 issues.
+- App-side (isti commit, 2026-11-24 — "smooth" animacije na kljucnim
+  ekranima): novi `lib/widgets/v3_fade_slide_in.dart` — V3FadeSlideIn
+  (TweenAnimationBuilder + Interval, entrance se ne ponavlja na realtime
+  rebuild-ima; delay za staggered cascade). V3VozacScreen: ListView.builder
+  -> SliverAnimatedList — _animPutnici + _syncAnimatedPutnici diff (kljuc
+  'e:<operativna_id>'/'p:<putnik_id>'; insert=expand+slide+fade,
+  remove=collapse+fade+slide levo, move=remove+insert) + reset na promenu
+  slota (datum|grad|vreme) sa cascadeDelays mapom (index*55ms, cap 8).
+  V3PutnikProfilScreen: _animatedSection (AnimatedCrossFade, child se
+  montira tek kad postane vidljiv) na vreme-dolaska/mesto_ponuda/
+  alternativa + V3FadeSlideIn stagger na ostalim sekcijama. Navigacija:
+  V3SmoothPageRoute (slide 5% + fade, 320ms) u V3NavigationUtils —
+  pushScreen/pushReplacement/pushAndRemoveUntil + svi direktni
+  MaterialPageRoute pozivi konvertovani (logout->welcome, statistika,
+  finansije, putnici, deep-link u main.dart). flutter analyze: 0 issues.
 
 ## Release (GitHub Actions)
 

@@ -7,6 +7,7 @@ import '../services/v3_locale_manager.dart';
 import '../theme.dart';
 import '../utils/v3_belgrade_time.dart';
 import '../utils/v3_container_utils.dart';
+import '../utils/v3_navigation_utils.dart';
 import '../utils/v3_style_helper.dart';
 import 'v3_putnik_voznje_mesec_screen.dart';
 
@@ -156,8 +157,8 @@ class _MesecCard extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => V3PutnikVoznjeMesecScreen(
+          V3SmoothPageRoute<void>(
+            screen: V3PutnikVoznjeMesecScreen(
               putnikId: putnikId,
               imePrezime: imePrezime,
               tipPutnika: tipPutnika,
