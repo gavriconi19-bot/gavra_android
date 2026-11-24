@@ -462,14 +462,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Sanity: vozac_id mora biti pravi vozač — endpoint nema auth pa bar
-    // odbijamo pozive za nepostojeće/ne-vozač naloge pre skupljeg rada.
+    // Sanity: vozac_id mora biti nalog koji sme da vozi — endpoint nema auth
+    // pa bar odbijamo pozive za nepostojeće/putnik naloge pre skupljeg rada.
+    // 'admin' uloga (Bojan, review nalozi) vozi slotove — tip='vozac'.
     const { data: vozacRow } = await client
       .from("v3_auth")
-      .select("id, uloga")
+      .select("id, uloga, tip")
       .eq("id", vozacId)
       .maybeSingle();
-    if (!vozacRow || String(vozacRow.uloga ?? "") !== "vozac") {
+    const canDrive = vozacRow &&
+      (String(vozacRow.uloga ?? "") === "vozac" || String(vozacRow.tip ?? "") === "vozac");
+    if (!canDrive) {
       return json(200, { ok: false, reason: "not_a_driver" });
     }
 

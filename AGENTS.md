@@ -310,6 +310,13 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   timestamp umesto bool — re-prompt na 24h dok je app optimizovan (ranije
   jednom po instalaciji pa je odbijanje bilo trajno). flutter analyze:
   0 issues.
+- Edge fix (2026-11-24, GPS tracking test): `v3-compute-eta` sanity check
+  je odbijao sve sto nije `uloga='vozac'` ('not_a_driver') — Bojan i
+  review nalozi su `uloga='admin'`/`tip='vozac'` i vaze kao vozaci na
+  slotovima, pa njihovi putnici NIKAD nisu dobijali ETA. Sada prolazi i
+  `tip='vozac'`. Testirano end-to-end (Lazar Gavrilovic na BC 12:00,
+  simulirani tickovi preko Kong :54321): eta_results ok, anti-spoof
+  (>500m divergence -> table loc) ok, driver_started identity gate ok.
 
 ## Release (GitHub Actions)
 
