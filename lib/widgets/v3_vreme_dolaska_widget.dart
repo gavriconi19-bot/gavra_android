@@ -364,6 +364,7 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
           final waitingAddress = nextRide == null ? null : _resolveWaitingAddressForRide(nextRide.row);
 
           return V3ContainerUtils.styledContainer(
+            width: double.infinity,
             padding: const EdgeInsets.all(12),
             backgroundColor: Colors.green.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(12),

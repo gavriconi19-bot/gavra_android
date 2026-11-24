@@ -1435,35 +1435,39 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
               style: TextStyle(color: V3StyleHelper.whiteAlpha65, fontSize: 11),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                for (var i = 0; i < opcije.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  Expanded(
-                    child: V3ButtonUtils.outlinedButton(
-                      onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: opcije[i].action),
-                      text: opcije[i].vreme,
-                      icon: Icons.check_circle_outline,
-                      borderColor: Colors.greenAccent,
-                      foregroundColor: Colors.greenAccent,
-                      fontSize: 13,
-                      borderRadius: BorderRadius.circular(8),
+            // Tri Expanded dugmeta u jednom redu su suviše uska — "06:00"
+            // se na ~88px truncate-uje u "0...". Opcije zauzimaju ceo red
+            // (svaka ~1/2 širine), a odbijanje ide ispod na punu širinu.
+            if (opcije.isNotEmpty)
+              Row(
+                children: [
+                  for (var i = 0; i < opcije.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: V3ButtonUtils.outlinedButton(
+                        onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: opcije[i].action),
+                        text: opcije[i].vreme,
+                        icon: Icons.check_circle_outline,
+                        borderColor: Colors.greenAccent,
+                        foregroundColor: Colors.greenAccent,
+                        fontSize: 13,
+                        borderRadius: BorderRadius.circular(8),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-                if (opcije.isNotEmpty) const SizedBox(width: 8),
-                Expanded(
-                  child: V3ButtonUtils.outlinedButton(
-                    onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: 'reject'),
-                    text: _tr('mestoOdbij'),
-                    icon: Icons.cancel_outlined,
-                    borderColor: Colors.redAccent,
-                    foregroundColor: Colors.redAccent,
-                    fontSize: 13,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ],
+              ),
+            if (opcije.isNotEmpty) const SizedBox(height: 8),
+            V3ButtonUtils.outlinedButton(
+              onPressed: busy ? null : () => _odgovoriNaPonudu(zahtev, action: 'reject'),
+              text: _tr('mestoOdbij'),
+              icon: Icons.cancel_outlined,
+              borderColor: Colors.redAccent,
+              foregroundColor: Colors.redAccent,
+              fontSize: 13,
+              borderRadius: BorderRadius.circular(8),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             ),
           ],
         ),
