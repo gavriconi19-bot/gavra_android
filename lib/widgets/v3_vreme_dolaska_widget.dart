@@ -441,6 +441,7 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
                                   child: Text(
                                     '${_tr('cekaNa')}: $waitingAddress',
                                     textAlign: TextAlign.center,
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       color: Colors.white70,

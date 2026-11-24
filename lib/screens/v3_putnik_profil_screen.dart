@@ -823,7 +823,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                                             fontSize: 13,
                                             fontWeight: FontWeight.w500,
                                           ),
-                                          maxLines: 1,
+                                          maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ],
@@ -1830,6 +1830,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                     letterSpacing: 0.5,
                   ),
                   textAlign: TextAlign.center,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1869,6 +1870,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1880,88 +1882,85 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
             const SizedBox(height: 12),
             Divider(color: V3StyleHelper.whiteAlpha15),
             const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // BC kolona
-                if (adresaBcNaziv != null && adresaBcNaziv.isNotEmpty)
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          const Icon(Icons.location_city, color: Colors.white38, size: 12),
-                          const SizedBox(width: 4),
-                          Text(_tr('belaCrkva'),
-                              style: TextStyle(
-                                  color: V3StyleHelper.whiteAlpha45, fontSize: 14, fontWeight: FontWeight.bold)),
-                        ]),
-                        const SizedBox(height: 3),
-                        Row(children: [
-                          const Icon(Icons.home, color: Colors.white60, size: 14),
-                          const SizedBox(width: 4),
-                          Expanded(
-                              child: Text(adresaBcNaziv,
-                                  style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14),
-                                  overflow: TextOverflow.ellipsis)),
-                        ]),
-                        if (adresaBcNaziv2 != null && adresaBcNaziv2.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // BC kolona
+                  if (adresaBcNaziv != null && adresaBcNaziv.isNotEmpty)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Row(children: [
-                            const Icon(Icons.home_outlined, color: Colors.white60, size: 14),
+                            const Icon(Icons.location_city, color: Colors.white38, size: 12),
+                            const SizedBox(width: 4),
+                            Text(_tr('belaCrkva'),
+                                style: TextStyle(
+                                    color: V3StyleHelper.whiteAlpha45, fontSize: 14, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 3),
+                          Row(children: [
+                            const Icon(Icons.home, color: Colors.white60, size: 14),
                             const SizedBox(width: 4),
                             Expanded(
-                                child: Text(adresaBcNaziv2,
-                                    style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14),
-                                    overflow: TextOverflow.ellipsis)),
+                                child: Text(adresaBcNaziv,
+                                    style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14))),
                           ]),
+                          if (adresaBcNaziv2 != null && adresaBcNaziv2.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              const Icon(Icons.home_outlined, color: Colors.white60, size: 14),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                  child: Text(adresaBcNaziv2,
+                                      style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14))),
+                            ]),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                if (adresaBcNaziv != null && adresaVsNaziv != null)
-                  Container(
-                      width: 1,
-                      height: V3ContainerUtils.responsiveHeight(context, 40),
-                      color: Colors.white12,
-                      margin: const EdgeInsets.symmetric(horizontal: 10)),
-                // VS kolona
-                if (adresaVsNaziv != null && adresaVsNaziv.isNotEmpty)
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          const Icon(Icons.location_city, color: Colors.white38, size: 12),
-                          const SizedBox(width: 4),
-                          Text(_tr('vrsac'),
-                              style: TextStyle(
-                                  color: V3StyleHelper.whiteAlpha45, fontSize: 14, fontWeight: FontWeight.bold)),
-                        ]),
-                        const SizedBox(height: 3),
-                        Row(children: [
-                          const Icon(Icons.work, color: Colors.white60, size: 14),
-                          const SizedBox(width: 4),
-                          Expanded(
-                              child: Text(adresaVsNaziv,
-                                  style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14),
-                                  overflow: TextOverflow.ellipsis)),
-                        ]),
-                        if (adresaVsNaziv2 != null && adresaVsNaziv2.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+                  if (adresaBcNaziv != null && adresaVsNaziv != null)
+                    Container(
+                        width: 1,
+                        color: Colors.white12,
+                        margin: const EdgeInsets.symmetric(horizontal: 10)),
+                  // VS kolona
+                  if (adresaVsNaziv != null && adresaVsNaziv.isNotEmpty)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Row(children: [
-                            const Icon(Icons.work_outline, color: Colors.white60, size: 14),
+                            const Icon(Icons.location_city, color: Colors.white38, size: 12),
+                            const SizedBox(width: 4),
+                            Text(_tr('vrsac'),
+                                style: TextStyle(
+                                    color: V3StyleHelper.whiteAlpha45, fontSize: 14, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 3),
+                          Row(children: [
+                            const Icon(Icons.work, color: Colors.white60, size: 14),
                             const SizedBox(width: 4),
                             Expanded(
-                                child: Text(adresaVsNaziv2,
-                                    style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14),
-                                    overflow: TextOverflow.ellipsis)),
+                                child: Text(adresaVsNaziv,
+                                    style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14))),
                           ]),
+                          if (adresaVsNaziv2 != null && adresaVsNaziv2.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              const Icon(Icons.work_outline, color: Colors.white60, size: 14),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                  child: Text(adresaVsNaziv2,
+                                      style: TextStyle(color: V3StyleHelper.whiteAlpha9, fontSize: 14))),
+                            ]),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ],
         ],
