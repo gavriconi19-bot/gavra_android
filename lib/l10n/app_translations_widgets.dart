@@ -420,6 +420,13 @@ const Map<String, Map<String, Map<String, String>>> _widgetsAndUtils = {
     },
     'cekaNa': {'sr': 'Čeka na', 'en': 'Waiting at', 'ru': 'Ожидает у', 'de': 'Wartet bei', 'zh': '等待于'},
     'vozac': {'sr': 'Vozač', 'en': 'Driver', 'ru': 'Водитель', 'de': 'Fahrer', 'zh': '司机'},
+    'vozacStize': {
+      'sr': 'Vozač stiže za',
+      'en': 'Driver arrives in',
+      'ru': 'Водитель прибудет через',
+      'de': 'Fahrer kommt in',
+      'zh': '司机将于',
+    },
     'u': {'sr': 'u', 'en': 'at', 'ru': 'в', 'de': 'um', 'zh': '于'},
     'noGpsForAddress': {
       'sr': 'Nema GPS koordinata za ovu adresu',

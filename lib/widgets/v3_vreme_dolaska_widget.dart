@@ -363,36 +363,73 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
               nextRide == null ? _tr('nemaZakazaneVoznje') : _formatNextRide(nextRide.departure, nextRide.grad);
           final waitingAddress = nextRide == null ? null : _resolveWaitingAddressForRide(nextRide.row);
 
+          // Odsek do polaska — za hero countdown ("za 45 min" / "za 2h 10 min").
+          // Prikazuje se samo kad nema live ETA i polazak je u budućnosti.
+          String? preostaloLabel;
+          if (!hasActiveEta && nextRide != null && nextRide.departure.isAfter(now)) {
+            final secs = nextRide.departure.difference(now).inSeconds;
+            final h = secs ~/ 3600;
+            final m = (secs % 3600) ~/ 60;
+            preostaloLabel = h > 0 ? '${_tr('zaMin')} ${h}h $m ${_tr('min')}' : '${_tr('zaMin')} $m ${_tr('min')}';
+          }
+
+          // Progress ka dolasku vozača: 0 na ulasku u T-15 prozor, 1 na
+          // eta=0. Sekundarna vizuelna referenca uz veliki broj minuta.
+          final etaProgress = hasActiveEta
+              ? (1 - (effectiveEta < 0 ? 0 : effectiveEta) / 900).clamp(0.05, 1.0).toDouble()
+              : null;
+
           return V3ContainerUtils.styledContainer(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             backgroundColor: Colors.green.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.8), width: 1.2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      hasActiveEta ? Icons.directions_car_filled : Icons.schedule,
+                      color: Colors.greenAccent,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      hasActiveEta ? _tr('procenjenoVreme') : _tr('sledecaVoznja'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
                 if (hasActiveEta)
                   Column(
                     children: [
                       Text(
-                        _tr('procenjenoVreme'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${_tr('zaMin')} $minutes ${_tr('min')}',
+                        '${_tr('vozacStize')} $minutes ${_tr('min')}',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.greenAccent,
-                          fontSize: 26,
+                          fontSize: 28,
                           fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: etaProgress,
+                          minHeight: 5,
+                          backgroundColor: Colors.white12,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
                         ),
                       ),
                     ],
@@ -400,16 +437,6 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
                 else
                   Column(
                     children: [
-                      Text(
-                        _tr('sledecaVoznja'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
                       Text(
                         nextRideLabel,
                         textAlign: TextAlign.center,
@@ -419,46 +446,68 @@ class _V3VremeDolaskaWidgetState extends State<V3VremeDolaskaWidget> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (waitingAddress != null && nextRide != null) ...[
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () => _openMapsForRide(nextRide.row),
-                          child: V3ContainerUtils.styledContainer(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            backgroundColor: Colors.white.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white24),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.location_on,
-                                  color: Colors.greenAccent,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    '${_tr('cekaNa')}: $waitingAddress',
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      decoration: TextDecoration.underline,
-                                      decorationColor: Colors.white38,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                      if (preostaloLabel != null) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.45)),
+                          ),
+                          child: Text(
+                            preostaloLabel,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                       ],
                     ],
                   ),
+                // Adresa čekanja — vidljiva i tokom aktivne ETA (tad je
+                // najpotrebnija), ne samo dok se čeka polazak.
+                if (waitingAddress != null && nextRide != null) ...[
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _openMapsForRide(nextRide.row),
+                    child: V3ContainerUtils.styledContainer(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      backgroundColor: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white24),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color: Colors.greenAccent,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '${_tr('cekaNa')}: $waitingAddress',
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                                decorationColor: Colors.white38,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 if (hasActiveEta && etaVozacId != null) ...[
                   const SizedBox(height: 4),
                   Text(

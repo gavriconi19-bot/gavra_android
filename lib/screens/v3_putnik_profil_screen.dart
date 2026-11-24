@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../globals.dart';
 import '../l10n/app_translations.dart';
@@ -160,9 +162,15 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
   double _statsUkupanDug = 0;
   double _statsUkupanVisak = 0;
   double _statsPrevMonthDebt = 0;
+  List<V3PutnikDnevnaStavka> _statsDnevne = const [];
 
-  ({V3PutnikMesecnaStatistika tekuci, double ukupanDug, double ukupanVisak, double prevMonthDebt}) _profilStats(
-      String? putnikId) {
+  ({
+    V3PutnikMesecnaStatistika tekuci,
+    double ukupanDug,
+    double ukupanVisak,
+    double prevMonthDebt,
+    List<V3PutnikDnevnaStavka> dnevne,
+  }) _profilStats(String? putnikId) {
     final rm = V3MasterRealtimeManager.instance;
     final now = V3BelgradeTime.now();
     // Ključ: putnik + revision-i tabela od kojih obračun zavisi + mesec
@@ -180,12 +188,21 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
         mesec: now.month,
       );
       _statsPrevMonthDebt = _historicalDebtAmountUntilPreviousMonth(id);
+      // Dnevne vožnje za mini-grafik — tip se resolve-uje iz keša u samom
+      // servisu pa '' fallback nije problem.
+      _statsDnevne = V3PutnikStatistikaService.getDnevneStavkeZaMesec(
+        putnikId: id,
+        godina: now.year,
+        mesec: now.month,
+        tipPutnika: '',
+      );
     }
     return (
       tekuci: _statsTekuci!,
       ukupanDug: _statsUkupanDug,
       ukupanVisak: _statsUkupanVisak,
       prevMonthDebt: _statsPrevMonthDebt,
+      dnevne: _statsDnevne,
     );
   }
 
@@ -330,6 +347,41 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     } else {
       _weatherRetryCount = 0;
     }
+  }
+
+  /// Pull-to-refresh — lokalni re-render + force-ovana weather provera +
+  /// pametan resync (delta, full fallback) kroz realtime manager.
+  Future<void> _pullRefresh() async {
+    _refresh();
+    unawaited(_refreshWeather(forceRefresh: true));
+    try {
+      await V3MasterRealtimeManager.instance
+          .requestManualResync()
+          .timeout(const Duration(seconds: 10), onTimeout: () {});
+    } catch (_) {}
+    if (mounted) _refresh();
+  }
+
+  /// Da li je kritična faza bootstrap-a stigla — dok ne stigne, ispod
+  /// header-a prikazujemo skeleton umesto rasporeda sa "➕ dodaj" ćelijama
+  /// (na cold start bez disk keša izgledalo je kao da nema termina).
+  bool get _criticalDataLoaded {
+    final rm = V3MasterRealtimeManager.instance;
+    return rm.tableRevision('v3_operativna_nedelja') > 0 || rm.operativnaNedeljaCache.isNotEmpty;
+  }
+
+  Widget _buildSkeletonCard({required double height}) {
+    return Shimmer.fromColors(
+      baseColor: Colors.white.withValues(alpha: 0.05),
+      highlightColor: Colors.white.withValues(alpha: 0.14),
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    );
   }
 
   /// Trailing debounce za realtime revision event-e — u smeni jedan
@@ -1315,10 +1367,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
             ),
             if (preostalo != null) ...[
               const SizedBox(height: 4),
-              Text(
-                _tr('mestoPonudaIstice').replaceAll('%s', '$preostalo'),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: V3StyleHelper.whiteAlpha65, fontSize: 11),
+              _PonudaCountdown(
+                offeredAt: zahtev['mesto_ponuda_at']?.toString(),
+                template: _tr('ponudaIsticeSekunde'),
+                onExpired: _scheduleRefresh,
               ),
             ],
             const SizedBox(height: 8),
@@ -1422,10 +1474,10 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
             ),
             if (preostalo != null) ...[
               const SizedBox(height: 4),
-              Text(
-                _tr('mestoPonudaIstice').replaceAll('%s', '$preostalo'),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: V3StyleHelper.whiteAlpha65, fontSize: 11),
+              _PonudaCountdown(
+                offeredAt: ts,
+                template: _tr('ponudaIsticeSekunde'),
+                onExpired: _scheduleRefresh,
               ),
             ],
             const SizedBox(height: 4),
@@ -1539,69 +1591,87 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
                     children: [
                       AbsorbPointer(
                         absorbing: hasPreviousMonthDebtLock,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Forced update gate
-                              const V3UpdateBanner(),
-                              // ── HEADER CARD ──────────────────────────────────────
-                              V3FadeSlideIn(
-                                child: _buildHeaderCard(
-                                  tip: tip,
-                                  imePrezime: imePrezime,
-                                  telefon: telefon,
-                                  telefon2: telefon2,
-                                  adresaBcNaziv: adresaBcNaziv,
-                                  adresaVsNaziv: adresaVsNaziv,
-                                  adresaBcNaziv2: adresaBcNaziv2,
-                                  adresaVsNaziv2: adresaVsNaziv2,
+                        child: RefreshIndicator(
+                          onRefresh: _pullRefresh,
+                          color: Colors.white,
+                          backgroundColor: const Color(0xFF1F2430),
+                          child: SingleChildScrollView(
+                            // AlwaysScrollable — RefreshIndicator mora da
+                            // može da se povuče i kad je sadržaj kraći od ekrana.
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Forced update gate
+                                const V3UpdateBanner(),
+                                // ── HEADER CARD ──────────────────────────────────────
+                                V3FadeSlideIn(
+                                  child: _buildHeaderCard(
+                                    tip: tip,
+                                    imePrezime: imePrezime,
+                                    telefon: telefon,
+                                    telefon2: telefon2,
+                                    adresaBcNaziv: adresaBcNaziv,
+                                    adresaVsNaziv: adresaVsNaziv,
+                                    adresaBcNaziv2: adresaBcNaziv2,
+                                    adresaVsNaziv2: adresaVsNaziv2,
+                                  ),
                                 ),
-                              ),
-                              _animatedSection(
-                                visible: putnikId != null && putnikId.isNotEmpty,
-                                delay: const Duration(milliseconds: 70),
-                                child: V3VremeDolaskaWidget(putnikId: putnikId ?? ''),
-                              ),
-                              _animatedSection(
-                                visible: _aktivnePonude.isNotEmpty,
-                                delay: const Duration(milliseconds: 130),
-                                child: _buildMestoPonudaCard(),
-                              ),
-                              _animatedSection(
-                                visible: _aktivneAlternative.isNotEmpty,
-                                delay: const Duration(milliseconds: 170),
-                                child: _buildAlternativaCard(),
-                              ),
-                              const SizedBox(height: 16),
-                              V3FadeSlideIn(
-                                delay: const Duration(milliseconds: 210),
-                                child: _buildStatistikaCard(
-                                  tip: tip,
-                                  stats: stats,
-                                  cenaInfo: cenaInfo,
-                                  ukupanDug: ukupanDug,
-                                  ukupanVisak: ukupanVisak,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              V3FadeSlideIn(
-                                delay: const Duration(milliseconds: 260),
-                                child: _buildDetaljneStatistikeSection(
-                                  putnikId: putnikId,
-                                  imePrezime: imePrezime,
-                                  tipPutnika: tip,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              // ── RASPORED TERMINA ─────────────────────────────────
-                              V3FadeSlideIn(
-                                delay: const Duration(milliseconds: 320),
-                                child: _buildRasporedCard(nedeljaInfo: nedeljaInfo),
-                              ),
-                              const SizedBox(height: 16),
-                            ],
+                                if (!_criticalDataLoaded) ...[
+                                  const SizedBox(height: 12),
+                                  _buildSkeletonCard(height: 86),
+                                  const SizedBox(height: 10),
+                                  _buildSkeletonCard(height: 170),
+                                  const SizedBox(height: 10),
+                                  _buildSkeletonCard(height: 300),
+                                ] else ...[
+                                  _animatedSection(
+                                    visible: putnikId != null && putnikId.isNotEmpty,
+                                    delay: const Duration(milliseconds: 70),
+                                    child: V3VremeDolaskaWidget(putnikId: putnikId ?? ''),
+                                  ),
+                                  _animatedSection(
+                                    visible: _aktivnePonude.isNotEmpty,
+                                    delay: const Duration(milliseconds: 130),
+                                    child: _buildMestoPonudaCard(),
+                                  ),
+                                  _animatedSection(
+                                    visible: _aktivneAlternative.isNotEmpty,
+                                    delay: const Duration(milliseconds: 170),
+                                    child: _buildAlternativaCard(),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  V3FadeSlideIn(
+                                    delay: const Duration(milliseconds: 210),
+                                    child: _buildStatistikaCard(
+                                      tip: tip,
+                                      stats: stats,
+                                      cenaInfo: cenaInfo,
+                                      ukupanDug: ukupanDug,
+                                      ukupanVisak: ukupanVisak,
+                                      dnevneStavke: profilStats.dnevne,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  V3FadeSlideIn(
+                                    delay: const Duration(milliseconds: 260),
+                                    child: _buildDetaljneStatistikeSection(
+                                      putnikId: putnikId,
+                                      imePrezime: imePrezime,
+                                      tipPutnika: tip,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // ── RASPORED TERMINA ─────────────────────────────────
+                                  V3FadeSlideIn(
+                                    delay: const Duration(milliseconds: 320),
+                                    child: _buildRasporedCard(nedeljaInfo: nedeljaInfo),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1974,6 +2044,7 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
     String? cenaInfo,
     required double ukupanDug,
     required double ukupanVisak,
+    required List<V3PutnikDnevnaStavka> dnevneStavke,
   }) {
     return V3ContainerUtils.styledContainer(
       padding: const EdgeInsets.all(16),
@@ -2084,9 +2155,117 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
               ],
             ),
           ],
+          // Žiro račun na dohvat ruke dok postoji dug — putnik ne mora da
+          // čeka debt-lock da sazna kako da uplati. Tap kopira broj.
+          if (ukupanDug > 0.009 || stats.dugIznos > 0.009) ...[
+            const SizedBox(height: 10),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () {
+                  Clipboard.setData(const ClipboardData(text: _giroRacun));
+                  V3AppSnackBar.success(context, V3PutnikProfilMessages.giroAccountCopied);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.45)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_balance_outlined, color: Colors.amber, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _tr('ziroRacunZaUplatu'),
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        _giroRacun,
+                        style: TextStyle(
+                            color: Colors.amber,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.copy_rounded, color: Colors.amber, size: 14),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+          // Mini bar-chart vožnji po danima — vizuelni pregled meseca bez
+          // odlaska na detaljnu statistiku.
+          if (dnevneStavke.any((d) => d.brojVoznji > 0)) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 100,
+              child: _buildVoznjeChart(dnevneStavke),
+            ),
+          ],
           // 'Otkazano' se ne ponavlja u listi — KPI tile gore prikazuje istu vrednost.
         ],
       ),
+    );
+  }
+
+  Widget _buildVoznjeChart(List<V3PutnikDnevnaStavka> stavke) {
+    final dani = stavke.where((d) => d.brojVoznji > 0).toList();
+    final maxVoznji = dani.fold<int>(0, (m, d) => d.brojVoznji > m ? d.brojVoznji : m);
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxVoznji + 0.5,
+        barTouchData: BarTouchData(enabled: false),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 16,
+              getTitlesWidget: (value, meta) {
+                final i = value.toInt();
+                if (i < 0 || i >= dani.length) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    '${dani[i].datum.day}',
+                    style: const TextStyle(color: Colors.white38, fontSize: 9),
+                  ),
+                );
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        barGroups: [
+          for (var i = 0; i < dani.length; i++)
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: dani[i].brojVoznji.toDouble(),
+                  color: Colors.greenAccent.withValues(alpha: 0.85),
+                  width: dani.length > 14 ? 7 : 10,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                ),
+              ],
+            ),
+        ],
+      ),
+      swapAnimationDuration: const Duration(milliseconds: 300),
+      swapAnimationCurve: Curves.easeInOut,
     );
   }
 
@@ -2274,16 +2453,50 @@ class _V3PutnikProfilScreenState extends State<V3PutnikProfilScreen> with Widget
               anchor: V3DanHelper.schedulingWeekAnchor(),
             );
             final isPast = datumIso.isNotEmpty && datumIso.compareTo(V3BelgradeTime.todayIso()) < 0;
+            final isToday = datumIso.isNotEmpty && datumIso == V3BelgradeTime.todayIso();
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
               child: Row(
                 children: [
                   SizedBox(
                     width: 96,
-                    child: Text(
-                      _getDanLabel(dan),
-                      style: TextStyle(color: isPast ? V3StyleHelper.whiteAlpha45 : Colors.white, fontSize: 13),
-                    ),
+                    child: isToday
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.lightBlueAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(color: Colors.lightBlueAccent.withValues(alpha: 0.55)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _getDanLabel(dan),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.lightBlueAccent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  _tr('danas'),
+                                  style: TextStyle(
+                                    color: Colors.lightBlueAccent.withValues(alpha: 0.85),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Text(
+                            _getDanLabel(dan),
+                            style: TextStyle(
+                                color: isPast ? V3StyleHelper.whiteAlpha45 : Colors.white, fontSize: 13),
+                          ),
                   ),
                   Expanded(
                     child: Center(
@@ -2541,6 +2754,72 @@ class _ZahtevCell extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Živi countdown (m:ss) za istek ponude mesta/alternative — tekst se
+/// osvežava svake sekunde umesto statičnog "~X min" koji zastareva dok je
+/// ekran otvoren. Po isteku zove [onExpired] da se kartica povuče lokalno,
+/// bez čekanja na realtime/server.
+class _PonudaCountdown extends StatefulWidget {
+  const _PonudaCountdown({required this.offeredAt, required this.template, required this.onExpired});
+
+  /// ISO timestamp kad je ponuda napravljena (mesto_ponuda_at /
+  /// alternativa_offered_at / updated_at fallback). Važenje je 10 min —
+  /// isto kao _preostaloMinutaZaPonudu i server.
+  final String? offeredAt;
+
+  /// Template sa %s placeholder-om (npr. 'Ponuda ističe za %s').
+  final String template;
+  final VoidCallback onExpired;
+
+  @override
+  State<_PonudaCountdown> createState() => _PonudaCountdownState();
+}
+
+class _PonudaCountdownState extends State<_PonudaCountdown> {
+  static const Duration _validity = Duration(minutes: 10);
+  Timer? _timer;
+  bool _expiredFired = false;
+
+  int _remainingSeconds() {
+    final offeredAt = V3BelgradeTime.parseTs(widget.offeredAt);
+    if (offeredAt == null) return -1;
+    return offeredAt.add(_validity).difference(DateTime.now()).inSeconds;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_remainingSeconds() <= 0 && !_expiredFired) {
+        _expiredFired = true;
+        widget.onExpired();
+      }
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = _remainingSeconds().clamp(0, 600);
+    final label = '${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}';
+    return Text(
+      widget.template.replaceAll('%s', label),
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: remaining <= 60 ? Colors.orangeAccent : V3StyleHelper.whiteAlpha65,
+        fontSize: 11,
+        fontWeight: remaining <= 60 ? FontWeight.w700 : FontWeight.w500,
       ),
     );
   }

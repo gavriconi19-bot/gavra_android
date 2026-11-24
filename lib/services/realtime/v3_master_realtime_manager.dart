@@ -423,6 +423,17 @@ class V3MasterRealtimeManager {
     }
   }
 
+  /// Ručni refresh sa UI-ja (pull-to-refresh) — ista pametna delta/full
+  /// logika kao reconnect path; cooldown-i unutar nje sprečavaju spam.
+  Future<void> requestManualResync() async {
+    if (!isSupabaseReady) return;
+    if (!_isInitialized) {
+      await initV3();
+      return;
+    }
+    await _resyncCachesAfterReconnectSmart();
+  }
+
   Future<void> _initV3Internal() async {
     debugPrint('[V3MasterRealtimeManager] ⚡ STARTED initV3()');
     if (!isSupabaseReady) {

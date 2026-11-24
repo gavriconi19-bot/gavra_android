@@ -958,6 +958,20 @@ const Map<String, Map<String, Map<String, String>>> _screensB = {
       'de': 'Angebot gültig ~%s Min.',
       'zh': '优惠有效期约 %s 分钟',
     },
+    'ponudaIsticeSekunde': {
+      'sr': 'Ponuda ističe za %s',
+      'en': 'Offer expires in %s',
+      'ru': 'Предложение истекает через %s',
+      'de': 'Angebot läuft ab in %s',
+      'zh': '优惠将在 %s 后到期',
+    },
+    'ziroRacunZaUplatu': {
+      'sr': 'Žiro račun za uplatu',
+      'en': 'Bank account for payment',
+      'ru': 'Счёт для оплаты',
+      'de': 'Konto für die Zahlung',
+      'zh': '付款账户',
+    },
     'rasporedSeUcitava': {
       'sr': 'Raspored se još učitava, pokušajte za par sekundi',
       'en': 'Schedule is still loading, try again in a few seconds',
