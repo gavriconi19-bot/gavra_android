@@ -58,6 +58,8 @@ Ovaj dokument opisuje kako je organizovan tok za obavezni unos pazara i gde su g
 ## Važna pravila
 
 - `V3MasterRealtimeManager` ne sme da koristi `BuildContext`, `Navigator` ili `showDialog`.
+- Obavezni unos važi samo za `uloga='vozac'` — admin/dispečer se preskaču u
+  `_checkPazarForCurrentDriver` (ni sync `zahtevan_unos` zapisa, ni popup).
 - `V3PazarListener` ne sme da sadrži poslovnu logiku za izračun pravila.
 - Za više listener-a koristi se subscriber count u manager-u da monitoring ne stane prerano.
 - Upisi u `v3_uplata_pazara` idu isključivo kroz `V3UplataPazaraService` (queue + merge semantika).

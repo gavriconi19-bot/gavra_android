@@ -9,6 +9,7 @@ import '../../models/v3_uplata_pazara.dart';
 import '../../utils/v3_belgrade_time.dart';
 import '../../utils/v3_status_policy.dart';
 import '../v3/v3_address_coordinate_service.dart';
+import '../v3/v3_admin_service.dart';
 import '../v3/v3_app_settings_state.dart';
 import '../v3/v3_app_update_service.dart';
 import '../v3/v3_finansije_service.dart';
@@ -1181,6 +1182,12 @@ class V3MasterRealtimeManager {
       final currentVozac = V3VozacService.currentVozac;
       final vozacId = currentVozac?.id;
       if (vozacId == null || vozacId.isEmpty) return;
+      // Admin/dispecer se ne blokira obaveznim unosom pazara — ni sync
+      // zahtevan_unos zapisa se za njih ne pokrece.
+      if (V3AdminService.isAdmin(currentVozac) ||
+          V3AdminService.isDispecer(currentVozac)) {
+        return;
+      }
 
       final now = V3BelgradeTime.now();
       final today = V3BelgradeTime.dateTime(now.year, now.month, now.day);
