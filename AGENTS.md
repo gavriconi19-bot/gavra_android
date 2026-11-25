@@ -331,6 +331,22 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   `tip='vozac'`. Testirano end-to-end (Lazar Gavrilovic na BC 12:00,
   simulirani tickovi preko Kong :54321): eta_results ok, anti-spoof
   (>500m divergence -> table loc) ok, driver_started identity gate ok.
+- App-side (2026-11-25 — GPS keep-alive stream za zakljucan ekran):
+  uzrok "tick ne radi u pozadini" je bio GNSS starvation, ne mrtav ticker
+  — FGS + partial wakelock + self-heal lanac rade, ali one-shot
+  `getCurrentPosition` (12s limit) na ugasenom ekranu zavrsava u
+  timeout-u jer OS duty-cycluje GPS dok ne postoji AKTIVAN kontinuiran
+  zahtev; tick se izvrsi, fallback vraca stale poziciju >30s i tick se
+  preskace — `v3_vozac_location` stoji 14-22min iako ticker ide. Fix:
+  `v3StartPositionKeepAlive`/`v3StopPositionKeepAlive` u
+  v3_tracking_config — kontinuiran `getPositionStream` (AndroidSettings
+  high accuracy, distanceFilter 0, intervalDuration 2s, BEZ timeLimit)
+  drzi GNSS budnim u BG FGS isolate-u (isti pattern kao iOS keep-alive);
+  `v3RunTrackingTick` uzima stream fix kad je svez (<=30s), one-shot +
+  lastKnown fallback ostaju za stream-outage. Stream se pali u
+  `startTracking` (+self-heal `maybeResumeTicks` restart), gasi u
+  `stopTracking`/`pauseTicks` (u pauzi main preuzima tickove — drzanje
+  bi samo trosilo GPS). flutter analyze: 0 issues.
 
 ## Release (GitHub Actions)
 

@@ -71,6 +71,7 @@ Future<void> onStart(ServiceInstance service) async {
     debugPrint('[BG_TRACKING] stop');
     ticker?.cancel();
     ticker = null;
+    v3StopPositionKeepAlive(logTag: '[BG_TRACKING]');
     expiryWatchdog?.cancel();
     expiryWatchdog = null;
     vozacId = null;
@@ -90,6 +91,9 @@ Future<void> onStart(ServiceInstance service) async {
   void pauseTicks() {
     ticker?.cancel();
     ticker = null;
+    // Pauza = main preuzeo tickove — stream u BG isolate-u tada samo
+    // prazn drži GNSS budnim.
+    v3StopPositionKeepAlive(logTag: '[BG_TRACKING]');
     unawaited(persistStandstillSeconds());
     debugPrint('[BG_TRACKING] pauseTicks');
   }
@@ -226,6 +230,7 @@ Future<void> onStart(ServiceInstance service) async {
         await v3SaveBgTrackingSession(saved);
       }
       debugPrint('[BG_TRACKING] self-heal: ticker mrtav a sesija aktivna — restartujem');
+      v3StartPositionKeepAlive(logTag: '[BG_TRACKING]');
       ticker = V3SelfReschedulingTicker(interval: v3TrackingTickInterval, onTick: doTick)..start();
     } catch (e) {
       debugPrint('[BG_TRACKING] self-heal greška: $e');
@@ -275,6 +280,10 @@ Future<void> onStart(ServiceInstance service) async {
     });
 
     ticker?.cancel();
+    // Keep-alive GNSS stream — bez njega se sa zaključanim ekranom tickovi
+    // izvrše, ali getCurrentPosition završava u timeout-u (OS nema aktivni
+    // kontinuiran zahtev) i lokacija/ETA stoje po 14-22min.
+    v3StartPositionKeepAlive(logTag: '[BG_TRACKING]');
     ticker = V3SelfReschedulingTicker(interval: v3TrackingTickInterval, onTick: doTick)..start();
   }
 

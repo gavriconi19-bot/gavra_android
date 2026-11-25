@@ -75,6 +75,65 @@ LocationSettings get v3IosBackgroundStreamSettings {
   );
 }
 
+/// Keep-alive stream settings — kontinuiran `requestLocationUpdates`.
+///
+/// Bez aktivnog kontinuiranog zahteva OS sa zaključanim ekranom duty-
+/// cycluje GNSS pa one-shot `getCurrentPosition` (12s limit) završava u
+/// timeout-u — `v3_vozac_location` se tada smrzava iako FGS + ticker rade
+/// (14-22min tišine tokom vožnje, mereno). Stream drži GNSS budnim; tick
+/// troši poslednji stream fix ako je svež, one-shot ostaje fallback.
+/// Namerno bez `timeLimit` — taj parametar bi stream ugasio posle 12s.
+LocationSettings get v3PositionKeepAliveSettings {
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0,
+      intervalDuration: const Duration(seconds: 2),
+    );
+  }
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return v3IosBackgroundStreamSettings;
+  }
+  return const LocationSettings(accuracy: LocationAccuracy.high);
+}
+
+StreamSubscription<Position>? _positionKeepAliveSub;
+Position? _lastKeepAlivePosition;
+
+/// Pokreće keep-alive position stream (idempotentno). Pozivati u isolate-u
+/// koji radi tickove (Android: FGS BG isolate; iOS ga ne treba — tamo već
+/// postoji keep-alive u main isolate-u).
+void v3StartPositionKeepAlive({String logTag = '[v3KeepAlive]'}) {
+  if (_positionKeepAliveSub != null) return;
+  _lastKeepAlivePosition = null;
+  try {
+    _positionKeepAliveSub = Geolocator.getPositionStream(
+      locationSettings: v3PositionKeepAliveSettings,
+    ).listen(
+      (position) {
+        _lastKeepAlivePosition = position;
+      },
+      onError: (Object e) {
+        debugPrint('$logTag stream greška: $e');
+      },
+      cancelOnError: false,
+    );
+    debugPrint('$logTag stream startovan');
+  } catch (e) {
+    debugPrint('$logTag stream start greška: $e');
+  }
+}
+
+void v3StopPositionKeepAlive({String logTag = '[v3KeepAlive]'}) {
+  final sub = _positionKeepAliveSub;
+  _positionKeepAliveSub = null;
+  _lastKeepAlivePosition = null;
+  if (sub != null) {
+    unawaited(sub.cancel());
+    debugPrint('$logTag stream zaustavljen');
+  }
+}
+
 /// SharedPreferences ključ — BG isolate čita ovo ako `invoke(startTracking)` stigne pre listener-a.
 const String v3BgTrackingSessionPrefsKey = 'v3_bg_tracking_session';
 
@@ -286,21 +345,30 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
   String logTag = '[v3RunTrackingTick]',
 }) async {
   Position position;
-  try {
-    position = await Geolocator.getCurrentPosition(
-      locationSettings: v3TrackingLocationSettings,
-    );
-  } on TimeoutException {
-    // GPS fix nije stigao na vreme (slab signal / cold start).
-    // Fallback na poslednju poznatu poziciju umesto da tick potpuno propadne
-    // — inače optimized_order ostaje "zamrznut" i novi putnici trajno
-    // dobijaju OsrmIdx=999 dok se ne desi sledeći uspešan tick.
-    // Timeout i ovde: zaglavljen method-channel poziv bi držao tickInFlight
-    // zauvek (ticker timeout ne resetuje flag) — tracking bi se tiho smrzao.
-    final last = await Geolocator.getLastKnownPosition().timeout(const Duration(seconds: 5));
-    if (last == null) rethrow;
-    debugPrint('$logTag getCurrentPosition timeout — koristim getLastKnownPosition fallback');
-    position = last;
+  // Keep-alive stream (zaključan ekran): svež stream fix ima prednost — bez
+  // njega one-shot getCurrentPosition na ugasenom ekranu zna da visi u
+  // timeout-u jer OS nema aktivni kontinuiran GNSS zahtev.
+  final streamed = _lastKeepAlivePosition;
+  if (streamed != null &&
+      DateTime.now().difference(streamed.timestamp).abs() <= v3TrackingMaxPositionAge) {
+    position = streamed;
+  } else {
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: v3TrackingLocationSettings,
+      );
+    } on TimeoutException {
+      // GPS fix nije stigao na vreme (slab signal / cold start).
+      // Fallback na poslednju poznatu poziciju umesto da tick potpuno propadne
+      // — inače optimized_order ostaje "zamrznut" i novi putnici trajno
+      // dobijaju OsrmIdx=999 dok se ne desi sledeći uspešan tick.
+      // Timeout i ovde: zaglavljen method-channel poziv bi držao tickInFlight
+      // zauvek (ticker timeout ne resetuje flag) — tracking bi se tiho smrzao.
+      final last = await Geolocator.getLastKnownPosition().timeout(const Duration(seconds: 5));
+      if (last == null) rethrow;
+      debugPrint('$logTag getCurrentPosition timeout — koristim getLastKnownPosition fallback');
+      position = last;
+    }
   }
 
   // Stari fix (getLastKnownPosition može vratiti poziciju od pre nekoliko
