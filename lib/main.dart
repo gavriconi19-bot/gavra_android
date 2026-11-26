@@ -1125,15 +1125,39 @@ Future<void> _reviveBackgroundTrackingService() async {
   if (!Platform.isAndroid) return;
   try {
     final saved = await v3LoadBgTrackingSession();
-    if (saved == null || saved['ticks_paused'] == true) return;
+    final vozacId = saved?['vozac_id']?.toString();
+    if (saved == null || saved['ticks_paused'] == true) {
+      // Breadcrumb i kad preskočimo — dokaz da je push stigao do procesa
+      // (best-effort: bez Supabase kljienta u FCM isolate-u se preskače).
+      unawaited(v3LogTrackingEvent(
+        event: 'fcm_revive',
+        vozacId: vozacId,
+        detail: <String, dynamic>{'result': saved == null ? 'no_session' : 'paused'},
+      ));
+      return;
+    }
     final service = FlutterBackgroundService();
     if (await service.isRunning()) {
       service.invoke('startTracking', saved);
+      unawaited(v3LogTrackingEvent(
+        event: 'fcm_revive',
+        vozacId: vozacId,
+        detail: <String, dynamic>{'result': 'invoked'},
+      ));
       return;
     }
     await service.startService();
+    unawaited(v3LogTrackingEvent(
+      event: 'fcm_revive',
+      vozacId: vozacId,
+      detail: <String, dynamic>{'result': 'started'},
+    ));
   } catch (e) {
     debugPrint('[FCM] tracking_stalled revive greška: $e');
+    unawaited(v3LogTrackingEvent(
+      event: 'fcm_revive',
+      detail: <String, dynamic>{'result': 'fail', 'error': e.toString()},
+    ));
   }
 }
 

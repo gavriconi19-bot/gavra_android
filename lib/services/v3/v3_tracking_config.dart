@@ -172,6 +172,45 @@ Future<void> v3ClearBgTrackingSession() async {
   }
 }
 
+/// Upisuje jedno polje u aktivnu session mapu (load→set→save). BG isolate
+/// tako stampuje `bg_tick_at`/`bg_last_error`/`bg_supabase_ok` — main ih
+/// čita u supervisoru i usvaja kao remote dijagnostiku.
+Future<void> v3SetBgSessionField(String key, Object? value) async {
+  try {
+    final saved = await v3LoadBgTrackingSession();
+    if (saved == null) return;
+    saved[key] = value;
+    await v3SaveBgTrackingSession(saved);
+  } catch (_) {}
+}
+
+/// Remote breadcrumb — retki događaji tracking lanca u `v3_tracking_debug`
+/// (start/handoff/stall/fail — NE svaki tick). Best-effort: nikad ne baca,
+/// 5s timeout; bez klijenta preskače (gubitak je samo dijagnostika).
+Future<void> v3LogTrackingEvent({
+  required String event,
+  String? vozacId,
+  SupabaseClient? client,
+  Map<String, dynamic>? detail,
+}) async {
+  try {
+    var c = client;
+    if (c == null) {
+      try {
+        c = Supabase.instance.client;
+      } catch (_) {
+        c = null;
+      }
+    }
+    if (c == null) return;
+    await c.from('v3_tracking_debug').insert(<String, dynamic>{
+      'v3_auth_id': vozacId,
+      'event': event,
+      if (detail != null) 'detail': detail,
+    }).timeout(const Duration(seconds: 5));
+  } catch (_) {}
+}
+
 /// Polazak termina u Europe/Belgrade (datum ISO + HH:mm).
 DateTime? v3PolazakDateTime({required String datumIso, required String vreme}) {
   final datePart = V3BelgradeTime.parseIsoDatePart(datumIso);

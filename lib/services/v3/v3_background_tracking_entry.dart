@@ -29,6 +29,8 @@ Future<void> onStart(ServiceInstance service) async {
   int lastPersistedStandstill = -1;
   bool tickInFlight = false;
   int prefsCheckCounter = 0;
+  DateTime? lastTickStamp;
+  String? lastBgError;
 
   /// Upisuje akumuliranu standstill kaznu u session prefs — main isolate je
   /// usvaja na BG→FG prelazu (vidi _pauseBgTicks), bez staleness-a.
@@ -44,6 +46,14 @@ Future<void> onStart(ServiceInstance service) async {
   Timer? expiryWatchdog;
   SupabaseClient? client;
 
+  /// Perzistira grešku u session prefs samo pri promeni — supervisor u
+  /// main isolate-u je pročita i upiše kao breadcrumb.
+  void bgErrorOnce(String error) {
+    if (lastBgError == error) return;
+    lastBgError = error;
+    unawaited(v3SetBgSessionField('bg_last_error', error));
+  }
+
   Future<void> ensureSupabase() async {
     if (client != null) return;
     try {
@@ -53,17 +63,23 @@ Future<void> onStart(ServiceInstance service) async {
       }
     } catch (_) {}
     try {
-      await configService.initializeBasic();
+      // Timeout-i: zaglavljen plugin/dotenv poziv bi držao tickInFlight
+      // zauvek (ticker timeout ne resetuje flag) — svaki tick tiho izlazi.
+      await configService.initializeBasic().timeout(const Duration(seconds: 15));
       final url = configService.getSupabaseUrl().trim();
       final anonKey = configService.getSupabaseAnonKey().trim();
       if (url.isEmpty || anonKey.isEmpty) {
         debugPrint('[BG_TRACKING] Nedostaju Supabase kredencijali');
+        bgErrorOnce('no_credentials');
         return;
       }
-      await Supabase.initialize(url: url, anonKey: anonKey);
+      await Supabase.initialize(url: url, anonKey: anonKey).timeout(const Duration(seconds: 20));
       client = Supabase.instance.client;
+      unawaited(v3SetBgSessionField('bg_supabase_ok', true));
+      unawaited(v3LogTrackingEvent(event: 'bg_supabase_ok', vozacId: vozacId, client: client));
     } catch (e) {
       debugPrint('[BG_TRACKING] Supabase init greška: $e');
+      bgErrorOnce('supabase_init:$e');
     }
   }
 
@@ -100,6 +116,12 @@ Future<void> onStart(ServiceInstance service) async {
 
   void finishAndStop(String reason) {
     debugPrint('[BG_TRACKING] stop reason=$reason');
+    unawaited(v3LogTrackingEvent(
+      event: 'bg_stop',
+      vozacId: vozacId,
+      client: client,
+      detail: <String, dynamic>{'reason': reason},
+    ));
     stopTracking();
     unawaited(v3ClearBgTrackingSession());
     try {
@@ -142,6 +164,16 @@ Future<void> onStart(ServiceInstance service) async {
       if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
         finishAndStop('timeout polazak=$polazakAt');
         return;
+      }
+
+      // Zdravstveni marker — supervisor u main-u iz njega vidi da isolate
+      // živi čak i kad mrežni deo tick-a ne prolazi (svež marker + zamrznuta
+      // lokacija = mrežni/doze stall, zastareo marker = mrtav isolate).
+      // Throttle ~10s — prefs write je mala vrednost.
+      final now = DateTime.now();
+      if (lastTickStamp == null || now.difference(lastTickStamp!) > const Duration(seconds: 10)) {
+        lastTickStamp = now;
+        unawaited(v3SetBgSessionField('bg_tick_at', now.toUtc().toIso8601String()));
       }
 
       await ensureSupabase();
@@ -262,6 +294,9 @@ Future<void> onStart(ServiceInstance service) async {
     startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();
     polazakAt = V3BelgradeTime.parseTs(m['polazak_at']?.toString()) ?? v3PolazakDateTime(datumIso: datum, vreme: v);
     debugPrint('[BG_TRACKING] start $g $v polazak=$polazakAt');
+    // Dokaz da je invoke stigao i engine živ — supervisor ovo čita za
+    // grace period (boot + prvi tick mogu potrajati).
+    unawaited(v3SetBgSessionField('bg_tracking_start_at', DateTime.now().toUtc().toIso8601String()));
 
     // Hard-stop provera i dok su tickovi pauzirani (app u FG ili ugašen) —
     // inače bi FGS + notifikacija stajali bez aktivnog trackinga.
@@ -307,6 +342,10 @@ Future<void> onStart(ServiceInstance service) async {
       service.stopSelf();
       return;
     }
+
+    // Engine boot sa živom sesijom (respawn ili prvi start) — marker za
+    // dijagnostiku bez posebnog DB upisa (supervisor ga prosledi uz stall).
+    unawaited(v3SetBgSessionField('bg_booted_at', DateTime.now().toUtc().toIso8601String()));
 
     // Sesija je mogla isteći dok je ticker bio pauziran (app ugašen u FG).
     if (v3TrackingTimedOut(

@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/app_platform.dart';
 import '../../utils/v3_belgrade_time.dart';
 import 'v3_device_identity_service.dart';
 import 'v3_slot_activation.dart';
@@ -78,6 +80,13 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   DateTime? _polazakAt;
   DateTime? _lastTickAt;
   V3SelfReschedulingTicker? _fgTicker;
+  Timer? _bgSupervisorTimer;
+  DateTime? _bgSupervisorStartedAt;
+  DateTime? _lastStallLogAt;
+  DateTime? _lastBgBlockedLogAt;
+  DateTime? _lastBgRehandoffAt;
+  String? _lastSeenBgError;
+  AppLifecycleState? _lastLoggedLifecycle;
   StreamSubscription<Map<String, dynamic>?>? _bgEndedSub;
   StreamSubscription<Position>? _iosKeepAliveSub;
   bool _tickInFlight = false;
@@ -189,21 +198,31 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       await v3SaveBgTrackingSession(_sessionPayload());
       // iOS: main isolate mora da ostane živ — ticker + continuous location.
       _startIosLocationKeepAlive();
+      _stopBgSupervisor();
       if (_fgTicker == null) _startFgTicker();
       if (immediateTick) unawaited(_fgTick());
       return;
     }
 
+    // Keep-alive GNSS i u main isolate-u: pokriva slučaj kad app ostane
+    // "resumed" preko lockscreena (showWhenLocked) — FG ticker tada troši
+    // stream fix umesto da getCurrentPosition visi na ugašenom ekranu; a i
+    // fallback tickovi BG supervisor-a dobijaju topao fix. Troši isti GPS
+    // koji ionako traži tick kad god je proces budan.
+    v3StartPositionKeepAlive(logTag: _tag);
+
     // Android: notifikacija ostaje dok je tracking aktivan.
     // FG = main ticker (FGS ticker pauziran); BG = FGS ticker.
     await _ensureBgServiceRunning();
     if (_isAppInForeground) {
+      _stopBgSupervisor();
       await _pauseBgTicks();
       if (_fgTicker == null) _startFgTicker();
       if (immediateTick) unawaited(_fgTick());
     } else {
       _fgTicker?.cancel();
       _fgTicker = null;
+      _startBgSupervisor();
       await _startBg();
     }
   }
@@ -291,6 +310,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         log: debugPrint,
       );
       _setRunning(true);
+      unawaited(_logTrackingStart('restore'));
       await _syncEngines(immediateTick: true);
       return true;
     } catch (e) {
@@ -396,6 +416,7 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       );
 
       _setRunning(true);
+      unawaited(_logTrackingStart('start'));
       try {
         await _syncEngines(immediateTick: true);
       } catch (e) {
@@ -441,6 +462,11 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       if (_vozacId.isNotEmpty) {
         _lastStoppedSessionKey = '$_datumIso|$_grad|$_vreme';
         _lastStoppedAt = DateTime.now();
+        unawaited(v3LogTrackingEvent(
+          event: 'tracking_stop',
+          vozacId: _vozacId,
+          detail: <String, dynamic>{'session': _lastStoppedSessionKey},
+        ));
       }
       _vozacId = '';
       _datumIso = '';
@@ -456,7 +482,9 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
 
       _fgTicker?.cancel();
       _fgTicker = null;
+      _stopBgSupervisor();
       await _stopIosLocationKeepAlive();
+      v3StopPositionKeepAlive(logTag: _tag);
       await v3ClearBgTrackingSession();
       await _stopBg();
 
@@ -514,6 +542,133 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     await _iosKeepAliveSub!.cancel();
     _iosKeepAliveSub = null;
     debugPrint('$_tag iOS location keep-alive stop');
+  }
+
+  // ── BG supervisor (Android, app u pozadini) ──────────────────────────
+  // FGS izolat može umreti ili nikad ne startovati (API 31+ FGS-restriction,
+  // OEM killer, servicePipe drop) dok main proces još živi. Supervisor dok
+  // je app u pozadini proverava `bg_tick_at` health stamp koji BG upisuje u
+  // session prefs na svaki tick; zastareo/odsutan marker = stall →
+  // re-handoff (`_startBg`) + fallback tick iz main isolate-a (proces je
+  // ionako budan dok supervisor radi, a keep-alive stream drži GNSS topao).
+
+  static const Duration _bgSupervisorInterval = Duration(seconds: 15);
+  static const Duration _bgStallThreshold = Duration(seconds: 45);
+  static const Duration _stallBreadcrumbCooldown = Duration(minutes: 3);
+  static const Duration _bgRehandoffCooldown = Duration(seconds: 60);
+
+  void _startBgSupervisor() {
+    _bgSupervisorTimer?.cancel();
+    _bgSupervisorStartedAt = DateTime.now().toUtc();
+    _lastSeenBgError = null;
+    _bgSupervisorTimer = Timer.periodic(_bgSupervisorInterval, (_) {
+      unawaited(_bgSupervise());
+    });
+  }
+
+  void _stopBgSupervisor() {
+    _bgSupervisorTimer?.cancel();
+    _bgSupervisorTimer = null;
+    _bgSupervisorStartedAt = null;
+  }
+
+  Future<void> _bgSupervise() async {
+    if (!_isRunning || _isAppInForeground || Platform.isIOS || _vozacId.isEmpty) return;
+    try {
+      final saved = await v3LoadBgTrackingSession();
+      if (saved == null) return;
+      final now = DateTime.now().toUtc();
+
+      // BG greška (no_credentials / supabase_init) stigne u prefs —
+      // prosledi je kao breadcrumb samo pri promeni vrednosti.
+      final bgError = saved['bg_last_error']?.toString();
+      if (bgError != null && bgError.isNotEmpty && bgError != _lastSeenBgError) {
+        _lastSeenBgError = bgError;
+        unawaited(v3LogTrackingEvent(
+          event: 'bg_error',
+          vozacId: _vozacId,
+          detail: <String, dynamic>{'error': bgError},
+        ));
+      }
+
+      final tickAt = V3BelgradeTime.parseTs(saved['bg_tick_at']?.toString());
+      if (tickAt != null && now.difference(tickAt) <= _bgStallThreshold) return;
+
+      // Grace: tek podignut BG (boot/start marker) ima vremena za prvi tick;
+      // bez ijednog markera — meri od starta supervisor-a.
+      final bootAt = V3BelgradeTime.parseTs(saved['bg_booted_at']?.toString()) ??
+          V3BelgradeTime.parseTs(saved['bg_tracking_start_at']?.toString());
+      final anchor = tickAt ?? bootAt ?? _bgSupervisorStartedAt;
+      if (anchor != null && now.difference(anchor) <= _bgStallThreshold) return;
+
+      debugPrint('$_tag BG stall — tick_at=${saved['bg_tick_at']} booted=${saved['bg_booted_at']}');
+
+      final lastRehandoff = _lastBgRehandoffAt;
+      if (lastRehandoff == null || now.difference(lastRehandoff) >= _bgRehandoffCooldown) {
+        _lastBgRehandoffAt = now;
+        // Re-handoff: re-save + re-invoke startTracking. Ako FGS živ a
+        // ticker mrtav — startTracking ga re-kreira; ako je FGS mrtav a
+        // dozvoljen start — podiže se. Na API 31+ blocked start _startBg
+        // tiho izlazi (fallback tickovi i dalje pokrivaju).
+        unawaited(_startBg());
+      }
+
+      final lastLog = _lastStallLogAt;
+      if (lastLog == null || now.difference(lastLog) >= _stallBreadcrumbCooldown) {
+        _lastStallLogAt = now;
+        unawaited(v3LogTrackingEvent(
+          event: 'bg_stall',
+          vozacId: _vozacId,
+          detail: <String, dynamic>{
+            'tick_at': saved['bg_tick_at'],
+            'booted_at': saved['bg_booted_at'],
+            'tracking_start_at': saved['bg_tracking_start_at'],
+            'bg_last_error': saved['bg_last_error'],
+            'fg_alive_at': saved['fg_alive_at'],
+          },
+        ));
+      }
+
+      // Fallback tick iz main isolate-a — sve dok proces živi tracking ne
+      // zamre potpuno iako je BG izolat mrtav.
+      unawaited(_fgTick());
+    } catch (e) {
+      debugPrint('$_tag BG supervisor greška: $e');
+    }
+  }
+
+  // ── Remote breadcrumbs (v3_tracking_debug) ───────────────────────────
+
+  static const MethodChannel _wakelockChannel = MethodChannel(AppPlatform.wakelockChannel);
+
+  Future<bool> _isIgnoringBatteryOptimizations() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _wakelockChannel.invokeMethod<bool>(
+            AppPlatform.methodIsIgnoringBatteryOptimizations,
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _logTrackingStart(String source) async {
+    try {
+      final whitelisted = await _isIgnoringBatteryOptimizations();
+      await v3LogTrackingEvent(
+        event: 'tracking_start',
+        vozacId: _vozacId,
+        detail: <String, dynamic>{
+          'source': source,
+          'grad': _grad,
+          'vreme': _vreme,
+          'datum': _datumIso,
+          'battery_whitelisted': whitelisted,
+          'sdk': _androidSdkInt,
+        },
+      );
+    } catch (_) {}
   }
 
   Future<({Map<String, int> etaMap, List<String> order, String? reason})> _runTick() async {
@@ -612,6 +767,16 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
     }
     if (!_isRunning) return;
 
+    // Breadcrumb — iz baze se vidi da li je app ikad dobio paused/hidden
+    // (ako ne, FGS ruke su bile vezane a "lock" zapravo nije suspendovao app).
+    if (state != _lastLoggedLifecycle) {
+      _lastLoggedLifecycle = state;
+      unawaited(v3LogTrackingEvent(
+        event: 'lifecycle_${state.name}',
+        vozacId: _vozacId,
+      ));
+    }
+
     switch (state) {
       case AppLifecycleState.inactive:
         // Kratki UI prekidi — ne diraj engine.
@@ -706,12 +871,24 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
         debugPrint('$_tag startService greška (attempt ${attempt + 1}): $e');
       }
       for (var i = 0; i < 10; i++) {
-        if (await service.isRunning()) return true;
+        if (await service.isRunning()) {
+          unawaited(v3LogTrackingEvent(
+            event: 'fgs_start_ok',
+            vozacId: _vozacId,
+            detail: <String, dynamic>{'attempt': attempt + 1, 'fg': _isAppInForeground},
+          ));
+          return true;
+        }
         await Future<void>.delayed(const Duration(milliseconds: 200));
       }
       debugPrint('$_tag BG service nije podignut (attempt ${attempt + 1})');
     }
     debugPrint('$_tag BG service se nije podigao nakon 2 pokušaja');
+    unawaited(v3LogTrackingEvent(
+      event: 'fgs_start_fail',
+      vozacId: _vozacId,
+      detail: <String, dynamic>{'fg': _isAppInForeground},
+    ));
     return false;
   }
 
@@ -725,7 +902,20 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       if (!await service.isRunning()) {
         // Na API 31+ startService iz pozadine baca izuzetak — servis se
         // podiže na sledećem resume-u; sesija je već u prefs.
-        if (!_isAppInForeground && !await _canStartFgsFromBackground()) return;
+        if (!_isAppInForeground && !await _canStartFgsFromBackground()) {
+          // Throttle — supervisor ovo zove na svaki re-handoff (~minut).
+          final now = DateTime.now();
+          if (_lastBgBlockedLogAt == null ||
+              now.difference(_lastBgBlockedLogAt!) >= _stallBreadcrumbCooldown) {
+            _lastBgBlockedLogAt = now;
+            unawaited(v3LogTrackingEvent(
+              event: 'fgs_bg_blocked',
+              vozacId: _vozacId,
+              detail: <String, dynamic>{'sdk': _androidSdkInt},
+            ));
+          }
+          return;
+        }
         if (!await _startBgServiceVerified()) return;
       }
 

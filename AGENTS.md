@@ -347,6 +347,47 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
   `startTracking` (+self-heal `maybeResumeTicks` restart), gasi u
   `stopTracking`/`pauseTicks` (u pauzi main preuzima tickove — drzanje
   bi samo trosilo GPS). flutter analyze: 0 issues.
+- `20261126000000_v3_tracking_debug.sql` = remote breadcrumb tabela
+  `public.v3_tracking_debug` (id, v3_auth_id, event, detail jsonb,
+  created_at; "Allow all" RLS anon+authenticated; indexi created_at i
+  (v3_auth_id, created_at desc)). `cleanup_eta_results` pg_cron job
+  prosiren — brise i redove starije od 7 dana. Primenjeno docker exec
+  psql + schema_migrations insert + NOTIFY pgrst.
+- App-side (isti commit, 2026-11-26 — BG izolat nije izvrsavao NULA
+  tickova sa zakljucanim ekranom; keep-alive fix pokriva samo ziv ticker).
+  Dokaz iz Kong loga: tokom 24-min vožnje nema NI allDone SELECT-a
+  (ide pre GPS-a u svakom ticku) — FGS ticker jednostavno ne postoji, a
+  stall watchdog push revive ne proizvede tickove (API 31+
+  ForegroundServiceStartNotAllowedException iz WatchdogReceiver-a).
+  - `v3LogTrackingEvent` + `v3SetBgSessionField` u v3_tracking_config —
+    best-effort insert u v3_tracking_debug (5s timeout, bez klijenta
+    preskace) + upis jednog polja u session prefs (load→set→save).
+  - BG isolate: `ensureSupabase` dobija timeout-e (initializeBasic 15s,
+    Supabase.initialize 20s) — zaglavljen init bi držao tickInFlight
+    zauvek; health stampovi u session prefs: `bg_booted_at` (onStart),
+    `bg_tracking_start_at` (startTracking), `bg_tick_at` (svaki ~10s iz
+    doTick), `bg_last_error` (no_credentials/supabase_init), `bg_supabase_ok`;
+    `bg_stop`/`bg_supabase_ok` eventi u v3_tracking_debug.
+  - Main isolate: `_startBgSupervisor` — Timer.periodic(15s) dok je app
+    u pozadini; `bg_tick_at` zastareo >45s (ili nikad upisan, grace od
+    boot/start markera) = stall → re-handoff `_startBg()` (max 1/60s;
+    zivi FGS dobija novi ticker kroz startTracking re-invoke) + fallback
+    `_fgTick()` iz main isolate-a svaki ciklus (proces ionako budan —
+    keep-alive stream u main-u drzi GNSS topao) + `bg_stall` event sa
+    svim markerima (throttle 3min). `bg_last_error` iz prefs se
+    prosledjuje kao `bg_error` event pri promeni.
+  - `v3StartPositionKeepAlive` sada i u MAIN isolate-u (Android) dok
+    tracking radi — pokriva slucaj kad app ostane "resumed" preko
+    lockscreena (FG ticker tada ima topao fix) i fallback tickove
+    supervisor-a; gasi se u stop().
+  - Breadcrumbs u main: `tracking_start` (source=start/restore +
+    battery_whitelisted iz native `isIgnoringBatteryOptimizations` na
+    wakelock channelu + sdk), `tracking_stop` (session key),
+    `lifecycle_<state>` dok tracking radi, `fgs_start_ok`/`fgs_start_fail`
+    (iz _startBgServiceVerified), `fgs_bg_blocked` (API 31+ start iz
+    pozadine zabranjen — throttle 3min). main.dart: `fcm_revive` sa
+    result=no_session/paused/invoked/started/fail u
+    _reviveBackgroundTrackingService. flutter analyze: 0 issues.
 
 ## Release (GitHub Actions)
 
