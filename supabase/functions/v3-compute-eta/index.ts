@@ -38,6 +38,10 @@ const OSRM_BASE_DELAY_MS = 1000;
 const OSRM_REQUEST_TIMEOUT_MS = 12000;
 /// OSRM /trip endpoint po default-u odbija vise od 100 waypoint-a
 const OSRM_MAX_WAYPOINTS = 100;
+/// Minimalni razmak između dva OSRM /trip compute-a za istog vozača —
+/// između njih tick ide "cheap path": eta redovi se jeftino osveže
+/// (preostali travel + svez standstill) bez reoptimizacije rute.
+const OSRM_MIN_INTERVAL_MS = 30 * 1000;
 
 type ComputeEtaPayload = {
   vozac_id?: string;
@@ -113,6 +117,8 @@ function etaRowsFromFixedOrder(
   putnik_id: string;
   vozac_id: string;
   eta_seconds: number;
+  travel_seconds: number;
+  route_at: string;
   computed_at: string;
 }> | null {
   const upsertRows: Array<{
@@ -121,6 +127,8 @@ function etaRowsFromFixedOrder(
     putnik_id: string;
     vozac_id: string;
     eta_seconds: number;
+    travel_seconds: number;
+    route_at: string;
     computed_at: string;
   }> = [];
   let cumulative = 0;
@@ -138,6 +146,10 @@ function etaRowsFromFixedOrder(
       termin_id: ordered[i].termin_id,
       putnik_id: ordered[i].putnik_id,
       vozac_id: ctx.vozacId,
+      // travel_seconds = sirovi OSRM (route_at anchor); eta_seconds =
+      // izvedena travel+standstill — kompatibilno sa starim citaocima.
+      travel_seconds: cumulative,
+      route_at: ctx.now,
       eta_seconds: cumulative + (ctx.standstillSeconds ?? 0),
       computed_at: ctx.now,
     });
@@ -670,7 +682,7 @@ Deno.serve(async (req) => {
     const remainingPutnikIds = new Set<string>(remaining.map((p) => p.putnik_id));
     const { data: existingEtaRows } = await client
       .from("v3_eta_results")
-      .select("putnik_id, optimized_order")
+      .select("slot_id, termin_id, putnik_id, eta_seconds, travel_seconds, route_at, optimized_order")
       .in("slot_id", matchingSlotIds)
       .eq("vozac_id", vozacId);
     const toDelete = (existingEtaRows ?? [])
@@ -683,7 +695,80 @@ Deno.serve(async (req) => {
         .in("putnik_id", toDelete);
     }
 
-    // 3. ETA: OSRM /trip na svaki tick — reoptimizacija preostalih putnika.
+    // 3. Cheap path: isti set putnika + svezi route_at → preskoči OSRM /trip.
+    //    eta_seconds = preostali travel (travel_seconds - routeAge) + svez
+    //    standstill; computed_at = now, pa putnicki countdown radi identično.
+    //    OSRM se poziva max jednom u OSRM_MIN_INTERVAL_MS ili čim se set
+    //    putnika promeni (pokupljenje/otkazivanje → nova ruta).
+    const survivingRows = (existingEtaRows ?? []).filter(
+      (r: any) => remainingPutnikIds.has(String(r?.putnik_id ?? "")),
+    );
+    const routeReady = survivingRows.length > 0 && survivingRows.every(
+      (r: any) => r.travel_seconds != null && r.route_at != null,
+    );
+    if (routeReady) {
+      const rowPutnikIds = new Set(survivingRows.map((r: any) => String(r.putnik_id)));
+      const samePassengers =
+        rowPutnikIds.size === remainingPutnikIds.size &&
+        [...remainingPutnikIds].every((id) => rowPutnikIds.has(id));
+      const routeAtMs = Math.max(
+        ...survivingRows
+          .map((r: any) => Date.parse(String(r.route_at)))
+          .filter((ms: number) => Number.isFinite(ms)),
+      );
+      const routeAgeMs = Number.isFinite(routeAtMs) ? Math.max(0, Date.now() - routeAtMs) : Infinity;
+      if (samePassengers && routeAgeMs <= OSRM_MIN_INTERVAL_MS) {
+        // termin_id iz `remaining` (prvi termin tog putnika) — drži cache
+        // ključ termin:putnik svežim i bez OSRM poziva.
+        const firstTerminByPutnik = new Map<string, string>();
+        for (const p of remaining) {
+          if (!firstTerminByPutnik.has(p.putnik_id)) firstTerminByPutnik.set(p.putnik_id, p.termin_id);
+        }
+        const nowCheap = new Date().toISOString();
+        const cheapRows = survivingRows.map((r: any) => {
+          const putnikId = String(r.putnik_id);
+          const travelRemaining = Math.max(
+            0,
+            Math.round(Number(r.travel_seconds) - routeAgeMs / 1000),
+          );
+          return {
+            slot_id: String(r.slot_id),
+            termin_id: firstTerminByPutnik.get(putnikId) ?? String(r.termin_id),
+            putnik_id: putnikId,
+            vozac_id: vozacId,
+            travel_seconds: Number(r.travel_seconds),
+            route_at: String(r.route_at),
+            eta_seconds: travelRemaining + standstillPenalty,
+            computed_at: nowCheap,
+            optimized_order: Array.isArray(r.optimized_order) ? r.optimized_order : [],
+          };
+        });
+        const { error: cheapError } = await client
+          .from("v3_eta_results")
+          .upsert(cheapRows, { onConflict: "slot_id,putnik_id" });
+        if (!cheapError) {
+          const order = Array.isArray(survivingRows[0]?.optimized_order)
+            ? survivingRows[0].optimized_order
+            : [];
+          console.log(
+            `[v3-compute-eta] cheap tick vozac=${vozacId.slice(0, 8)} rows=${cheapRows.length} routeAge=${Math.round(routeAgeMs / 1000)}s`,
+          );
+          return json(200, {
+            ok: true,
+            updated: cheapRows.length,
+            eta_results: cheapRows.map((r: any) => ({
+              termin_id: r.termin_id,
+              putnik_id: r.putnik_id,
+              eta_seconds: r.eta_seconds,
+            })),
+            optimized_order: order,
+          });
+        }
+        console.warn(`[v3-compute-eta] cheap upsert error: ${cheapError.message} — OSRM fallback`);
+      }
+    }
+
+    // 4. ETA: OSRM /trip — reoptimizacija preostalih putnika (max 1/30s).
     const destLat = activeGrad === "BC" ? 45.118736452002345 : 44.90281796231954;
     const destLng = activeGrad === "BC" ? 21.301195520159723 : 21.424364904529384;
 
@@ -740,7 +825,10 @@ Deno.serve(async (req) => {
       putnik_id: string;
       vozac_id: string;
       eta_seconds: number;
+      travel_seconds: number;
+      route_at: string;
       computed_at: string;
+      optimized_order?: unknown;
     }> = [];
 
     const rawWaypoints = osrmData.waypoints;
@@ -798,7 +886,7 @@ Deno.serve(async (req) => {
       return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "no_eta_rows");
     }
 
-    // 4. Upsert v3_eta_results — koristi slot_id za conflict resolution
+    // 5. Upsert v3_eta_results — koristi slot_id za conflict resolution
     // optimized_order = putnik_id[] (usklađeno sa Flutter sort po putnik.id)
     const optimizedOrder = upsertRows.map((r) => r.putnik_id);
     const upsertRowsWithOrder = upsertRows.map((r) => ({ ...r, optimized_order: optimizedOrder }));

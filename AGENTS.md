@@ -439,6 +439,30 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     ticker) ili privremeno u BG stall fallback-u; gasi se cim BG tick
     postane sveze (`_bgSupervise`). BG FGS isolate i dalje ima svoj
     keep-alive — nema vise dva GNSS stream-a istovremeno.
+- `20261127000002_eta_route_cache.sql` + edge (isti commit, 2026-11-27 —
+  OSRM vise ne ide na svaki 5s tick):
+  - Nove kolone `v3_eta_results.travel_seconds` (kumulativni OSRM travel
+    BEZ standstill, u trenutku `route_at`) i `route_at` (poslednji uspesni
+    OSRM compute). `eta_seconds` ostaje izvedena = preostali travel +
+    standstill, `computed_at` = svaki upis — putnicki countdown i
+    `V3VremeDolaskaWidget` rade IDENTICNO, bez app izmena.
+  - `v3-compute-eta` cheap path: ako je set preostalih putnika isti,
+    `route_at` mlaci od `OSRM_MIN_INTERVAL_MS` (30s) i svi redovi imaju
+    travel/route podatke → preskace /trip i radi jeftini upsert
+    (`eta_seconds = max(0, travel_seconds - routeAge) + standstill`,
+    `computed_at = now`, `optimized_order` prosledjen nepromenjen).
+    OSRM se poziva max 1/30s po vozacu ILI cim se set putnika promeni
+    (pokupljenje/otkazivanje → nova ruta). Prvi tick posle deploy-a puni
+    kolone (stari redovi imaju NULL → automatski full OSRM path).
+  - Standstill se i dalje racuna server-side na SVAKI tick (u
+    `computeAndPersistStandstill`, pre cheap/OSRM grananja) — kazna je
+    svezha i na cheap tickovima.
+  - Poznato degradiranje (nije regresija): ako na format-duplikatu slota
+    postoji "sirotic" eta red BEZ travel_seconds/route_at (nastao pre
+    migracije na neaktivnom duplikatu), routeReady guard drzi taj vozac
+    na full OSRM path-u do kraja voznje — ponasanje kao pre izmene.
+  - Migracija primenjena docker exec psql + schema_migrations insert +
+    NOTIFY pgrst. Edge smoke-test: invalid_payload OK (modul se ucitava).
 
 ## Release (GitHub Actions)
 
