@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../utils/v3_belgrade_time.dart';
-import '../../utils/v3_status_policy.dart';
 import '../realtime/v3_master_realtime_manager.dart';
 
 /// Auto-start koliko pre polaska (T-15). Uskladiti sa `v3-auto-prepare-termins`.
@@ -527,153 +526,23 @@ Future<bool> v3AllPassengersCompleted({
     if (cached != null) return cached;
   } catch (_) {}
 
+  // RPC umesto 3 sekvencijalna REST upita (slot → dodela → operativna) —
+  // ista semantika u fn_v3_tracking_done (migracija 20261127000001).
+  // Timeout: zaglavljen poziv (half-open TCP) ne sme da drži tickInFlight
+  // zauvek. `false` = "ne dokazuje kraj" = tracking nastavlja.
   try {
-    // Timeout: zaglavljen REST poziv (half-open TCP pri prelasku mreže) bi bez
-    // njega držao tickInFlight zauvek — tracking bi se tiho smrzao. `false`
-    // = "ne dokazuje kraj" = tracking nastavlja (isti fail-safe kao catch).
-    return await _v3AllPassengersCompletedDb(
-      client: client,
-      vozacId: id,
-      datumIso: datumIso,
-      grad: grad,
-      vreme: vreme,
-    ).timeout(const Duration(seconds: 20), onTimeout: () {
-      debugPrint('[v3AllPassengersCompleted] DB timeout — ne dokazuje kraj');
-      return false;
-    });
+    final res = await client
+        .rpc('fn_v3_tracking_done', params: <String, dynamic>{
+          'p_datum': datumIso,
+          'p_grad': grad,
+          'p_vreme': vreme,
+          'p_vozac_id': id,
+        })
+        .timeout(const Duration(seconds: 20));
+    return res == true;
   } catch (e) {
     debugPrint('[v3AllPassengersCompleted] greška: $e');
     return false;
-  }
-}
-
-/// DB deo [v3AllPassengersCompleted] — poziva se pod timeout-om.
-Future<bool> _v3AllPassengersCompletedDb({
-  required SupabaseClient client,
-  required String vozacId,
-  required String datumIso,
-  required String grad,
-  required String vreme,
-}) async {
-  final id = vozacId.trim();
-  try {
-    // Isto kao edge: datum+grad, pa match HH:mm (DB može biti 07:00 ili
-    // 07:00:00). Svih fizičkih duplikata — dodele mogu biti na bilo kom.
-    final slotRows = await client
-        .from('v3_trenutna_dodela_slot')
-        .select('id, vreme, vozac_v3_auth_id')
-        .eq('datum', datumIso)
-        .eq('grad', grad);
-
-    final wantVreme = V3BelgradeTime.normalizeToHHmm(vreme);
-    final matchingSlots = <Map<String, dynamic>>[];
-    for (final raw in (slotRows as List<dynamic>? ?? const [])) {
-      if (raw is! Map) continue;
-      final row = Map<String, dynamic>.from(raw);
-      if (V3BelgradeTime.normalizeToHHmm(row['vreme']?.toString()) == wantVreme) {
-        matchingSlots.add(row);
-      }
-    }
-    if (matchingSlots.isEmpty) return false;
-
-    final slotIds = matchingSlots
-        .map((s) => s['id']?.toString() ?? '')
-        .where((sid) => sid.isNotEmpty)
-        .toList();
-    if (slotIds.isEmpty) return false;
-
-    final dodelaRows = await client
-        .from('v3_trenutna_dodela')
-        .select('termin_id, vozac_v3_auth_id')
-        .inFilter('slot_id', slotIds);
-
-    final slotTerminIds = <String>{};
-    for (final raw in (dodelaRows as List<dynamic>? ?? const [])) {
-      if (raw is! Map) continue;
-      final row = Map<String, dynamic>.from(raw);
-      final tid = row['termin_id']?.toString() ?? '';
-      if (tid.isEmpty) continue;
-      if ((row['vozac_v3_auth_id']?.toString() ?? '').trim() == id) {
-        slotTerminIds.add(tid);
-      }
-    }
-
-    if (slotTerminIds.isEmpty) {
-      // Prazna dodela ≠ svi gotovi: dodele mogu kasniti (auto-prepare race u
-      // T-15 prozoru). Gasi samo kad tracking nema šta da radi:
-      //  - nijedan fizički slot nije dodeljen ovom vozaču (transfer), ili
-      //  - termin nema aktivnih putnika.
-      // Inače bi stop → auto-start → stop pravilo petlju.
-      final slotIsMine = matchingSlots
-          .any((s) => (s['vozac_v3_auth_id']?.toString() ?? '').trim() == id);
-      if (!slotIsMine) return true;
-      return !(await _v3TerminHasActivePassengers(
-        client: client,
-        datumIso: datumIso,
-        grad: grad,
-        wantVreme: wantVreme,
-      ));
-    }
-
-    final rows = await client
-        .from('v3_operativna_nedelja')
-        .select('id, pokupljen_at, otkazano_at')
-        .inFilter('id', slotTerminIds.toList());
-
-    if (rows.isEmpty) return false;
-
-    for (final row in rows) {
-      final pokupljen = V3StatusPolicy.isTimestampSet(row['pokupljen_at']);
-      final otkazan = V3StatusPolicy.isTimestampSet(row['otkazano_at']);
-      if (!pokupljen && !otkazan) return false;
-    }
-    return true;
-  } catch (e) {
-    debugPrint('[v3AllPassengersCompleted] greška: $e');
-    return false;
-  }
-}
-
-/// Ima li termin (datum+grad+vreme) bar jednog aktivnog putnika — isti
-/// kriterijum kao `V3VozacScreen._terminHasActivePassengers`, ali direktno
-/// iz baze (BG isolate nema realtime cache). Jedan vozač po slotu — svi
-/// aktivni putnici termina pripadaju vozaču slota.
-Future<bool> _v3TerminHasActivePassengers({
-  required SupabaseClient client,
-  required String datumIso,
-  required String grad,
-  required String wantVreme,
-}) async {
-  try {
-    // `status` ne postoji na operativna_nedelja — select sa njom pada (400) i
-    // pogrešno "dokazuje" da putnika nema. Aktivnost = nije pokupljen/otkazan.
-    // Server-side datum filter: bez njega upit vuče celu nedelju za grad i
-    // PostgREST max_rows=1000 može tiho odseći redove baš ovog termina.
-    final rows = await client
-        .from('v3_operativna_nedelja')
-        .select('id, datum, polazak_at, pokupljen_at, otkazano_at')
-        .eq('grad', grad)
-        .eq('datum', datumIso);
-
-    for (final raw in (rows as List<dynamic>? ?? const [])) {
-      if (raw is! Map) continue;
-      final row = Map<String, dynamic>.from(raw);
-      if (V3BelgradeTime.parseIsoDatePart(row['datum']?.toString() ?? '') != datumIso) continue;
-      if (V3BelgradeTime.normalizeToHHmm(row['polazak_at']?.toString()) != wantVreme) continue;
-      final terminId = row['id']?.toString() ?? '';
-      if (terminId.isEmpty) continue;
-      final active = V3StatusPolicy.canAssign(
-        otkazanoAt: row['otkazano_at'],
-        pokupljenAt: row['pokupljen_at'],
-      );
-      if (active) return true;
-    }
-    return false;
-  } catch (e) {
-    // Fail-safe: greška u proveri ne sme da "dokaže" prazan termin — pozivalac
-    // negira rezultat u allDone pa bi tracking pogrešno stao (lock/BG kill).
-    debugPrint('[_v3TerminHasActivePassengers] greška: $e');
-    return true;
   }
 }
 

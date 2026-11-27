@@ -410,6 +410,16 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     nije vozacev). Klijent broji `_stopStrikes`/`stopStrikes` (12 ticks
     ≈ 60s); `no_active_slot` i dalje samo posle polaska. Zadrzano na:
     resume (`_onResumed`) i iOS BG fetch.
+  - `20261127000001_tracking_done_rpc.sql` = `fn_v3_tracking_done(date,
+    text, text, uuid)` — "svi putnici gotovi?" kao JEDAN RPC umesto 3
+    sekvencijalna REST upita (slot→dodela→operativna) koje je radio
+    `v3AllPassengersCompleted` DB fallback. Ista semantika (nema slota→
+    false; prazan dodela: tudji slot→true, moj+bez aktivnih→true, moj+
+    aktivni→false; svi termin-i pokupljeni/otkazani→true; sve greske→
+    false). `v3AllPassengersCompleted` zadrzava realtime-cache proveru
+    pa RPC; `_v3AllPassengersCompletedDb` i `_v3TerminHasActivePassengers`
+    obrisani (~130 linija Dart koda). GRANT anon+authenticated;
+    verifikovano kroz PostgREST sa anon kljucem.
   - `V3TrackingSession` u v3_tracking_config — jedini toMap/tryParse
     format session prefs + 'startTracking' invoke payload-a (bilo 4
     rucna parsera); BG isolate sad drzi `session` objekat umesto 6
