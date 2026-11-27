@@ -388,6 +388,33 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     pozadine zabranjen — throttle 3min). main.dart: `fcm_revive` sa
     result=no_session/paused/invoked/started/fail u
     _reviveBackgroundTrackingService. flutter analyze: 0 issues.
+- `20261127000000_standstill_server_side.sql` + app/edge (isti commit,
+  2026-11-27 — uklanjanje overengineeringsa u trackingu):
+  - Standstill (ETA penalty) vise NE putuje kroz SharedPreferences
+    session payload izmedju FG/BG isolate-a — akumulira se SERVER-SIDE u
+    novim kolonama `v3_vozac_location.standstill_seconds /
+    standstill_tick_at / standstill_prev_lat / standstill_prev_lng`.
+    `v3-compute-eta` racuna ga u `computeAndPersistStandstill` (speed
+    <3.6km/h primarno, distance<15m fallback, elapsed clamp 30s, cap
+    20min, samo posle polaska — Belgrade vreme preko Intl). Uklonjeni:
+    `_standstillSeconds` globali + `v3Get/SetStandstillSeconds`,
+    `persistStandstillSeconds`, `standstill_seconds` u session payload-u
+    i requestBody-u. Stari app buildovi automatski dobijaju server-side
+    kaznu (edge ignorise payload polje). Migracija primenjena docker
+    exec psql + schema_migrations insert + NOTIFY pgrst.
+  - `v3AllPassengersCompleted` vise NE ide na svaki tick (bio do 3
+    sekvencijalna REST poziva kroz Funnel po tick-u, u BG uvek DB
+    fallback) — edge vraca terminalne razloge: `no_remaining_passengers`
+    (vec postojao), `no_active_passengers` (dodela prazna + nema
+    aktivnih redova na tom polazak_vremenu) i `slot_not_owner` (slot
+    nije vozacev). Klijent broji `_stopStrikes`/`stopStrikes` (12 ticks
+    ≈ 60s); `no_active_slot` i dalje samo posle polaska. Zadrzano na:
+    resume (`_onResumed`) i iOS BG fetch.
+  - `V3TrackingSession` u v3_tracking_config — jedini toMap/tryParse
+    format session prefs + 'startTracking' invoke payload-a (bilo 4
+    rucna parsera); BG isolate sad drzi `session` objekat umesto 6
+    scalar polja. `bg_*` dijagnosticka polja ostaju sirovi map.
+  - flutter analyze: 0 issues. Edge smoke-test: invalid_payload OK.
 
 ## Release (GitHub Actions)
 

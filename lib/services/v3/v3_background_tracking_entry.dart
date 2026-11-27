@@ -19,29 +19,12 @@ Future<void> onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   V3BelgradeTime.location;
 
-  String? vozacId;
-  String? datumIso;
-  String? grad;
-  String? vreme;
-  DateTime? startedAt;
-  DateTime? polazakAt;
-  int noSlotStrikes = 0;
-  int lastPersistedStandstill = -1;
+  int stopStrikes = 0;
   bool tickInFlight = false;
   int prefsCheckCounter = 0;
   DateTime? lastTickStamp;
   String? lastBgError;
-
-  /// Upisuje akumuliranu standstill kaznu u session prefs — main isolate je
-  /// usvaja na BG→FG prelazu (vidi _pauseBgTicks), bez staleness-a.
-  Future<void> persistStandstillSeconds() async {
-    try {
-      final saved = await v3LoadBgTrackingSession();
-      if (saved == null) return;
-      saved['standstill_seconds'] = v3GetStandstillSeconds();
-      await v3SaveBgTrackingSession(saved);
-    } catch (_) {}
-  }
+  V3TrackingSession? session;
   V3SelfReschedulingTicker? ticker;
   Timer? expiryWatchdog;
   SupabaseClient? client;
@@ -76,7 +59,7 @@ Future<void> onStart(ServiceInstance service) async {
       await Supabase.initialize(url: url, anonKey: anonKey).timeout(const Duration(seconds: 20));
       client = Supabase.instance.client;
       unawaited(v3SetBgSessionField('bg_supabase_ok', true));
-      unawaited(v3LogTrackingEvent(event: 'bg_supabase_ok', vozacId: vozacId, client: client));
+      unawaited(v3LogTrackingEvent(event: 'bg_supabase_ok', vozacId: session?.vozacId, client: client));
     } catch (e) {
       debugPrint('[BG_TRACKING] Supabase init greška: $e');
       bgErrorOnce('supabase_init:$e');
@@ -90,18 +73,12 @@ Future<void> onStart(ServiceInstance service) async {
     v3StopPositionKeepAlive(logTag: '[BG_TRACKING]');
     expiryWatchdog?.cancel();
     expiryWatchdog = null;
-    vozacId = null;
-    datumIso = null;
-    grad = null;
-    vreme = null;
-    startedAt = null;
-    polazakAt = null;
-    noSlotStrikes = 0;
+    session = null;
+    stopStrikes = 0;
     prefsCheckCounter = 0;
     // Ako je prethodni tick zaglavio (half-open TCP), flag bi preživeo
     // stop/start i onemogućio svaki sledeći doTick zauvek.
     tickInFlight = false;
-    v3SetStandstillSeconds(0);
   }
 
   void pauseTicks() {
@@ -110,7 +87,6 @@ Future<void> onStart(ServiceInstance service) async {
     // Pauza = main preuzeo tickove — stream u BG isolate-u tada samo
     // prazn drži GNSS budnim.
     v3StopPositionKeepAlive(logTag: '[BG_TRACKING]');
-    unawaited(persistStandstillSeconds());
     debugPrint('[BG_TRACKING] pauseTicks');
   }
 
@@ -118,7 +94,7 @@ Future<void> onStart(ServiceInstance service) async {
     debugPrint('[BG_TRACKING] stop reason=$reason');
     unawaited(v3LogTrackingEvent(
       event: 'bg_stop',
-      vozacId: vozacId,
+      vozacId: session?.vozacId,
       client: client,
       detail: <String, dynamic>{'reason': reason},
     ));
@@ -133,7 +109,8 @@ Future<void> onStart(ServiceInstance service) async {
   }
 
   Future<void> doTick() async {
-    if (vozacId == null || datumIso == null || grad == null || vreme == null) return;
+    final s = session;
+    if (s == null) return;
     // Ticker zakazuje sledeci tick i kad prethodni timeout-uje (ne otkazuje ga)
     // — bez ovog guard-a bi 90s+ zaglavljen tick pravio paralelne upise.
     if (tickInFlight) return;
@@ -161,8 +138,8 @@ Future<void> onStart(ServiceInstance service) async {
         }
       }
 
-      if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
-        finishAndStop('timeout polazak=$polazakAt');
+      if (v3TrackingTimedOut(startedAt: s.startedAt, polazakAt: s.polazakAt)) {
+        finishAndStop('timeout polazak=${s.polazakAt}');
         return;
       }
 
@@ -180,52 +157,40 @@ Future<void> onStart(ServiceInstance service) async {
       if (client == null) return;
 
       try {
-        // allDone pre tick-a (kao FG): jeftinije, bez suvišnog compute-eta.
-        final allDone = await v3AllPassengersCompleted(
-        client: client!,
-        vozacId: vozacId!,
-        datumIso: datumIso!,
-        grad: grad!,
-        vreme: vreme!,
-      );
-      if (allDone) {
-        finishAndStop('all_passengers_completed');
-        return;
-      }
+        // Kao FG: compute-eta (OSRM reoptimizacija) na svaki tick.
+        final result = await v3RunTrackingTick(
+          client: client!,
+          vozacId: s.vozacId,
+          grad: s.grad,
+          vreme: s.vreme,
+          datumIso: s.datumIso,
+          logTag: '[BG_TRACKING]',
+        );
 
-      // Kao FG: compute-eta (OSRM reoptimizacija) na svaki tick.
-      final result = await v3RunTrackingTick(
-        client: client!,
-        vozacId: vozacId!,
-        grad: grad!,
-        vreme: vreme!,
-        datumIso: datumIso!,
-        logTag: '[BG_TRACKING]',
-      );
-
-      // Isti guard kao FG: slot obrisan u hodu → no_active_slot zauvek.
-      // Strikes se broje tek od polazka (pre toga auto-prepare može kasniti);
-      // 12 strikes ≈ ~60s konzistentnog odgovora (compute-eta na svaki tick).
-      final postDeparture = polazakAt == null || !V3BelgradeTime.now().isBefore(polazakAt!);
-      if (result.reason == 'no_active_slot' && postDeparture) {
-        noSlotStrikes++;
-        if (noSlotStrikes >= 12) {
-          finishAndStop('no_active_slot');
-          return;
+        // Isti guard kao FG: terminalni razlozi iz edge odgovora.
+        // no_active_slot se broji tek od polazka (pre toga auto-prepare
+        // moze kasniti); ostali razlozi su stabilna stanja i broj se
+        // i pre polaska (kao raniji allDone). 12 strikes ≈ ~60s.
+        final postDeparture = s.polazakAt == null || !V3BelgradeTime.now().isBefore(s.polazakAt!);
+        final terminal = switch (result.reason) {
+          'no_active_slot' => postDeparture,
+          'no_remaining_passengers' ||
+          'no_active_passengers' ||
+          'slot_not_owner' =>
+            true,
+          _ => false,
+        };
+        if (terminal) {
+          stopStrikes++;
+          if (stopStrikes >= 12) {
+            finishAndStop(result.reason ?? 'terminal');
+            return;
+          }
+        } else {
+          stopStrikes = 0;
         }
-      } else {
-        noSlotStrikes = 0;
-      }
       } catch (e) {
         debugPrint('[BG_TRACKING] tick greška: $e');
-      }
-
-      // Persist samo kad se kazna promenila (stajanje → svaki tick ~5s,
-      // mala prefs vrednost; u pokretu → jedan write na reset u 0).
-      final ss = v3GetStandstillSeconds();
-      if (ss != lastPersistedStandstill) {
-        lastPersistedStandstill = ss;
-        unawaited(persistStandstillSeconds());
       }
     } finally {
       tickInFlight = false;
@@ -236,7 +201,7 @@ Future<void> onStart(ServiceInstance service) async {
   /// kažu da tickovi treba da rade — restartuje ticker. Zove ga watchdog
   /// (svakih 60s), pa najviše ~1min izgubljenih tickova.
   Future<void> maybeResumeTicks() async {
-    if (ticker != null || vozacId == null) return;
+    if (ticker != null || session == null) return;
     try {
       final saved = await v3LoadBgTrackingSession();
       if (saved == null) {
@@ -269,31 +234,13 @@ Future<void> onStart(ServiceInstance service) async {
     }
   }
 
-  void startTracking(Map<String, dynamic>? args) {
-    final m = args ?? <String, dynamic>{};
-    final id = (m['vozac_id']?.toString() ?? '').trim();
-    final datum = V3BelgradeTime.parseIsoDatePart(m['datum_iso']?.toString() ?? '');
-    final g = (m['grad']?.toString() ?? '').trim().toUpperCase();
-    final v = V3BelgradeTime.normalizeToHHmm(m['vreme']?.toString() ?? '');
-
-    if (id.isEmpty || datum.isEmpty || g.isEmpty || v.isEmpty) {
-      debugPrint('[BG_TRACKING] start preskočen: nedostaju podaci');
-      return;
-    }
-
-    vozacId = id;
-    datumIso = datum;
-    grad = g;
-    vreme = v;
-    noSlotStrikes = 0;
+  void startTracking(V3TrackingSession s) {
+    stopStrikes = 0;
     prefsCheckCounter = 0;
     // Novi ticker ne sme naslediti flag zaglavljenog tick-a.
     tickInFlight = false;
-    // Standstill kazna iz FG sesije — BG nastavlja akumulaciju, ne resetuje.
-    v3SetStandstillSeconds((m['standstill_seconds'] as num?)?.toInt() ?? 0);
-    startedAt = V3BelgradeTime.parseTs(m['started_at']?.toString()) ?? V3BelgradeTime.now();
-    polazakAt = V3BelgradeTime.parseTs(m['polazak_at']?.toString()) ?? v3PolazakDateTime(datumIso: datum, vreme: v);
-    debugPrint('[BG_TRACKING] start $g $v polazak=$polazakAt');
+    session = s;
+    debugPrint('[BG_TRACKING] start ${s.grad} ${s.vreme} polazak=${s.polazakAt}');
     // Dokaz da je invoke stigao i engine živ — supervisor ovo čita za
     // grace period (boot + prvi tick mogu potrajati).
     unawaited(v3SetBgSessionField('bg_tracking_start_at', DateTime.now().toUtc().toIso8601String()));
@@ -301,7 +248,7 @@ Future<void> onStart(ServiceInstance service) async {
     // Hard-stop provera i dok su tickovi pauzirani (app u FG ili ugašen) —
     // inače bi FGS + notifikacija stajali bez aktivnog trackinga.
     expiryWatchdog ??= Timer.periodic(const Duration(minutes: 1), (_) {
-      if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
+      if (v3TrackingTimedOut(startedAt: s.startedAt, polazakAt: s.polazakAt)) {
         finishAndStop('timeout_watchdog');
         return;
       }
@@ -309,7 +256,7 @@ Future<void> onStart(ServiceInstance service) async {
       // dropovati — ticker tada ostaje null dok prefs kažu da treba da radi
       // (ticks_paused=false). Bez ovoga tracking ćutke zamre do sledećeg
       // invoke-a ili resume-a. Radi i dok je ticker pauziran (watchdog živi).
-      if (ticker == null && vozacId != null) {
+      if (ticker == null && session != null) {
         unawaited(maybeResumeTicks());
       }
     });
@@ -323,7 +270,8 @@ Future<void> onStart(ServiceInstance service) async {
   }
 
   service.on('startTracking').listen((event) {
-    startTracking(event is Map<String, dynamic> ? event : null);
+    final s = V3TrackingSession.tryParse(event is Map ? event : null);
+    if (s != null) startTracking(s);
   });
   service.on('pauseTicks').listen((_) {
     pauseTicks();
@@ -348,27 +296,22 @@ Future<void> onStart(ServiceInstance service) async {
     unawaited(v3SetBgSessionField('bg_booted_at', DateTime.now().toUtc().toIso8601String()));
 
     // Sesija je mogla isteći dok je ticker bio pauziran (app ugašen u FG).
-    if (v3TrackingTimedOut(
-      startedAt: V3BelgradeTime.parseTs(saved['started_at']?.toString()),
-      polazakAt: V3BelgradeTime.parseTs(saved['polazak_at']?.toString()) ??
-          v3PolazakDateTime(
-            datumIso: V3BelgradeTime.parseIsoDatePart(saved['datum_iso']?.toString() ?? ''),
-            vreme: V3BelgradeTime.normalizeToHHmm(saved['vreme']?.toString() ?? ''),
-          ),
-    )) {
-      debugPrint('[BG_TRACKING] sesija istekla — stopSelf');
+    final savedSession = V3TrackingSession.tryParse(saved);
+    if (savedSession == null ||
+        v3TrackingTimedOut(startedAt: savedSession.startedAt, polazakAt: savedSession.polazakAt)) {
+      debugPrint('[BG_TRACKING] sesija istekla/neispravna — stopSelf');
       unawaited(v3ClearBgTrackingSession());
       service.stopSelf();
       return;
     }
 
-    if (saved['ticks_paused'] == true) {
+    if (savedSession.ticksPaused) {
       // startTracking puni session polja (potrebna expiry watchdog-u), pa pauza.
-      startTracking(saved);
+      startTracking(savedSession);
       pauseTicks();
     } else {
       debugPrint('[BG_TRACKING] resume iz prefs');
-      startTracking(saved);
+      startTracking(savedSession);
     }
   } catch (e) {
     debugPrint('[BG_TRACKING] prefs resume greška: $e');
@@ -387,15 +330,8 @@ Future<bool> onIosBackground(ServiceInstance service) async {
     final saved = await v3LoadBgTrackingSession();
     if (saved == null) return true;
 
-    final id = (saved['vozac_id']?.toString() ?? '').trim();
-    final datum = V3BelgradeTime.parseIsoDatePart(saved['datum_iso']?.toString() ?? '');
-    final g = (saved['grad']?.toString() ?? '').trim().toUpperCase();
-    final v = V3BelgradeTime.normalizeToHHmm(saved['vreme']?.toString() ?? '');
-    if (id.isEmpty || datum.isEmpty || g.isEmpty || v.isEmpty) return true;
-
-    final startedAt = V3BelgradeTime.parseTs(saved['started_at']?.toString());
-    final polazakAt =
-        V3BelgradeTime.parseTs(saved['polazak_at']?.toString()) ?? v3PolazakDateTime(datumIso: datum, vreme: v);
+    final session = V3TrackingSession.tryParse(saved);
+    if (session == null) return true;
 
     Future<void> end(String reason) async {
       debugPrint('[BG_TRACKING_IOS] stop reason=$reason');
@@ -407,7 +343,7 @@ Future<bool> onIosBackground(ServiceInstance service) async {
       }
     }
 
-    if (v3TrackingTimedOut(startedAt: startedAt, polazakAt: polazakAt)) {
+    if (v3TrackingTimedOut(startedAt: session.startedAt, polazakAt: session.polazakAt)) {
       await end('timeout');
       return true;
     }
@@ -427,31 +363,21 @@ Future<bool> onIosBackground(ServiceInstance service) async {
       client = Supabase.instance.client;
     }
 
-    // Standstill kazna iz sesije — bez ovoga bi BG-fetch tick slao 0 i
-    // gubio akumuliranu kaznu iz FG/FGS isolate-a.
-    v3SetStandstillSeconds((saved['standstill_seconds'] as num?)?.toInt() ?? 0);
-
     await v3RunTrackingTick(
       client: client,
-      vozacId: id,
-      grad: g,
-      vreme: v,
-      datumIso: datum,
+      vozacId: session.vozacId,
+      grad: session.grad,
+      vreme: session.vreme,
+      datumIso: session.datumIso,
       logTag: '[BG_TRACKING_IOS]',
     ).timeout(const Duration(seconds: 25));
 
-    // Persist nazad — kazna se nastavlja, ne resetuje na handoff-u.
-    try {
-      saved['standstill_seconds'] = v3GetStandstillSeconds();
-      await v3SaveBgTrackingSession(saved);
-    } catch (_) {}
-
     final allDone = await v3AllPassengersCompleted(
       client: client,
-      vozacId: id,
-      datumIso: datum,
-      grad: g,
-      vreme: v,
+      vozacId: session.vozacId,
+      datumIso: session.datumIso,
+      grad: session.grad,
+      vreme: session.vreme,
     ).timeout(const Duration(seconds: 10), onTimeout: () => false);
 
     if (allDone) {

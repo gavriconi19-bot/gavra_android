@@ -41,11 +41,6 @@ const OSRM_REQUEST_TIMEOUT_MS = 12000;
 /// OSRM /trip endpoint po default-u odbija vise od 100 waypoint-a
 const OSRM_MAX_WAYPOINTS = 100;
 
-/// Cap standstill kazne iz payload-a (usklađeno sa v3StandstillPenaltyCap u
-/// v3_tracking_config.dart). Tracking može ostati upaljen dok vozač pauzira —
-/// bez cap-a ETA bi rastao neograničeno.
-const STANDSTILL_PENALTY_MAX_SECONDS = 20 * 60;
-
 type ComputeEtaPayload = {
   vozac_id?: string;
   grad?: string;
@@ -54,8 +49,6 @@ type ComputeEtaPayload = {
   /** Svež GPS iz istog tick-a (preferiran nad v3_vozac_location). */
   lat?: number | string;
   lng?: number | string;
-  /** Trajanje trenutnog stajanja u sekundama (resetuje se kad vozač krene). */
-  standstill_seconds?: number | string;
 };
 
 type PassengerEntry = {
@@ -293,6 +286,85 @@ async function fillMissingPassengerGps(
   return result;
 }
 
+/// Trenutno vreme u Europe/Belgrade kao "YYYY-MM-DDTHH:mm:ss" — poredi se
+/// leksikografski sa polaskom (obe strane su Belgrade lokalno vreme).
+function belgradeNowString(d: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Belgrade",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
+}
+
+/// Cap standstill kazne (20 min). Tracking može ostati upaljen dok vozač
+/// pauzira — bez cap-a ETA bi rastao neograničeno.
+const STANDSTILL_PENALTY_MAX_SECONDS = 20 * 60;
+
+/// Standstill pragovi — isti kao u ranijoj klijentskoj verziji:
+/// speed < 3.6 km/h primarno, distance < 15m fallback kad speed nije
+/// validan; elapsed po tick-u clamp-ovan na 30s da preskočeni tickovi
+/// (stale/out_of_region) ne "dokažu" stajanje.
+const STANDSTILL_SPEED_KMH = 3.6;
+const STANDSTILL_MOVED_M = 15;
+const STANDSTILL_ELAPSED_CAP_S = 30;
+
+/// Standstill (ETA penalty) se akumulira SERVER-SIDE u kolonama
+/// standstill_* na v3_vozac_location — ranije je brojač putovao kroz
+/// SharedPreferences session payload između FG i BG isolate-a (4 parse
+/// mesta + persist na svaki tick). Edge poziv ide na svaki tick, pa je
+/// ovo prirodno mesto. Zove se pre OSRM poziva da se kazna upiše i kad
+/// kasniji koraci padnu na fallback.
+async function computeAndPersistStandstill(
+  client: ReturnType<typeof createClient>,
+  vozacId: string,
+  lat: number,
+  lng: number,
+  departureReached: boolean,
+): Promise<number> {
+  const nowMs = Date.now();
+  const { data: row } = await client
+    .from("v3_vozac_location")
+    .select("speed_kmh, standstill_seconds, standstill_tick_at, standstill_prev_lat, standstill_prev_lng")
+    .eq("vozac_id", vozacId)
+    .maybeSingle();
+
+  let standstill = 0;
+  if (departureReached && row) {
+    const prevTickMs = row.standstill_tick_at ? Date.parse(String(row.standstill_tick_at)) : NaN;
+    const elapsed = Number.isFinite(prevTickMs)
+      ? Math.min(Math.max((nowMs - prevTickMs) / 1000, 0), STANDSTILL_ELAPSED_CAP_S)
+      : 0;
+    const speed = parseCoord(row.speed_kmh);
+    let standing: boolean;
+    if (speed != null) {
+      standing = speed < STANDSTILL_SPEED_KMH;
+    } else {
+      const plat = parseCoord(row.standstill_prev_lat);
+      const plng = parseCoord(row.standstill_prev_lng);
+      standing = plat != null && plng != null && haversineMeters(lat, lng, plat, plng) < STANDSTILL_MOVED_M;
+    }
+    standstill = standing
+      ? Math.min(Math.round((Number(row.standstill_seconds) || 0) + elapsed), STANDSTILL_PENALTY_MAX_SECONDS)
+      : 0;
+  }
+
+  await client.from("v3_vozac_location").update({
+    standstill_seconds: standstill,
+    standstill_tick_at: new Date(nowMs).toISOString(),
+    standstill_prev_lat: lat,
+    standstill_prev_lng: lng,
+  }).eq("vozac_id", vozacId);
+
+  return standstill;
+}
+
 /// Koliko se payload lat/lng sme razlikovati od sveže tabelske pozicije pre
 /// nego što se proglasi spoof-om — legitimni klijent u istom tick-u upiše
 /// ISTU poziciju u v3_vozac_location, pa je očekivana razlika ~0m.
@@ -476,12 +548,11 @@ Deno.serve(async (req) => {
       return json(200, { ok: false, reason: "not_a_driver" });
     }
 
-    // Standstill kazna: klijent akumulira sekunde stajanja od polaska; ovde se
-    // samo clamp-uje i dodaje ravnomerno na sve eta_seconds (svima kasni isto).
-    const standstillRaw = Number(payload.standstill_seconds);
-    const standstillPenalty = Number.isFinite(standstillRaw) && standstillRaw > 0
-      ? Math.min(Math.round(standstillRaw), STANDSTILL_PENALTY_MAX_SECONDS)
-      : 0;
+    // Standstill kazna se NE čita iz payload-a — akumulira se server-side
+    // u v3_vozac_location (vidi computeAndPersistStandstill), posle provere
+    // da je vozač stvarno krenuo (polazak u Belgrade lokalnom vremenu).
+    const polazakLocal = `${activeDatumIso}T${activeVemme}:00`;
+    const departureReached = belgradeNowString() >= polazakLocal;
 
     // 1. Obriši ETA redove starije od celog tracking prozora (55 min).
     // Poslednja ETA ostaje dostupna putniku i kad vozač ugasi app.
@@ -538,6 +609,17 @@ Deno.serve(async (req) => {
     const driverLat = driverLocation.lat;
     const driverLng = driverLocation.lng;
 
+    // Standstill: akumulacija + persist PRE citanja putnika — upisuje se i
+    // kad OSRM padne na fallback, a stari klijenti (koji jos salju
+    // standstill_seconds u payload-u) dobijaju istu kaznu bez izmene.
+    const standstillPenalty = await computeAndPersistStandstill(
+      client,
+      vozacId,
+      driverLat,
+      driverLng,
+      departureReached,
+    );
+
     const now = new Date().toISOString();
 
     // 2.5. Putnici ovog vozača na slotu (jedan vozač po slotu — filter po
@@ -564,6 +646,29 @@ Deno.serve(async (req) => {
 
     if ((dodelaRows ?? []).length === 0) {
       await client.from("v3_eta_results").delete().in("slot_id", matchingSlotIds).eq("vozac_id", vozacId);
+      // Terminalni razlozi umesto klijentskog v3AllPassengersCompleted
+      // (3 REST poziva na svaki tick): slot nije moj → tuđi slot, ne diraj;
+      // nema aktivnih putnika na tom terminu → nema sta da se vozi.
+      // "nema dodela, ali ima aktivnih putnika" NIJE terminalno — auto-prepare
+      // moze kasniti, klijent i dalje ne sme da gasi tracking.
+      const slotOwner = String(activeSlot?.vozac_v3_auth_id ?? "").trim();
+      if (slotOwner !== vozacId) {
+        return json(200, { ok: false, reason: "slot_not_owner" });
+      }
+      const { data: terminRows } = await client
+        .from("v3_operativna_nedelja")
+        .select("id, polazak_at, pokupljen_at, otkazano_at")
+        .eq("grad", activeGrad)
+        .eq("datum", activeDatumIso);
+      const hasActivePassengers = (terminRows ?? []).some(
+        (r: any) =>
+          normalizeTime(r?.polazak_at) === activeVemme &&
+          !r?.pokupljen_at &&
+          !r?.otkazano_at,
+      );
+      if (!hasActivePassengers) {
+        return json(200, { ok: true, reason: "no_active_passengers", updated: 0 });
+      }
       return json(200, { ok: true, reason: "no_passengers_for_this_vozac", updated: 0 });
     }
 

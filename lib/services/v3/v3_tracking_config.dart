@@ -172,6 +172,68 @@ Future<void> v3ClearBgTrackingSession() async {
   }
 }
 
+/// Tracking sesija — jedini format zapisa u prefs (`v3_bg_tracking_session`)
+/// i 'startTracking' invoke payload-u. Ranije ga je svaki pozivalac
+/// parsirao rucno polje-po-polje (4 razlicita parsera); BG dijagnosticka
+/// polja (`bg_*`) namerno nisu ovde — citaju se sirovim map-om.
+class V3TrackingSession {
+  const V3TrackingSession({
+    required this.vozacId,
+    required this.datumIso,
+    required this.grad,
+    required this.vreme,
+    this.startedAt,
+    this.polazakAt,
+    this.ticksPaused = false,
+    this.fgAliveAt,
+  });
+
+  final String vozacId;
+  final String datumIso;
+  final String grad;
+  final String vreme;
+  final DateTime? startedAt;
+  final DateTime? polazakAt;
+  final bool ticksPaused;
+  final DateTime? fgAliveAt;
+
+  Map<String, dynamic> toMap() => <String, dynamic>{
+        'vozac_id': vozacId,
+        'datum_iso': datumIso,
+        'grad': grad,
+        'vreme': vreme,
+        'started_at': startedAt?.toUtc().toIso8601String(),
+        'polazak_at': polazakAt?.toUtc().toIso8601String(),
+        'ticks_paused': ticksPaused,
+        // FG heartbeat — BG watchdog iz zastarelog timestamp-a zakljucuje da
+        // je main mrtav (app ugasena dok su BG tickovi pauzirani) i nastavlja
+        // tickove; inace ticks_paused ostaje true zauvek i notifikacija laze.
+        'fg_alive_at': fgAliveAt?.toUtc().toIso8601String(),
+      };
+
+  /// Parsira core polja; `null` ako identitet sesije nije kompletan.
+  /// `polazakAt` fallback-uje na termin iz datum+vreme kao i raniji parseri.
+  static V3TrackingSession? tryParse(Map<dynamic, dynamic>? m) {
+    if (m == null) return null;
+    final id = (m['vozac_id']?.toString() ?? '').trim();
+    final datum = V3BelgradeTime.parseIsoDatePart(m['datum_iso']?.toString() ?? '');
+    final g = (m['grad']?.toString() ?? '').trim().toUpperCase();
+    final v = V3BelgradeTime.normalizeToHHmm(m['vreme']?.toString() ?? '');
+    if (id.isEmpty || datum.isEmpty || g.isEmpty || v.isEmpty) return null;
+    return V3TrackingSession(
+      vozacId: id,
+      datumIso: datum,
+      grad: g,
+      vreme: v,
+      startedAt: V3BelgradeTime.parseTs(m['started_at']?.toString()),
+      polazakAt: V3BelgradeTime.parseTs(m['polazak_at']?.toString()) ??
+          v3PolazakDateTime(datumIso: datum, vreme: v),
+      ticksPaused: m['ticks_paused'] == true,
+      fgAliveAt: V3BelgradeTime.parseTs(m['fg_alive_at']?.toString()),
+    );
+  }
+}
+
 /// Upisuje jedno polje u aktivnu session mapu (load→set→save). BG isolate
 /// tako stampuje `bg_tick_at`/`bg_last_error`/`bg_supabase_ok` — main ih
 /// čita u supervisoru i usvaja kao remote dijagnostiku.
@@ -340,34 +402,6 @@ bool v3IsInOperatingRegion(double lat, double lng) {
   return (etaMap: etaMap, order: order, reason: data['reason']?.toString());
 }
 
-/// Prag brzine (m/s) ispod kojeg se vozač računa da stoji — 1 m/s ≈ 3.6 km/h,
-/// ispod tipičnog GPS jitter-a na stajanju.
-const double _v3StandstillSpeedMps = 1.0;
-
-/// Pomeraj (m) za detekciju stajanja kad `position.speed` nije validan.
-const double _v3StandstillMovedMeters = 15;
-
-/// Cap standstill kazne — tracking može ostati upaljen i dok vozač pauzira;
-/// bez cap-a ETA bi rastao neograničeno. Uskladiti sa edge funkcijom.
-const Duration v3StandstillPenaltyCap = Duration(minutes: 20);
-
-/// Sekunde trenutnog stajanja (resetuje se kad vozač krene) — po isolate-u
-/// (main i FGS imaju svoje kopije; prelazak FG↔BG resetuje brojač, ETA se
-/// nakratko vrati).
-int _standstillSeconds = 0;
-DateTime? _standstillPrevTickAt;
-Position? _standstillPrevPos;
-
-/// Akumulirane sekunde stajanja — čuva se u tracking session payload-u da
-/// FG↔BG handoff ne resetuje kaznu.
-int v3GetStandstillSeconds() => _standstillSeconds;
-
-void v3SetStandstillSeconds(int seconds) {
-  _standstillSeconds = seconds.clamp(0, v3StandstillPenaltyCap.inSeconds);
-  _standstillPrevTickAt = null;
-  _standstillPrevPos = null;
-}
-
 /// Jedan tick: live GPS fix + upsert `v3_vozac_location` + `v3-compute-eta`.
 ///
 /// Trenutna GPS lokacija ide u tabelu i u payload edge funkcije (payload je
@@ -421,42 +455,13 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     return (etaMap: <String, int>{}, order: <String>[], reason: 'stale_position');
   }
 
-  // Loš fix van operativnog regiona ne sme ni u tabelu ni u ETA ni u
-  // standstill akumulaciju — OSRM mapa ne pokriva to područje, a
-  // `v3_vozac_location` bi dobila otrovane podatke.
+  // Loš fix van operativnog regiona ne sme ni u tabelu ni u ETA — OSRM mapa
+  // ne pokriva to područje, a `v3_vozac_location` bi dobila otrovane podatke.
   if (!v3IsInOperatingRegion(position.latitude, position.longitude)) {
     debugPrint(
       '$logTag pozicija van regiona ${position.latitude},${position.longitude} — tick preskočen',
     );
     return (etaMap: <String, int>{}, order: <String>[], reason: 'out_of_region');
-  }
-
-  // Standstill kazna: akumulira se tek od polaska (T-15 čekanje je planirano)
-  // i samo na svežem fix-u — stale fallback pozicija ne sme da "dokaže" stajanje.
-  final polazakAt = v3PolazakDateTime(datumIso: datumIso, vreme: vreme);
-  final departureReached = polazakAt == null || !V3BelgradeTime.now().isBefore(polazakAt);
-  if (DateTime.now().difference(position.timestamp).inSeconds.abs() < 30) {
-    final now = DateTime.now();
-    final elapsedSec =
-        _standstillPrevTickAt == null ? 0 : now.difference(_standstillPrevTickAt!).inSeconds.clamp(0, 30);
-    final standing = position.speed >= 0
-        ? position.speed < _v3StandstillSpeedMps
-        : _standstillPrevPos != null &&
-            Geolocator.distanceBetween(
-                  _standstillPrevPos!.latitude,
-                  _standstillPrevPos!.longitude,
-                  position.latitude,
-                  position.longitude,
-                ) <
-                _v3StandstillMovedMeters;
-    if (departureReached && standing) {
-      _standstillSeconds =
-          (_standstillSeconds + elapsedSec).clamp(0, v3StandstillPenaltyCap.inSeconds).toInt();
-    } else {
-      _standstillSeconds = 0;
-    }
-    _standstillPrevTickAt = now;
-    _standstillPrevPos = position;
   }
 
   // Mora uspeti pre compute-eta — inače edge bi računao na staroj lokaciji.
@@ -480,7 +485,6 @@ Future<({Map<String, int> etaMap, List<String> order, String? reason})> v3RunTra
     'lat': position.latitude,
     'lng': position.longitude,
     if (datumIso.isNotEmpty) 'datum_iso': datumIso,
-    'standstill_seconds': _standstillSeconds,
   };
   debugPrint('$logTag computeEta request: $requestBody');
 
