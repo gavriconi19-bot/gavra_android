@@ -105,7 +105,8 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     ->'otkazano' PRE primarnog 'odobreno' (trigger guši duplikate i
     upsertuje kanonski operativna red); vraca `operativna` (aktivni red) +
     `operativna_sve` (svi redovi konteksta).
-  - `fn_v3_vozac_otkazi` — otkaz operativne po id-u ('already_canceled').
+  - `fn_v3_vozac_otkazi` — (UKLONJEN 20261127000003: mrtav RPC, nigde se
+    nije zvao; otkaz ide kroz fn_v3_putnik_otkazi).
   - `fn_v3_pokupi` — pokupljenje + finansijska evidencija: visak trosi
     cenu, ostatak->nenaplacene; po-danu guard (vecVozioDanas/postojeća
     stavka->'skipped'). advisory lock 'fin:putnik:mesec:godina'.
@@ -463,6 +464,15 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     na full OSRM path-u do kraja voznje — ponasanje kao pre izmene.
   - Migracija primenjena docker exec psql + schema_migrations insert +
     NOTIFY pgrst. Edge smoke-test: invalid_payload OK (modul se ucitava).
+- `20261127000003_drop_dead_vozac_otkazi.sql` = DROP mrtvog RPC-ja
+  `fn_v3_vozac_otkazi` (kreiran u 20261122000002, nigde pozivan — app ni
+  edge; otkaz operativne ide kroz fn_v3_putnik_otkazi). RPC audit:
+  svih 22 app `.rpc()` poziva + edge rpc pozivi odgovaraju potpisima u
+  bazi; interni helperi ostaju service_role-only. Poznato (namerno
+  ne dirano): `seed_kapacitet_slots_for_active_week` i
+  `v3_find_termins_for_auto_prepare` imaju anon EXECUTE — seed pise u
+  kapacitete, find je STABLE read-only;obe su posledica allow-all RLS
+  modela (anon key + custom PIN), ne novi problem.
 
 ## Release (GitHub Actions)
 
