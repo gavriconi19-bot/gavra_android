@@ -199,22 +199,20 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       return;
     }
 
-    // Keep-alive GNSS i u main isolate-u: pokriva slučaj kad app ostane
-    // "resumed" preko lockscreena (showWhenLocked) — FG ticker tada troši
-    // stream fix umesto da getCurrentPosition visi na ugašenom ekranu; a i
-    // fallback tickovi BG supervisor-a dobijaju topao fix. Troši isti GPS
-    // koji ionako traži tick kad god je proces budan.
-    v3StartPositionKeepAlive(logTag: _tag);
-
     // Android: notifikacija ostaje dok je tracking aktivan.
-    // FG = main ticker (FGS ticker pauziran); BG = FGS ticker.
+    // FG = main ticker + main keep-alive; BG = FGS ticker sa svojim
+    // keep-alive-om u BG isolate-u. Main keep-alive se ne drzi u BG da ne bi
+    // radila dva GNSS stream-a; BG supervisor ga pali privremeno samo kad
+    // detektuje stall, pre fallback tick-a.
     await _ensureBgServiceRunning();
     if (_isAppInForeground) {
+      v3StartPositionKeepAlive(logTag: _tag);
       _stopBgSupervisor();
       await _pauseBgTicks();
       if (_fgTicker == null) _startFgTicker();
       if (immediateTick) unawaited(_fgTick());
     } else {
+      v3StopPositionKeepAlive(logTag: _tag);
       _fgTicker?.cancel();
       _fgTicker = null;
       _startBgSupervisor();
@@ -539,7 +537,8 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
   // je app u pozadini proverava `bg_tick_at` health stamp koji BG upisuje u
   // session prefs na svaki tick; zastareo/odsutan marker = stall →
   // re-handoff (`_startBg`) + fallback tick iz main isolate-a (proces je
-  // ionako budan dok supervisor radi, a keep-alive stream drži GNSS topao).
+  // ionako budan dok supervisor radi; main keep-alive se privremeno pali
+  // samo dok BG tick ne postane svež).
 
   static const Duration _bgSupervisorInterval = Duration(seconds: 15);
   static const Duration _bgStallThreshold = Duration(seconds: 45);
@@ -581,7 +580,11 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       }
 
       final tickAt = V3BelgradeTime.parseTs(saved['bg_tick_at']?.toString());
-      if (tickAt != null && now.difference(tickAt) <= _bgStallThreshold) return;
+      if (tickAt != null && now.difference(tickAt) <= _bgStallThreshold) {
+        // BG zdrav — main keep-alive nije potreban (BG isolate ima svoj).
+        v3StopPositionKeepAlive(logTag: _tag);
+        return;
+      }
 
       // Grace: tek podignut BG (boot/start marker) ima vremena za prvi tick;
       // bez ijednog markera — meri od starta supervisor-a.
@@ -619,7 +622,10 @@ class V3VozacLocationTrackingService with WidgetsBindingObserver {
       }
 
       // Fallback tick iz main isolate-a — sve dok proces živi tracking ne
-      // zamre potpuno iako je BG izolat mrtav.
+      // zamre potpuno iako je BG izolat mrtav. Main keep-alive se privremeno
+      // pali da fallback tick dobije topli GNSS fix; sledeći supervisor prolaz
+      // ga gasi čim BG tick ponovo postane svež.
+      v3StartPositionKeepAlive(logTag: _tag);
       unawaited(_fgTick());
     } catch (e) {
       debugPrint('$_tag BG supervisor greška: $e');

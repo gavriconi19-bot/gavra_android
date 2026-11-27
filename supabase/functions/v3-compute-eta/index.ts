@@ -6,11 +6,9 @@ const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 
 /// Koliko dugo se poslednji ETA red čuva u bazi kada vozač prestane da šalje
 /// tickove (npr. ugasio app). Putnik i dalje vidi poslednju poznatu ETA.
-/// Nezavisno od tracking prozora (T-15..T+3h). Brisanje rade i ovaj delete
-/// (pri svakom pozivu) i pg_cron job `cleanup_eta_results` (svakih 5 min) —
-/// cron pokriva slučaj kad više niko ne poziva funkciju.
+/// Nezavisno od tracking prozora (T-15..T+3h). Brisanje radi isključivo pg_cron
+/// job `cleanup_eta_results` (svakih 5 min) — edge ga ne radi na svaki poziv.
 /// Uskladiti sa etaRetentionDuration u lib/globals.dart.
-const ETA_RETENTION_SECONDS = (15 + 40) * 60; // 3300
 
 /// Maksimalna starost lokacije vozača u `v3_vozac_location` pre nego što se
 /// smatra zastarelom za NOVI live ETA — samo fallback kada tick NE pošalje
@@ -365,17 +363,11 @@ async function computeAndPersistStandstill(
   return standstill;
 }
 
-/// Koliko se payload lat/lng sme razlikovati od sveže tabelske pozicije pre
-/// nego što se proglasi spoof-om — legitimni klijent u istom tick-u upiše
-/// ISTU poziciju u v3_vozac_location, pa je očekivana razlika ~0m.
-const MAX_PAYLOAD_DIVERGENCE_M = 500;
-
-/// Preferira lat/lng iz tick payload-a (isti request kao GPS fix).
-/// Fallback: v3_vozac_location ako je dovoljno sveža i u regionu.
-/// Anti-spoof: endpoint nema auth (anon key + custom PIN), pa pored region
-/// box-a payload koji se bitno razlikuje od sveže tabelske pozicije gubi
-/// prednost — drugi uređaj ne zna vozačevu live poziciju, a upis u tabelu
-/// je ionako svežiji signal.
+/// Preferira lat/lng iz tick payload-a — to je isti GPS fix koji je klijent
+/// u istom tick-u upisao u `v3_vozac_location` (i vec region/stale-validirao).
+/// Fallback na tabelu samo kad payload nedostaje (stari klijenti).
+/// Nije anti-spoof: endpoint je anon, a `v3_vozac_location` takodje moze da
+/// pise anon — ovo je samo izbor svezeg izvora, ne security granica.
 async function resolveDriverLocation(
   client: ReturnType<typeof createClient>,
   vozacId: string,
@@ -384,8 +376,10 @@ async function resolveDriverLocation(
 ): Promise<{ lat: number; lng: number; source: "payload" | "table" } | null> {
   const pLat = parseCoord(payloadLat);
   const pLng = parseCoord(payloadLng);
-  const payloadOk = pLat != null && pLng != null && inOperatingRegion(pLat, pLng);
-  if (pLat != null && pLng != null && !payloadOk) {
+  if (pLat != null && pLng != null) {
+    if (inOperatingRegion(pLat, pLng)) {
+      return { lat: pLat, lng: pLng, source: "payload" };
+    }
     console.warn(`[v3-compute-eta] payload location out_of_region ${pLat},${pLng}`);
   }
 
@@ -395,53 +389,26 @@ async function resolveDriverLocation(
     .eq("vozac_id", vozacId)
     .maybeSingle();
 
-  let tableLoc: { lat: number; lng: number } | null = null;
-  if (!error && row) {
-    const lat = parseCoord(row.lat);
-    const lng = parseCoord(row.lng);
-    const ts = typeof row.updated_at === "string" ? Date.parse(row.updated_at) : NaN;
-    if (lat != null && lng != null && inOperatingRegion(lat, lng) && Number.isFinite(ts)) {
-      const ageMs = Date.now() - ts;
-      if (ageMs <= DRIVER_LOCATION_MAX_AGE_MS) {
-        tableLoc = { lat, lng };
-      } else {
-        console.warn(`[v3-compute-eta] driver location stale ageMs=${ageMs} max=${DRIVER_LOCATION_MAX_AGE_MS}`);
-      }
-    } else if (lat != null && lng != null && !inOperatingRegion(lat, lng)) {
-      console.warn(`[v3-compute-eta] table location out_of_region ${lat},${lng}`);
-    }
+  if (error || !row) return null;
+  const lat = parseCoord(row.lat);
+  const lng = parseCoord(row.lng);
+  const ts = typeof row.updated_at === "string" ? Date.parse(row.updated_at) : NaN;
+  if (lat == null || lng == null || !Number.isFinite(ts)) return null;
+  if (!inOperatingRegion(lat, lng)) {
+    console.warn(`[v3-compute-eta] table location out_of_region ${lat},${lng}`);
+    return null;
   }
-
-  if (payloadOk && tableLoc) {
-    const divergence = haversineMeters(pLat, pLng, tableLoc.lat, tableLoc.lng);
-    if (divergence > MAX_PAYLOAD_DIVERGENCE_M) {
-      console.warn(
-        `[v3-compute-eta] payload diverges from table by ${Math.round(divergence)}m — preferring table`,
-      );
-      return { lat: tableLoc.lat, lng: tableLoc.lng, source: "table" };
-    }
-    return { lat: pLat, lng: pLng, source: "payload" };
+  const ageMs = Date.now() - ts;
+  if (ageMs > DRIVER_LOCATION_MAX_AGE_MS) {
+    console.warn(`[v3-compute-eta] driver location stale ageMs=${ageMs} max=${DRIVER_LOCATION_MAX_AGE_MS}`);
+    return null;
   }
-  if (payloadOk) return { lat: pLat, lng: pLng, source: "payload" };
-  if (tableLoc) return { lat: tableLoc.lat, lng: tableLoc.lng, source: "table" };
-  return null;
+  return { lat, lng, source: "table" };
 }
 
 /// Fetch sa eksponencijalnim backoff retry-om.
 /// HTTP/1.1 only: Deno default (HTTP/2 ALPN) često pada na Tailscale Funnel sa
 /// "tls handshake eof" iz Supabase edge runtime-a.
-let osrmHttpClient: ReturnType<typeof Deno.createHttpClient> | null = null;
-function getOsrmHttpClient(): ReturnType<typeof Deno.createHttpClient> | undefined {
-  try {
-    if (!osrmHttpClient) {
-      osrmHttpClient = Deno.createHttpClient({ http2: false });
-    }
-    return osrmHttpClient;
-  } catch {
-    return undefined;
-  }
-}
-
 async function fetchWithRetry(url: string, maxRetries: number = OSRM_MAX_RETRIES): Promise<Response> {
   return await fetchOsrmWithRetry(url, {
     maxRetries,
@@ -554,12 +521,11 @@ Deno.serve(async (req) => {
     const polazakLocal = `${activeDatumIso}T${activeVemme}:00`;
     const departureReached = belgradeNowString() >= polazakLocal;
 
-    // 1. Obriši ETA redove starije od celog tracking prozora (55 min).
-    // Poslednja ETA ostaje dostupna putniku i kad vozač ugasi app.
-    const retentionThreshold = new Date(Date.now() - ETA_RETENTION_SECONDS * 1000).toISOString();
-    await client.from("v3_eta_results").delete().lt("computed_at", retentionThreshold);
+    // ETA retention (55 min) brise pg_cron cleanup_eta_results — ovde se ne radi
+    // da ne dodajemo jos jedan delete po tick-u. Poslednja ETA i dalje ostaje
+    // dostupna putniku do cron brisanja.
 
-    // 2. Dohvati aktivan SLOT (v3_trenutna_dodela_slot) po grad+datum+vreme.
+    // 1. Dohvati aktivan SLOT (v3_trenutna_dodela_slot) po grad+datum+vreme.
     //    Fizički ključ slota (jedan vozač po slotu — migracija 20261123000000).
     const { data: slotRows, error: slotError } = await client
       .from("v3_trenutna_dodela_slot")
@@ -622,7 +588,7 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // 2.5. Putnici ovog vozača na slotu (jedan vozač po slotu — filter po
+    // 1.5. Putnici ovog vozača na slotu (jedan vozač po slotu — filter po
     // vozaču je i dalje sesijski scope, ne multi-driver). Ako dodela nema
     // GPS, uzmi iz adrese. Dodele mogu biti raspoređene na više
     // format-duplikata istog fizičkog slota (vreme "15:25" vs "15:25:00")
@@ -676,7 +642,7 @@ Deno.serve(async (req) => {
       return json(200, { ok: false, reason: "missing_passenger_gps", updated: 0 });
     }
 
-    // 3. Izbaci pokupljene/otkazane
+    // 2. Izbaci pokupljene/otkazane
     const terminIds = rawPassengers.map((p) => p.termin_id);
     const { data: operativnaRows, error: operativnaError } = await client
       .from("v3_operativna_nedelja")
@@ -717,7 +683,7 @@ Deno.serve(async (req) => {
         .in("putnik_id", toDelete);
     }
 
-    // 4. ETA: OSRM /trip na svaki tick — reoptimizacija preostalih putnika.
+    // 3. ETA: OSRM /trip na svaki tick — reoptimizacija preostalih putnika.
     const destLat = activeGrad === "BC" ? 45.118736452002345 : 44.90281796231954;
     const destLng = activeGrad === "BC" ? 21.301195520159723 : 21.424364904529384;
 
@@ -832,7 +798,7 @@ Deno.serve(async (req) => {
       return await buildOsrmFallbackResponse(client, matchingSlotIds, vozacId, "no_eta_rows");
     }
 
-    // 6. Upsert v3_eta_results — koristi slot_id za conflict resolution
+    // 4. Upsert v3_eta_results — koristi slot_id za conflict resolution
     // optimized_order = putnik_id[] (usklađeno sa Flutter sort po putnik.id)
     const optimizedOrder = upsertRows.map((r) => r.putnik_id);
     const upsertRowsWithOrder = upsertRows.map((r) => ({ ...r, optimized_order: optimizedOrder }));

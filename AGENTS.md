@@ -425,6 +425,20 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     rucna parsera); BG isolate sad drzi `session` objekat umesto 6
     scalar polja. `bg_*` dijagnosticka polja ostaju sirovi map.
   - flutter analyze: 0 issues. Edge smoke-test: invalid_payload OK.
+- App-side + edge (isti commit, 2026-11-27 — drugi overengineering cleanup):
+  - `v3-compute-eta`: uklonjen per-call ETA retention delete (55min) —
+    `cleanup_eta_results` pg_cron job to vec radi svakih 5min; uklonjen
+    mrtav `getOsrmHttpClient`/`osrmHttpClient` blok (fetch ide kroz
+    `fetchOsrmWithRetry` u _shared/osrm_fetch.ts). `resolveDriverLocation`
+    pojednostavljen na payload-first/table-fallback: divergence >500m
+    anti-spoof provera uklonjena — endpoint je anon i `v3_vozac_location`
+    takodje moze da pise anon, pa provera nije bila security granica
+    (samo consistency); payload je vec region/stale-validiran na klijentu.
+  - Android keep-alive: main-isolate `v3StartPositionKeepAlive` vise NE
+    radi stalno u pozadini — pali se samo dok je app u foreground-u (FG
+    ticker) ili privremeno u BG stall fallback-u; gasi se cim BG tick
+    postane sveze (`_bgSupervise`). BG FGS isolate i dalje ima svoj
+    keep-alive — nema vise dva GNSS stream-a istovremeno.
 
 ## Release (GitHub Actions)
 

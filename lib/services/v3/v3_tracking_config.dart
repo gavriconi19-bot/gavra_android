@@ -100,8 +100,9 @@ StreamSubscription<Position>? _positionKeepAliveSub;
 Position? _lastKeepAlivePosition;
 
 /// Pokreće keep-alive position stream (idempotentno). Pozivati u isolate-u
-/// koji radi tickove (Android: FGS BG isolate; iOS ga ne treba — tamo već
-/// postoji keep-alive u main isolate-u).
+/// koji trenutno radi tickove — Android: main FG ili BG FGS isolate, ne
+/// oba istovremeno (dva GNSS stream-a troše bateriju); iOS ga ne treba jer
+/// tamo već postoji continuous keep-alive u main isolate-u.
 void v3StartPositionKeepAlive({String logTag = '[v3KeepAlive]'}) {
   if (_positionKeepAliveSub != null) return;
   _lastKeepAlivePosition = null;
