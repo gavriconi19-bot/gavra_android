@@ -41,7 +41,9 @@ const OSRM_MAX_WAYPOINTS = 100;
 /// Minimalni razmak između dva OSRM /trip compute-a za istog vozača —
 /// između njih tick ide "cheap path": eta redovi se jeftino osveže
 /// (preostali travel + svez standstill) bez reoptimizacije rute.
-const OSRM_MIN_INTERVAL_MS = 30 * 1000;
+/// 5s = efektivno svaki tick (kao pre uvođenja route cache-a) — cheap
+/// path ostaje kao safety net ako tickovi dođu brže od intervala.
+const OSRM_MIN_INTERVAL_MS = 5 * 1000;
 
 type ComputeEtaPayload = {
   vozac_id?: string;

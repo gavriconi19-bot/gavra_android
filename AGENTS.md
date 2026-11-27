@@ -440,20 +440,20 @@ truth za bazu i backend. Cloud Supabase projekat se vise ne koristi.
     postane sveze (`_bgSupervise`). BG FGS isolate i dalje ima svoj
     keep-alive — nema vise dva GNSS stream-a istovremeno.
 - `20261127000002_eta_route_cache.sql` + edge (isti commit, 2026-11-27 —
-  OSRM vise ne ide na svaki 5s tick):
+  route cache infrastruktura; OSRM interval ostao ~5s):
   - Nove kolone `v3_eta_results.travel_seconds` (kumulativni OSRM travel
     BEZ standstill, u trenutku `route_at`) i `route_at` (poslednji uspesni
     OSRM compute). `eta_seconds` ostaje izvedena = preostali travel +
     standstill, `computed_at` = svaki upis — putnicki countdown i
     `V3VremeDolaskaWidget` rade IDENTICNO, bez app izmena.
   - `v3-compute-eta` cheap path: ako je set preostalih putnika isti,
-    `route_at` mlaci od `OSRM_MIN_INTERVAL_MS` (30s) i svi redovi imaju
+    `route_at` mlaci od `OSRM_MIN_INTERVAL_MS` i svi redovi imaju
     travel/route podatke → preskace /trip i radi jeftini upsert
     (`eta_seconds = max(0, travel_seconds - routeAge) + standstill`,
     `computed_at = now`, `optimized_order` prosledjen nepromenjen).
-    OSRM se poziva max 1/30s po vozacu ILI cim se set putnika promeni
-    (pokupljenje/otkazivanje → nova ruta). Prvi tick posle deploy-a puni
-    kolone (stari redovi imaju NULL → automatski full OSRM path).
+    `OSRM_MIN_INTERVAL_MS = 5s` — efektivno OSRM na ( skoro ) svaki tick,
+    cheap path je safety net za tickove brze od intervala. Lako se
+    povecava (npr. 30s) ako zatreba manji OSRM saobracaj.
   - Standstill se i dalje racuna server-side na SVAKI tick (u
     `computeAndPersistStandstill`, pre cheap/OSRM grananja) — kazna je
     svezha i na cheap tickovima.
